@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  /* โทนสีเอกสารราชการ: ครีม-น้ำเงินเข้ม-ทอง */
+  --color-paper: #fdfcf7;
+  --color-ink: #1f2937;
+  --color-brand: #1e3a5f;
+  --color-brand-soft: #eef2f8;
+  --color-gold: #b08d3f;
+
+  --font-sans: "Noto Sans Thai", "Sarabun", "IBM Plex Sans Thai", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  /* ภาษาไทยไม่มีเว้นวรรคระหว่างคำ ต้องบอกเบราว์เซอร์ให้ตัดบรรทัดตามคำ */
+  word-break: break-word;
+  line-break: normal;
+}

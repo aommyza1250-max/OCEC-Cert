@@ -1,0 +1,66 @@
+/** ตัวเชื่อมกับ Cloudflare R2 (dev ใช้ MinIO ซึ่งเป็น S3-compatible เหมือนกัน) */
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { env } from "./env";
+
+let client: S3Client | null = null;
+
+function s3() {
+  if (client) return client;
+  const e = env();
+  client = new S3Client({
+    region: "auto", // R2 ไม่มีแนวคิด region ต้องใส่ "auto"
+    endpoint: e.R2_ENDPOINT,
+    forcePathStyle: e.R2_FORCE_PATH_STYLE, // MinIO ต้องเป็น true
+    credentials: {
+      accessKeyId: e.R2_ACCESS_KEY_ID,
+      secretAccessKey: e.R2_SECRET_ACCESS_KEY,
+    },
+  });
+  return client;
+}
+
+/** URL สาธารณะของไฟล์ preview — เสิร์ฟผ่าน CDN ไม่กิน bandwidth ของ Railway */
+export function publicUrl(key: string) {
+  return `${env().R2_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`;
+}
+
+/**
+ * ลิงก์ดาวน์โหลด PDF แบบมีอายุ
+ * ใช้ presigned แทน public URL เพื่อไม่ให้ใครไล่เดา key แล้วดูดไฟล์ทั้ง bucket
+ */
+export async function presignedDownloadUrl(key: string, filename: string, expiresIn = 900) {
+  return getSignedUrl(
+    s3(),
+    new GetObjectCommand({
+      Bucket: env().R2_BUCKET,
+      Key: key,
+      // บังคับให้เบราว์เซอร์ดาวน์โหลดพร้อมตั้งชื่อไฟล์ แทนที่จะเปิดในแท็บ
+      ResponseContentDisposition: `attachment; filename="${encodeURIComponent(filename)}"`,
+      ResponseContentType: "application/pdf",
+    }),
+    { expiresIn },
+  );
+}
+
+/**
+ * ลิงก์อัปโหลดแบบมีอายุ — เบราว์เซอร์ของแอดมินยิงไฟล์ขึ้น R2 ตรง ๆ
+ * ห้ามให้ไฟล์ PDF รวมเล่ม (หลายร้อย MB) วิ่งผ่าน Next.js API เพราะ Railway จะกินแรมจนล่ม
+ */
+export async function presignedUploadUrl(key: string, contentType: string, expiresIn = 900) {
+  return getSignedUrl(
+    s3(),
+    new PutObjectCommand({ Bucket: env().R2_BUCKET, Key: key, ContentType: contentType }),
+    { expiresIn },
+  );
+}
+
+/** ตั้งชื่อ key ให้เป็นระเบียบ เดาไม่ได้ และรู้ว่าไฟล์ของ batch ไหน
+ *  ส่วนของเกียรติบัตรรายคน worker เป็นคนตั้งชื่อ (ดู apps/worker/app/storage.py)
+ *  รูปแบบคือ {FNAME}_{LNAME}_{รหัสรายการสอบ} ซึ่งตรงกับที่ใช้อยู่เดิมตอนตัดไฟล์ด้วยมือ */
+export const keys = {
+  sourcePdf: (batchId: string) => `sources/${batchId}/bundle.pdf`,
+  sourceExcel: (batchId: string) => `sources/${batchId}/roster.xlsx`,
+  certificatePdf: (batchId: string, stem: string) => `certificates/${batchId}/${stem}.pdf`,
+  preview: (batchId: string, stem: string) => `previews/${batchId}/${stem}.webp`,
+};

@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnpm-store/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# build output
+.next/
+out/
+dist/
+build/
+*.egg-info/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# data & uploads (ห้าม commit ไฟล์เกียรติบัตรจริงเด็ดขาด - เป็นข้อมูลส่วนบุคคล)
+data/
+uploads/
+tmp/
+*.pdf
+*.xlsx
+*.xls
+!apps/worker/tests/fixtures/*.pdf
+!apps/worker/tests/fixtures/*.xlsx
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage/
+.turbo/
+playwright-report/
+test-results/
+
+# os / editor
+.DS_Store
+.idea/
+*.swp

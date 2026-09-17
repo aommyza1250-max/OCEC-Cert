@@ -1,0 +1,10 @@
+[
+  {
+    "_comment": "ต้องตั้งค่านี้ที่ R2 bucket ไม่งั้นเบราว์เซอร์ของแอดมินจะ PUT ไฟล์ขึ้นตรงไม่ได้ (โดน CORS บล็อก) แทนที่ example.com ด้วยโดเมนจริงของเว็บ",
+    "AllowedOrigins": ["https://example.com", "http://localhost:3000"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "ExposeHeaders": ["etag"],
+    "MaxAgeSeconds": 3600
+  }
+]

@@ -1,0 +1,213 @@
+{
+  "_readme": "แหล่งเทสเดียวของกฎ normalize ชื่อ อ่านโดยทั้ง vitest (apps/web) และ pytest (apps/worker) — เพิ่มเคสใหม่ที่นี่เท่านั้น ห้าม hardcode ในเทสฝั่งใดฝั่งหนึ่ง สเปกเต็ม: docs/name-normalization.md",
+  "cases": [
+    {
+      "why": "คำนำหน้าอังกฤษ + ช่องว่างซ้ำ",
+      "input": "Mr. Somchai   Jaidee",
+      "normalized": "SOMCHAI JAIDEE",
+      "sortKey": "JAIDEE SOMCHAI"
+    },
+    {
+      "why": "รูปแบบจาก Excel (พิมพ์ใหญ่ล้วน) ต้องไม่เปลี่ยน",
+      "input": "SOMCHAI JAIDEE",
+      "normalized": "SOMCHAI JAIDEE",
+      "sortKey": "JAIDEE SOMCHAI"
+    },
+    {
+      "why": "ผู้ใช้พิมพ์ตัวเล็กล้วน + เว้นวรรคหัวท้าย",
+      "input": "  somchai jaidee  ",
+      "normalized": "SOMCHAI JAIDEE",
+      "sortKey": "JAIDEE SOMCHAI"
+    },
+    {
+      "why": "คำนำหน้าไทยเขียนติดกัน",
+      "input": "นายสมชาย ใจดี",
+      "normalized": "สมชาย ใจดี",
+      "sortKey": "สมชาย ใจดี"
+    },
+    {
+      "why": "คำนำหน้าไทยแบบเต็ม",
+      "input": "เด็กชายสมชาย ใจดี",
+      "normalized": "สมชาย ใจดี",
+      "sortKey": "สมชาย ใจดี"
+    },
+    {
+      "why": "คำนำหน้าย่อมีจุด — จุดกลายเป็นช่องว่างก่อนแล้วค่อยตัด",
+      "input": "ด.ช.สมชาย ใจดี",
+      "normalized": "สมชาย ใจดี",
+      "sortKey": "สมชาย ใจดี"
+    },
+    {
+      "why": "น.ส. ย่อ",
+      "input": "น.ส.สมหญิง ใจดี",
+      "normalized": "สมหญิง ใจดี",
+      "sortKey": "สมหญิง ใจดี"
+    },
+    {
+      "why": "ต้องตัด 'นางสาว' ก่อน 'นาง' (เรียงยาวไปสั้น)",
+      "input": "นางสาวสมหญิง ใจดี",
+      "normalized": "สมหญิง ใจดี",
+      "sortKey": "สมหญิง ใจดี"
+    },
+    {
+      "why": "คำนำหน้าไทยที่มีช่องว่างคั่น",
+      "input": "  นาย   สมชาย  ใจดี ",
+      "normalized": "สมชาย ใจดี",
+      "sortKey": "สมชาย ใจดี"
+    },
+    {
+      "why": "ห้ามตัด MR ออกจาก MRINAL (ต้องมีช่องว่างตามหลังเท่านั้น)",
+      "input": "MRINAL SHARMA",
+      "normalized": "MRINAL SHARMA",
+      "sortKey": "MRINAL SHARMA"
+    },
+    {
+      "why": "MS ไม่มีจุด",
+      "input": "MS PIYADA SRI",
+      "normalized": "PIYADA SRI",
+      "sortKey": "PIYADA SRI"
+    },
+    {
+      "why": "วนตัดซ้ำ: อังกฤษแล้วต่อด้วยไทย",
+      "input": "MR. เด็กชายสมชาย",
+      "normalized": "สมชาย",
+      "sortKey": "สมชาย"
+    },
+    {
+      "why": "apostrophe กลายเป็นช่องว่าง",
+      "input": "O'Brien Patrick",
+      "normalized": "O BRIEN PATRICK",
+      "sortKey": "BRIEN O PATRICK"
+    },
+    {
+      "why": "ยัติภังค์กลายเป็นช่องว่าง",
+      "input": "Anne-Marie Dubois",
+      "normalized": "ANNE MARIE DUBOIS",
+      "sortKey": "ANNE DUBOIS MARIE"
+    },
+    {
+      "why": "จุลภาคจาก Excel",
+      "input": "Jaidee, Somchai",
+      "normalized": "JAIDEE SOMCHAI",
+      "sortKey": "JAIDEE SOMCHAI"
+    },
+    {
+      "why": "non-breaking space และ zero-width space ที่ติดมาจาก PDF",
+      "input": "Somchai ​Jaidee",
+      "normalized": "SOMCHAI JAIDEE",
+      "sortKey": "JAIDEE SOMCHAI"
+    },
+    {
+      "why": "ขึ้นบรรทัดใหม่/แท็บจากการสกัดข้อความ PDF",
+      "input": "Somchai\nJaidee\t",
+      "normalized": "SOMCHAI JAIDEE",
+      "sortKey": "JAIDEE SOMCHAI"
+    },
+    {
+      "why": "ลบ diacritic (é -> E)",
+      "input": "José García",
+      "normalized": "JOSE GARCIA",
+      "sortKey": "GARCIA JOSE"
+    },
+    {
+      "why": "MASTER + คำต่อท้ายชื่อ",
+      "input": "MASTER JOHN SMITH JR",
+      "normalized": "JOHN SMITH JR",
+      "sortKey": "JOHN JR SMITH"
+    },
+    {
+      "why": "ตัวเลขต้องคงไว้ (บางรายชื่อมีรหัสต่อท้าย)",
+      "input": "Somchai Jaidee 12345",
+      "normalized": "SOMCHAI JAIDEE 12345",
+      "sortKey": "12345 JAIDEE SOMCHAI"
+    },
+    {
+      "why": "สตริงว่าง",
+      "input": "",
+      "normalized": "",
+      "sortKey": ""
+    },
+    {
+      "why": "ช่องว่างล้วน",
+      "input": "   ",
+      "normalized": "",
+      "sortKey": ""
+    },
+    {
+      "why": "เครื่องหมายล้วน",
+      "input": "...---",
+      "normalized": "",
+      "sortKey": ""
+    },
+    {
+      "why": "ชื่อไทยล้วนไม่มีคำนำหน้า ต้องไม่ถูกแตะ",
+      "input": "ปิยะดา ศรีสุข",
+      "normalized": "ปิยะดา ศรีสุข",
+      "sortKey": "ปิยะดา ศรีสุข"
+    },
+    {
+      "why": "ชื่อกลางภาษาอังกฤษ",
+      "input": "Mrs.  Nattaya   Wong  Sri",
+      "normalized": "NATTAYA WONG SRI",
+      "sortKey": "NATTAYA SRI WONG"
+    }
+  ],
+  "_readmeSchool": "schoolCases ใช้ทดสอบ normalizeSchool/normalize_school ซึ่งใช้แยกคนที่ชื่อพ้องกันด้วยโรงเรียน",
+  "schoolCases": [
+    {
+      "why": "ตัดคำว่า 'โรงเรียน' นำหน้า",
+      "input": "โรงเรียนสวนกุหลาบวิทยาลัย",
+      "normalized": "สวนกุหลาบวิทยาลัย"
+    },
+    {
+      "why": "ตัดตัวย่อ รร.",
+      "input": "รร.สวนกุหลาบวิทยาลัย",
+      "normalized": "สวนกุหลาบวิทยาลัย"
+    },
+    {
+      "why": "เว้นวรรคหลังคำนำหน้า",
+      "input": "โรงเรียน สวนกุหลาบวิทยาลัย",
+      "normalized": "สวนกุหลาบวิทยาลัย"
+    },
+    {
+      "why": "เว้นวรรคกลางชื่อไม่เหมือนกัน ต้องได้ค่าเดียวกัน",
+      "input": "  โรงเรียนสวนกุหลาบ  วิทยาลัย ",
+      "normalized": "สวนกุหลาบวิทยาลัย"
+    },
+    {
+      "why": "ตัด School นำหน้าภาษาอังกฤษ",
+      "input": "School of Bangkok Christian",
+      "normalized": "OFBANGKOKCHRISTIAN"
+    },
+    {
+      "why": "ตัด The นำหน้า",
+      "input": "The Prince Royal's College",
+      "normalized": "PRINCEROYALSCOLLEGE"
+    },
+    {
+      "why": "ห้ามตัด THE ออกจากชื่อจริงที่ขึ้นต้นด้วย THE",
+      "input": "Thepsirin School",
+      "normalized": "THEPSIRINSCHOOL"
+    },
+    {
+      "why": "พิมพ์เล็กพิมพ์ใหญ่ต้องเทียบเท่ากัน",
+      "input": "assumption college",
+      "normalized": "ASSUMPTIONCOLLEGE"
+    },
+    {
+      "why": "ไม่มีคำนำหน้า ต้องไม่ถูกแตะ",
+      "input": "ราชวินิต",
+      "normalized": "ราชวินิต"
+    },
+    {
+      "why": "ว่าง",
+      "input": "",
+      "normalized": ""
+    },
+    {
+      "why": "มีแต่คำนำหน้า",
+      "input": "โรงเรียน",
+      "normalized": ""
+    }
+  ]
+}

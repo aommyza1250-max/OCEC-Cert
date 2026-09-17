@@ -1,0 +1,250 @@
+// ฐานข้อมูลระบบเกียรติบัตร OCEC
+// เอกสารประกอบ: docs/db-schema.md
+//
+// หลักการ: staging_pages เก็บผลการตัดหน้า PDF ไว้ก่อน แล้วค่อย match กับ Excel ทีหลัง
+// ทำให้ re-run การ match ได้โดยไม่ต้องตัด PDF ใหม่ และมีที่ให้แอดมินจับคู่ด้วยมือ
+
+generator client {
+  provider        = "prisma-client-js"
+  // ต้องเปิดเพื่อประกาศ extension และ GIN index พร้อม operator class ในไฟล์นี้ได้
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // pg_trgm ใช้ทำ trigram index สำหรับค้นหาชื่อบางส่วน — ประกาศไว้ที่นี่เพื่อให้
+  // migrate สร้างให้เองทุกครั้ง ไม่ต้องไปเขียน SQL แยกซึ่งจะถูก migrate รอบถัดไปลบทิ้ง
+  extensions = [pg_trgm]
+}
+
+enum ExamKind {
+  DOMESTIC
+  INTERNATIONAL
+}
+
+enum BatchStatus {
+  DRAFT        // สร้างแล้วแต่ยังไม่อัปโหลด PDF
+  SPLITTING    // worker กำลังตัดหน้า
+  SPLIT_DONE   // ตัดเสร็จ รอ Excel
+  MATCHING     // worker กำลังจับคู่กับ Excel
+  READY        // จับคู่เสร็จ รอแอดมินตรวจ/publish
+  PUBLISHED    // ผู้ใช้ทั่วไปค้นเจอแล้ว
+  FAILED       // job พัง ดูรายละเอียดที่ Job.error
+}
+
+enum MatchStatus {
+  UNMATCHED       // ตัดหน้าได้แล้วแต่ยังไม่มีคู่ใน Excel
+  MATCHED         // จับคู่แล้ว มี Certificate ออกมา
+  SKIPPED_FOREIGN // หน้าของผู้เข้าสอบต่างชาติ (batch international) — ข้ามตั้งแต่ต้น
+  AMBIGUOUS       // ชื่อตรงกับหน้าใน PDF มากกว่า 1 หน้า ต้องให้คนตัดสิน
+  DUPLICATE_NAME  // ชื่อซ้ำกับหน้าที่จับคู่ไปแล้วในรายการสอบเดียวกัน — แอดมินต้องดูใบจริงแล้วตัดสิน
+  DISCARDED       // แอดมินตัดสินแล้วว่าเป็นใบซ้ำ ไม่ต้องนำเข้า
+}
+
+enum JobType {
+  SPLIT
+  MATCH
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// รายการสอบที่หน่วยงานจัด เช่น HKIMO, TIMO — แอดมินจัดการรายการนี้เองได้
+/// `code` คือสิ่งที่ไปต่อท้ายชื่อไฟล์: {FNAME}_{LNAME}_{CODE}.pdf
+/// เดิมค่านี้มาจากชื่อโฟลเดอร์ที่เก็บไฟล์ ตอนนี้มาจากตัวเลือกที่แอดมินเลือกตอนสร้างรอบนำเข้า
+model ExamProgram {
+  id   String   @id @default(uuid()) @db.Uuid
+  code String   @unique
+  name String
+  kind ExamKind
+  /// ปิดรายการที่เลิกจัดแล้ว โดยไม่ต้องลบ (ลบไม่ได้ถ้ามีข้อมูลเก่าอ้างอยู่)
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  exams Exam[]
+
+  @@map("exam_programs")
+}
+
+/// รายการสอบ 1 รายการใน 1 ปีการศึกษา
+model Exam {
+  id           String      @id @default(uuid()) @db.Uuid
+  programId    String      @map("program_id") @db.Uuid
+  program      ExamProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  academicYear Int         @map("academic_year")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  batches      Batch[]
+  certificates Certificate[]
+
+  @@unique([programId, academicYear])
+  @@index([academicYear])
+  @@map("exams")
+}
+
+/// ผู้เข้าสอบ 1 คน — ใช้ซ้ำข้ามรายการสอบและข้ามปี
+model Student {
+  id String @id @default(uuid()) @db.Uuid
+
+  nameTh String? @map("name_th")
+  nameEn String? @map("name_en")
+
+  // ผลจาก normalizeName() — ใช้ค้นหาและจับคู่ ห้ามเขียนค่าดิบลงคอลัมน์นี้
+  nameThNormalized String? @map("name_th_normalized")
+  nameEnNormalized String? @map("name_en_normalized")
+  // ผลจาก nameSortKey() — ตัวช่วยลำดับรองกรณี Excel สลับชื่อ-นามสกุล
+  nameEnSortKey String? @map("name_en_sort_key")
+
+  /// โรงเรียน — ใช้แยกคนที่ชื่อพ้องกันออกจากกัน (ชื่ออย่างเดียวไม่พอ)
+  school String?
+  /// ผลจาก normalizeSchool() — ใช้เทียบ ห้ามเขียนค่าดิบลงคอลัมน์นี้
+  schoolNormalized String? @map("school_normalized")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  certificates  Certificate[]
+  stagingPages  StagingPage[]
+
+  // การค้นหาใช้ LIKE '%คำค้น%' ซึ่ง btree index ช่วยไม่ได้เลย ต้องใช้ trigram index
+  @@index([nameEnNormalized(ops: raw("gin_trgm_ops"))], type: Gin, map: "students_name_en_normalized_trgm_idx")
+  @@index([nameThNormalized(ops: raw("gin_trgm_ops"))], type: Gin, map: "students_name_th_normalized_trgm_idx")
+  // ใช้จับคู่แบบสลับชื่อ-นามสกุลตอน match Excel — อันนี้เทียบเท่ากันจึงใช้ btree
+  @@index([nameEnSortKey], map: "students_name_en_sort_key_idx")
+  // ใช้แยกคนชื่อพ้องด้วยโรงเรียน
+  @@index([nameEnNormalized, schoolNormalized], map: "students_name_school_idx")
+  @@map("students")
+}
+
+/// รอบการนำเข้า 1 ครั้ง = PDF รวมเล่ม 1 ไฟล์ + Excel 1 ไฟล์
+model Batch {
+  id     String      @id @default(uuid()) @db.Uuid
+  examId String      @map("exam_id") @db.Uuid
+  exam   Exam        @relation(fields: [examId], references: [id], onDelete: Restrict)
+  status BatchStatus @default(DRAFT)
+
+  sourcePdfKey   String? @map("source_pdf_key")
+  sourceExcelKey String? @map("source_excel_key")
+
+  // สรุปตัวเลข เช่น { pagesTotal, pagesSplit, foreignSkipped, matched, unmatched }
+  stats Json @default("{}")
+
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  jobs         Job[]
+  stagingPages StagingPage[]
+  certificates Certificate[]
+
+  @@index([examId])
+  @@index([status])
+  @@map("batches")
+}
+
+/// 1 หน้าที่ตัดออกมาจาก PDF รวมเล่ม — ยังไม่ผูกกับผู้เข้าสอบจนกว่าจะ match สำเร็จ
+model StagingPage {
+  id      String @id @default(uuid()) @db.Uuid
+  batchId String @map("batch_id") @db.Uuid
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  pageNumber Int    @map("page_number")
+  rawText    String @map("raw_text") @db.Text
+
+  extractedName           String? @map("extracted_name")
+  extractedNameNormalized String? @map("extracted_name_normalized")
+  extractedNameSortKey    String? @map("extracted_name_sort_key")
+
+  /// เลขเกียรติบัตรที่พิมพ์อยู่บนหน้า (No: 12345) — คีย์ที่เชื่อถือได้กว่าชื่อเมื่อมีคนชื่อซ้ำ
+  certNo String? @map("cert_no")
+  /// ระดับชั้น/รุ่นที่อ่านได้จาก "for outstanding achievement in ..."
+  level  String?
+
+  pdfKey     String? @map("pdf_key")
+  previewKey String? @map("preview_key")
+
+  matchStatus     MatchStatus @default(UNMATCHED) @map("match_status")
+  matchedStudentId String?    @map("matched_student_id") @db.Uuid
+  matchedStudent   Student?   @relation(fields: [matchedStudentId], references: [id], onDelete: SetNull)
+  // true เมื่อแอดมินจับคู่เอง ไม่ใช่ระบบจับให้ — ไว้ตรวจย้อนหลัง
+  matchedManually Boolean @default(false) @map("matched_manually")
+  matchNote       String? @map("match_note")
+
+  /// ข้อมูลจากแถว Excel ที่จับคู่มาถึงหน้านี้ แต่ยังตัดสินไม่ได้ว่าเป็นของใคร
+  /// เก็บไว้เพื่อให้แอดมินเห็นครบตอนตัดสิน และไม่ต้องเปิด Excel มาพิมพ์ซ้ำ
+  pendingAward  String? @map("pending_award")
+  pendingSchool String? @map("pending_school")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  certificate Certificate?
+
+  @@unique([batchId, pageNumber])
+  @@index([batchId, matchStatus])
+  @@index([extractedNameNormalized])
+  // ใช้จับคู่ด้วยเลขเกียรติบัตร ซึ่งแม่นกว่าชื่อเมื่อมีคนชื่อซ้ำ
+  @@index([batchId, certNo], map: "staging_pages_batch_id_cert_no_idx")
+  @@map("staging_pages")
+}
+
+/// เกียรติบัตรที่จับคู่สำเร็จแล้ว — นี่คือสิ่งที่ผู้ใช้ค้นเจอและดาวน์โหลด
+model Certificate {
+  id        String  @id @default(uuid()) @db.Uuid
+  studentId String  @map("student_id") @db.Uuid
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  examId    String  @map("exam_id") @db.Uuid
+  exam      Exam    @relation(fields: [examId], references: [id], onDelete: Restrict)
+  batchId   String  @map("batch_id") @db.Uuid
+  batch     Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  stagingPageId String      @unique @map("staging_page_id") @db.Uuid
+  stagingPage   StagingPage @relation(fields: [stagingPageId], references: [id], onDelete: Cascade)
+
+  pdfKey     String  @map("pdf_key")
+  previewKey String? @map("preview_key")
+  pageNumber Int     @map("page_number")
+  award      String?
+  certNo     String? @map("cert_no")
+  level      String?
+
+  // ผู้ใช้ทั่วไปเห็นเฉพาะ published = true
+  published DateTime? @map("published_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // คนเดียวกันมีเกียรติบัตรในรายการสอบเดียวกันได้ใบเดียว
+  @@unique([examId, studentId])
+  @@index([studentId])
+  @@index([batchId])
+  @@map("certificates")
+}
+
+/// คิวงานของ worker — poll ด้วย SELECT ... FOR UPDATE SKIP LOCKED
+model Job {
+  id      String  @id @default(uuid()) @db.Uuid
+  type    JobType
+  batchId String  @map("batch_id") @db.Uuid
+  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  status   JobStatus @default(QUEUED)
+  payload  Json      @default("{}")
+  progress Json      @default("{}")
+
+  attempts Int     @default(0)
+  error    String? @db.Text
+
+  lockedAt   DateTime? @map("locked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+
+  @@index([status, createdAt])
+  @@index([batchId])
+  @@map("jobs")
+}

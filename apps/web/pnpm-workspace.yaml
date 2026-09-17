@@ -1,0 +1,7 @@
+# pnpm 11 อ่านการอนุญาตรัน postinstall จากที่นี่ (ไม่ใช่ package.json แล้ว)
+# prisma ต้องรัน postinstall เพื่อดาวน์โหลด query engine ไม่งั้น build ไม่ผ่าน
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  esbuild: true
