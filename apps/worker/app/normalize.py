@@ -39,24 +39,28 @@ _WHITESPACE = re.compile(r"\s+")
 _MAX_PREFIX_PASSES = 3
 
 
-def normalize_name(raw: str) -> str:
-    """แปลงชื่อให้เป็นรูปมาตรฐาน โดยคงลำดับคำไว้"""
+def basic_clean(raw: str) -> str:
+    """ขั้นตอนทำความสะอาดพื้นฐาน (ขั้นที่ 1-4) ที่ทั้งชื่อคน ชื่อโรงเรียน และรางวัลใช้ร่วมกัน
+
+    1. NFD -> ลบ combining diacritic -> NFC
+    2. อักขระที่ไม่อนุญาต -> ช่องว่าง
+    3. ยุบช่องว่าง + ตัดหัวท้าย
+    4. พิมพ์ใหญ่ (ไม่กระทบตัวอักษรไทย)
+    """
     if not raw:
         return ""
-
-    # ขั้นที่ 1: NFD -> ลบ combining diacritic -> NFC
     text = unicodedata.normalize("NFD", raw)
     text = _COMBINING.sub("", text)
     text = unicodedata.normalize("NFC", text)
-
-    # ขั้นที่ 2: อักขระที่ไม่อนุญาต -> ช่องว่าง
     text = _DISALLOWED.sub(" ", text)
+    return _WHITESPACE.sub(" ", text).strip().upper()
 
-    # ขั้นที่ 3: ยุบช่องว่าง + ตัดหัวท้าย
-    text = _WHITESPACE.sub(" ", text).strip()
 
-    # ขั้นที่ 4: พิมพ์ใหญ่ (ไม่กระทบตัวอักษรไทย)
-    text = text.upper()
+def normalize_name(raw: str) -> str:
+    """แปลงชื่อให้เป็นรูปมาตรฐาน โดยคงลำดับคำไว้"""
+    text = basic_clean(raw)
+    if not text:
+        return ""
 
     # ขั้นที่ 5: ตัดคำนำหน้า วนจนไม่มีอะไรถูกตัด
     for _ in range(_MAX_PREFIX_PASSES):
@@ -78,6 +82,57 @@ def _strip_one_prefix(text: str) -> str:
             return text[len(prefix) + 1:].lstrip()
     return text
 
+
+# ---------------------------------------------------------------- รางวัล
+
+# คำที่ไม่ได้ช่วยระบุว่าเป็นรางวัลอะไร ต่างแหล่งเติมมาไม่เหมือนกัน
+# Excel เขียน "GOLD AWARD" / "PERFECT SCORER" ส่วนโฟลเดอร์เขียนแค่ "Gold"
+AWARD_NOISE = frozenset({"AWARD", "AWARDS", "SCORER", "SCORERS", "MEDAL", "PRIZE"})
+
+# ค่ามาตรฐาน 5 ค่าที่ระบบใช้ทั้งในชื่อไฟล์และฐานข้อมูล
+AWARD_CANONICAL = {
+    "GOLD": "GOLD",
+    "SILVER": "SILVER",
+    "BRONZE": "BRONZE",
+    "MERIT": "MERIT",
+    "PERFECT": "PERFECT_SCORE",
+    "PERFECT_SCORE": "PERFECT_SCORE",
+}
+
+# ชื่อรางวัลภาษาไทย — เรียงจากเจาะจงไปกว้าง ("ทองแดง" ต้องมาก่อน "ทอง")
+AWARD_THAI = (
+    ("ทองแดง", "BRONZE"),
+    ("ทอง", "GOLD"),
+    ("เงิน", "SILVER"),
+    ("ชมเชย", "MERIT"),
+    ("คะแนนเต็ม", "PERFECT_SCORE"),
+)
+
+
+def normalize_award(raw: str) -> str:
+    """แปลงชื่อรางวัลให้เป็นค่ามาตรฐาน 1 ใน 5 ค่า
+
+    รางวัลมาจาก 3 แหล่งที่สะกดไม่เหมือนกันเลย:
+      ชื่อโฟลเดอร์ใน ZIP   "Gold", "Perfect_Score"
+      ข้อความบนเกียรติบัตร "Gold Award"
+      คอลัมน์ AWARD ใน Excel "GOLD AWARD", "PERFECT SCORER"
+
+    รางวัลที่ไม่รู้จักคืนค่าว่าง ไม่ใช่เดา — เพราะรางวัลผิดจะไปโผล่บนหน้าเว็บของเด็ก
+    ผู้เรียกต้องตัดสินเองว่าจะหยุดงาน (กรณีชื่อโฟลเดอร์) หรือแค่เตือน (กรณี cross-check)
+    """
+    text = basic_clean(raw)
+    if not text:
+        return ""
+
+    for thai, canonical in AWARD_THAI:
+        if thai in text:
+            return canonical
+
+    tokens = [t for t in text.split(" ") if t and t not in AWARD_NOISE]
+    return AWARD_CANONICAL.get("_".join(tokens), "")
+
+
+# ---------------------------------------------------------------- โรงเรียน
 
 # คำนำหน้าชื่อโรงเรียนที่ไม่ได้ช่วยแยกความต่าง — เขียนบ้างไม่เขียนบ้างในไฟล์เดียวกัน
 # ภาษาไทยตัดแบบ "ขึ้นต้นด้วย" ได้เลยเพราะเขียนติดกัน

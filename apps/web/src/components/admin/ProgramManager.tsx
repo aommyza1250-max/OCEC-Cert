@@ -7,7 +7,6 @@ export type Program = {
   id: string;
   code: string;
   name: string;
-  kind: "DOMESTIC" | "INTERNATIONAL";
   active: boolean;
   examCount: number;
 };
@@ -25,10 +24,12 @@ export function ProgramManager({ programs }: { programs: Program[] }) {
         <div>
           <h2 className="font-semibold">รายการสอบ ({programs.length})</h2>
           <p className="text-sm text-gray-500">
-            รหัสที่ตั้งไว้จะถูกนำไปต่อท้ายชื่อไฟล์ เช่น{" "}
+            รหัสที่ตั้งไว้จะไปอยู่ในชื่อไฟล์ เช่น{" "}
             <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
-              SOMCHAI_JAIDEE_{programs[0]?.code ?? "HKIMO"}.pdf
+              SOMCHAI_JAIDEE_{programs[0]?.code ?? "HKIMO"}_FINAL_GOLD_2026.pdf
             </code>
+            <br />
+            รายการสอบเดียวจัดได้ทั้งรอบ Heat และ Final — เลือกรอบตอนสร้างรอบนำเข้า
           </p>
         </div>
         <button
@@ -85,9 +86,7 @@ function ProgramRow({ program }: { program: Program }) {
       <span className={`min-w-0 flex-1 truncate text-sm ${program.active ? "" : "text-gray-400"}`}>
         {program.name}
       </span>
-      <span className="text-xs text-gray-400">
-        {program.kind === "DOMESTIC" ? "เฉพาะของไทย" : "รวมประเทศ"} · ใช้แล้ว {program.examCount} ปี
-      </span>
+      <span className="text-xs text-gray-400">ใช้แล้ว {program.examCount} รอบ</span>
 
       <button
         onClick={() => send("PATCH", { active: !program.active })}
@@ -118,7 +117,6 @@ function NewProgramForm() {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"DOMESTIC" | "INTERNATIONAL">("INTERNATIONAL");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,7 +128,7 @@ function NewProgramForm() {
     const res = await fetch("/api/admin/programs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code, name, kind }),
+      body: JSON.stringify({ code, name }),
     });
 
     if (res.ok) {
@@ -146,7 +144,7 @@ function NewProgramForm() {
   return (
     <form onSubmit={submit} className="rounded-lg bg-gray-50 p-4">
       <p className="mb-3 text-sm font-medium">เพิ่มรายการสอบใหม่</p>
-      <div className="grid gap-3 sm:grid-cols-[140px_1fr_auto]">
+      <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
         <input
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -159,14 +157,6 @@ function NewProgramForm() {
           placeholder="ชื่อเต็ม เช่น Hong Kong International Mathematical Olympiad"
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]"
         />
-        <select
-          value={kind}
-          onChange={(e) => setKind(e.target.value as "DOMESTIC" | "INTERNATIONAL")}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]"
-        >
-          <option value="INTERNATIONAL">รวมประเทศ</option>
-          <option value="DOMESTIC">เฉพาะของไทย</option>
-        </select>
       </div>
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}

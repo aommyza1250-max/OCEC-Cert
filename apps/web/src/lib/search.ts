@@ -13,8 +13,9 @@ const MAX_STUDENTS = 20;
 
 export type CertificateItem = {
   id: string;
-  academicYear: number;
-  award: string | null;
+  year: number;
+  round: string;
+  award: string;
   level: string | null;
   certNo: string | null;
   previewUrl: string | null;
@@ -24,7 +25,7 @@ export type ProgramGroup = {
   code: string;
   name: string;
   /** ปีล่าสุดอยู่บนสุด */
-  years: { academicYear: number; certificates: CertificateItem[] }[];
+  years: { year: number; certificates: CertificateItem[] }[];
 };
 
 export type SearchResult = {
@@ -52,7 +53,7 @@ export async function searchStudents(rawQuery: string): Promise<SearchResult[]> 
       certificates: {
         where: { published: { not: null } },
         include: { exam: { include: { program: true } } },
-        orderBy: { exam: { academicYear: "desc" } },
+        orderBy: { exam: { year: "desc" } },
       },
     },
   });
@@ -62,11 +63,11 @@ export async function searchStudents(rawQuery: string): Promise<SearchResult[]> 
 
 type CertificateRow = {
   id: string;
-  award: string | null;
+  award: string;
   level: string | null;
   certNo: string | null;
   previewKey: string | null;
-  exam: { academicYear: number; program: { code: string; name: string } };
+  exam: { year: number; round: string; program: { code: string; name: string } };
 };
 
 function toSearchResult(student: {
@@ -84,11 +85,12 @@ function toSearchResult(student: {
     const program = byProgram.get(code) ?? { name, years: new Map() };
     byProgram.set(code, program);
 
-    const year = cert.exam.academicYear;
+    const year = cert.exam.year;
     const bucket = program.years.get(year) ?? [];
     bucket.push({
       id: cert.id,
-      academicYear: year,
+      year,
+      round: cert.exam.round,
       award: cert.award,
       level: cert.level,
       certNo: cert.certNo,
@@ -107,8 +109,8 @@ function toSearchResult(student: {
         code,
         name: program.name,
         years: [...program.years.entries()]
-          .map(([academicYear, certificates]) => ({ academicYear, certificates }))
-          .sort((a, b) => b.academicYear - a.academicYear),
+          .map(([year, certificates]) => ({ year, certificates }))
+          .sort((a, b) => b.year - a.year),
       }))
       .sort((a, b) => a.code.localeCompare(b.code)),
   };

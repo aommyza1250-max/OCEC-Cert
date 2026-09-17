@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 const STATUS_LABEL: Record<string, { text: string; className: string }> = {
-  DRAFT: { text: "ยังไม่อัปโหลดไฟล์", className: "bg-gray-100 text-gray-600" },
+  DRAFT: { text: "ยังไม่อัปโหลด ZIP", className: "bg-gray-100 text-gray-600" },
   SPLITTING: { text: "กำลังตัดแยกหน้า", className: "bg-blue-100 text-blue-700" },
   SPLIT_DONE: { text: "ตัดเสร็จ รอรายชื่อ", className: "bg-indigo-100 text-indigo-700" },
   MATCHING: { text: "กำลังจับคู่รายชื่อ", className: "bg-blue-100 text-blue-700" },
@@ -40,7 +40,6 @@ export default async function AdminDashboard() {
     id: p.id,
     code: p.code,
     name: p.name,
-    kind: p.kind,
     active: p.active,
     examCount: p._count.exams,
   }));
@@ -99,8 +98,7 @@ export default async function AdminDashboard() {
                         {batch.exam.program.name}
                       </p>
                       <p className="text-sm text-gray-500">
-                        ปีการศึกษา {batch.exam.academicYear} ·{" "}
-                        {batch.exam.program.kind === "DOMESTIC" ? "เฉพาะของไทย" : "รวมประเทศ"} ·{" "}
+                        รอบ {batch.exam.round === "HEAT" ? "Heat" : "Final"} · ปี {batch.exam.year} ·{" "}
                         {batch._count.stagingPages} หน้า / {batch._count.certificates} ใบ
                       </p>
                     </div>

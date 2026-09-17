@@ -62,9 +62,19 @@ def test_ไม่มีคอลัมน์ชื่อต้องฟ้อ�
         parse_roster(data)
 
 
-def test_อ่านเลขที่นั่งสอบ():
+def test_อ่านหัวตารางแบบไฟล์จริง_HKIMO():
+    # CANDIDATE NO / GRADE / CANDIDATE NAME / AWARD คือหัวตารางที่ใช้จริง
     data = make_roster_xlsx(
-        [{"name_en": "Somchai Jaidee", "code": "A-1024"}],
-        headers={"name_en": "Name", "code": "เลขที่นั่งสอบ"},
+        [{"cert_no": 203297, "level": "PRIMARY 3", "name_en": "JAYTIPAT CHATRATANAMALAI",
+          "award": "PERFECT SCORER"}]
     )
-    assert parse_roster(data)[0].exam_code == "A-1024"
+    row = parse_roster(data)[0]
+    assert row.cert_no == "203297"
+    assert row.level == "PRIMARY 3"
+    assert row.name_en == "JAYTIPAT CHATRATANAMALAI"
+    assert row.award == "PERFECT SCORER"
+
+
+def test_เลขที่อ่านมาเป็นทศนิยมต้องตัดให้เหลือตัวเลข():
+    data = make_roster_xlsx([{"cert_no": "203297.0", "name_en": "SOMCHAI JAIDEE"}])
+    assert parse_roster(data)[0].cert_no == "203297"

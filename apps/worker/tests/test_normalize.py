@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.normalize import name_sort_key, normalize_name, normalize_school
+from app.normalize import name_sort_key, normalize_award, normalize_name, normalize_school
 
 def _cases_file() -> Path:
     """ในเครื่อง = <repo>/shared/, ใน container ของ compose = /shared (ดู docker-compose.yml)"""
@@ -24,6 +24,7 @@ CASES_FILE = _cases_file()
 _DATA = json.loads(CASES_FILE.read_text(encoding="utf-8"))
 CASES = _DATA["cases"]
 SCHOOL_CASES = _DATA["schoolCases"]
+AWARD_CASES = _DATA["awardCases"]
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["why"] for c in CASES])
@@ -35,3 +36,8 @@ def test_matches_shared_cases(case):
 @pytest.mark.parametrize("case", SCHOOL_CASES, ids=[c["why"] for c in SCHOOL_CASES])
 def test_school_matches_shared_cases(case):
     assert normalize_school(case["input"]) == case["normalized"]
+
+
+@pytest.mark.parametrize("case", AWARD_CASES, ids=[c["why"] for c in AWARD_CASES])
+def test_award_matches_shared_cases(case):
+    assert normalize_award(case["input"]) == case["normalized"]

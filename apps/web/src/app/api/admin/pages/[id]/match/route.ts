@@ -9,7 +9,6 @@ const schema = z
     nameTh: z.string().trim().optional(),
     nameEn: z.string().trim().optional(),
     school: z.string().trim().optional(),
-    award: z.string().trim().optional(),
   })
   .refine((v) => (v.nameTh?.length ?? 0) > 0 || (v.nameEn?.length ?? 0) > 0, {
     message: "ต้องกรอกชื่ออย่างน้อยหนึ่งภาษา",
@@ -44,6 +43,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!page) return NextResponse.json({ error: "ไม่พบหน้านี้" }, { status: 404 });
   if (!page.pdfKey) {
     return NextResponse.json({ error: "หน้านี้ไม่มีไฟล์ PDF ที่ตัดไว้" }, { status: 409 });
+  }
+  // รางวัลมาจากชื่อโฟลเดอร์ใน ZIP ตั้งแต่ตอนตัดหน้า ถ้าไม่มีแปลว่าตัดมาผิดตั้งแต่ต้น
+  if (!page.award) {
+    return NextResponse.json(
+      { error: "หน้านี้ไม่มีรางวัลติดมา — ต้องตัดแยกไฟล์ ZIP ใหม่ก่อน" },
+      { status: 409 },
+    );
   }
 
   const nameTh = parsed.data.nameTh || null;
@@ -96,14 +102,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     }),
     prisma.certificate.upsert({
-      where: { examId_studentId: { examId: page.batch.examId, studentId: student.id } },
+      where: {
+        examId_studentId_award: {
+          examId: page.batch.examId,
+          studentId: student.id,
+          award: page.award,
+        },
+      },
       update: {
         stagingPageId: page.id,
         batchId: page.batchId,
         pdfKey: page.pdfKey,
         previewKey: page.previewKey,
         pageNumber: page.pageNumber,
-        award: parsed.data.award || null,
         certNo: page.certNo,
         level: page.level,
       },
@@ -115,8 +126,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         pdfKey: page.pdfKey,
         previewKey: page.previewKey,
         pageNumber: page.pageNumber,
-        award: parsed.data.award || null,
+        award: page.award,
         certNo: page.certNo,
+        candidateNo: page.certNo,
         level: page.level,
         // เผยแพร่ตามสถานะของ batch ไม่ใช่เผยแพร่ทันที
         published: page.batch.status === "PUBLISHED" ? new Date() : null,

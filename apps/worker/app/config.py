@@ -37,8 +37,12 @@ class Settings:
     name_anchor: str = "This is awarded to"
     # ข้อความนำหน้าระดับชั้น
     level_line_prefix: str = "for outstanding achievement in"
-    # เลขเกียรติบัตรบนหน้ากระดาษ
-    cert_no_pattern: str = r"No:\s*(\d+)"
+    # เลขบนหน้ากระดาษ ของจริงเขียน "Cert No: 203297"
+    cert_no_pattern: str = r"(?:Cert\s+)?No:\s*(\d+)"
+    # บรรทัดรางวัล ของจริงเขียน "Gold Award" — หน้า Perfect Score ไม่มีบรรทัดนี้
+    award_line_pattern: str = r"^(.+?)\s+Award$"
+    # รอบและปี ของจริงเขียน "... Olympiad Final Round 2026,"
+    round_year_pattern: str = r"(Final|Heat)\s+Round\s+(\d{4})"
     # ชื่อบนเกียรติบัตรเป็นอังกฤษพิมพ์ใหญ่ล้วน ใช้ตรวจว่าหยิบถูกบรรทัดไหม
     name_validation_pattern: str = r"[A-Z][A-Z .\'\-]+"
 
@@ -70,7 +74,11 @@ def settings() -> Settings:
         level_line_prefix=os.environ.get(
             "LEVEL_LINE_PREFIX", "for outstanding achievement in"
         ),
-        cert_no_pattern=os.environ.get("CERT_NO_PATTERN", r"No:\s*(\d+)"),
+        cert_no_pattern=os.environ.get("CERT_NO_PATTERN", r"(?:Cert\s+)?No:\s*(\d+)"),
+        award_line_pattern=os.environ.get("AWARD_LINE_PATTERN", r"^(.+?)\s+Award$"),
+        round_year_pattern=os.environ.get(
+            "ROUND_YEAR_PATTERN", r"(Final|Heat)\s+Round\s+(\d{4})"
+        ),
         name_validation_pattern=os.environ.get(
             "NAME_VALIDATION_PATTERN", r"[A-Z][A-Z .\'\-]+"
         ),

@@ -11,9 +11,10 @@ export type DuplicatePage = {
   level: string | null;
   previewUrl: string | null;
   matchNote: string | null;
-  /** ข้อมูลจากแถว Excel ที่จับคู่มาถึงหน้านี้ — เก็บไว้ให้แอดมินไม่ต้องเปิด Excel ซ้ำ */
-  pendingAward: string | null;
-  pendingSchool: string | null;
+  /** รางวัลจากชื่อโฟลเดอร์ใน ZIP — แหล่งความจริงของรางวัล */
+  award: string | null;
+  /** รางวัลตามที่ Excel เขียน — เก็บไว้ให้แอดมินไม่ต้องเปิด Excel ซ้ำ */
+  rosterAward: string | null;
   /** true = ใบที่ระบบจับคู่ไปแล้ว, false = ใบที่ชนเข้ามาทีหลัง */
   isMatched: boolean;
   studentNameTh: string | null;
@@ -53,8 +54,7 @@ export function DuplicateReview({ groups }: { groups: DuplicateGroup[] }) {
 function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
   const duplicates = group.pages.filter((p) => !p.isMatched);
   const [nameTh, setNameTh] = useState("");
-  // เติมโรงเรียนจาก Excel ไว้ให้ก่อน แอดมินแก้ได้ถ้าไม่ถูก
-  const [school, setSchool] = useState(duplicates[0]?.pendingSchool ?? "");
+  const [school, setSchool] = useState("");
 
   return (
     <article className="rounded-xl border-2 border-amber-200 bg-amber-50/40 p-4">
@@ -137,8 +137,8 @@ function PageCard({ page }: { page: DuplicatePage }) {
         <Row label="ชื่อบนเกียรติบัตร" value={page.extractedName} />
         <Row label="เลขเกียรติบัตร" value={page.certNo} />
         <Row label="ระดับชั้น" value={page.level} />
-        <Row label="รางวัล (จาก Excel)" value={page.pendingAward} />
-        <Row label="โรงเรียน (จาก Excel)" value={page.pendingSchool} />
+        <Row label="รางวัล (จากโฟลเดอร์)" value={page.award} />
+        <Row label="รางวัล (ตาม Excel)" value={page.rosterAward} />
         {page.isMatched && (
           <>
             <Row label="ผูกกับผู้เข้าสอบ" value={page.studentNameTh ?? page.studentNameEn} />

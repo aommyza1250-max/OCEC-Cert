@@ -10,7 +10,6 @@ const schema = z.object({
   nameTh: z.string().trim().optional(),
   nameEn: z.string().trim().optional(),
   school: z.string().trim().optional(),
-  award: z.string().trim().optional(),
 });
 
 /**
@@ -45,8 +44,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { status: 409 },
     );
   }
-  if (!page.pdfKey) {
-    return NextResponse.json({ error: "หน้านี้ไม่มีไฟล์ PDF ที่ตัดไว้" }, { status: 409 });
+  if (!page.pdfKey || !page.award) {
+    return NextResponse.json(
+      { error: "หน้านี้ไม่มีไฟล์ PDF หรือรางวัลที่ตัดไว้" },
+      { status: 409 },
+    );
   }
 
   const examId = page.batch.examId;
@@ -99,7 +101,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       }),
       prisma.certificate.update({
-        where: { examId_studentId: { examId, studentId: rival.matchedStudentId } },
+        where: {
+          examId_studentId_award: {
+            examId,
+            studentId: rival.matchedStudentId,
+            award: page.award,
+          },
+        },
         data: {
           stagingPageId: page.id,
           pdfKey: page.pdfKey,
@@ -107,8 +115,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           pageNumber: page.pageNumber,
           certNo: page.certNo,
           level: page.level,
-          // รางวัลของใบนี้มาจากแถว Excel ที่จับคู่มาถึงหน้านี้
-          award: page.pendingAward ?? undefined,
         },
       }),
     ]);
@@ -122,9 +128,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ต้องกรอกชื่ออย่างน้อยหนึ่งภาษา" }, { status: 400 });
   }
 
-  // ค่าที่แอดมินพิมพ์มาชนะเสมอ ถ้าไม่พิมพ์จึงใช้ค่าที่เก็บไว้จาก Excel
-  const school = parsed.data.school || page.pendingSchool || null;
-  const award = parsed.data.award || page.pendingAward || null;
+  const school = parsed.data.school || null;
   const student = await prisma.student.create({
     data: {
       nameTh,
@@ -158,8 +162,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         previewKey: page.previewKey,
         pageNumber: page.pageNumber,
         certNo: page.certNo,
+        candidateNo: page.certNo,
         level: page.level,
-        award,
+        // รางวัลมาจากชื่อโฟลเดอร์ใน ZIP เสมอ
+        award: page.award,
         // เผยแพร่ตามสถานะของ batch ไม่ใช่เผยแพร่ทันที
         published: page.batch.status === "PUBLISHED" ? new Date() : null,
       },

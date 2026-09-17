@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { keys } from "@/lib/r2";
 import { wakeWorker } from "@/lib/worker";
 
-const schema = z.object({ kind: z.enum(["pdf", "excel"]) });
+const schema = z.object({ kind: z.enum(["zip", "excel"]) });
 
 /**
  * บอกระบบว่าไฟล์อัปโหลดขึ้น R2 เสร็จแล้ว ให้ตั้งงานให้ worker ไปทำต่อ
@@ -30,9 +30,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const batch = await prisma.batch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "ไม่พบรอบการนำเข้านี้" }, { status: 404 });
 
-  if (kind === "excel" && !batch.sourcePdfKey) {
+  if (kind === "excel" && !batch.sourceZipKey) {
     return NextResponse.json(
-      { error: "ต้องอัปโหลดไฟล์ PDF และรอตัดแยกให้เสร็จก่อน จึงจะนำเข้ารายชื่อได้" },
+      { error: "ต้องอัปโหลดไฟล์ ZIP เกียรติบัตรและรอตัดแยกให้เสร็จก่อน จึงจะนำเข้ารายชื่อได้" },
       { status: 409 },
     );
   }
@@ -41,12 +41,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await tx.batch.update({
       where: { id },
       data:
-        kind === "pdf"
-          ? { sourcePdfKey: keys.sourcePdf(id), status: "SPLITTING" }
+        kind === "zip"
+          ? { sourceZipKey: keys.sourceZip(id), status: "SPLITTING" }
           : { sourceExcelKey: keys.sourceExcel(id), status: "MATCHING" },
     });
     return tx.job.create({
-      data: { batchId: id, type: kind === "pdf" ? "SPLIT" : "MATCH" },
+      data: { batchId: id, type: kind === "zip" ? "SPLIT" : "MATCH" },
     });
   });
 

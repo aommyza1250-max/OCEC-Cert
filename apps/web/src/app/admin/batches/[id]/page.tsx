@@ -52,15 +52,15 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           {batch.exam.program.name}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          ปีการศึกษา {batch.exam.academicYear} ·{" "}
-          {batch.exam.program.kind === "DOMESTIC" ? "เฉพาะของไทย" : "รวมประเทศ"} · สร้างเมื่อ{" "}
-          {batch.createdAt.toLocaleDateString("th-TH")}
+          รอบ {batch.exam.round === "HEAT" ? "Heat (คัดเลือก)" : "Final (ชิงชนะเลิศ)"} · ปี{" "}
+          {batch.exam.year} · สร้างเมื่อ {batch.createdAt.toLocaleDateString("th-TH")}
         </p>
         <p className="mt-1 text-sm text-gray-400">
           ไฟล์ที่ตัดได้จะชื่อ{" "}
           <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
             {"{FNAME}_{LNAME}_"}
-            {batch.exam.program.code}.pdf
+            {batch.exam.program.code}_{batch.exam.round}_{"{AWARD}_"}
+            {batch.exam.year}.pdf
           </code>
         </p>
       </header>
@@ -68,7 +68,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
       <BatchWorkflow
         batchId={batch.id}
         status={batch.status}
-        hasPdf={Boolean(batch.sourcePdfKey)}
+        hasZip={Boolean(batch.sourceZipKey)}
         hasExcel={Boolean(batch.sourceExcelKey)}
         certificateCount={batch._count.certificates}
         stats={batch.stats as Record<string, unknown>}
@@ -99,6 +99,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
             extractedName: page.extractedName,
             certNo: page.certNo,
             level: page.level,
+            award: page.award,
             matchStatus: page.matchStatus,
             matchNote: page.matchNote,
             previewUrl: page.previewKey ? publicUrl(page.previewKey) : null,
@@ -147,8 +148,8 @@ async function loadDuplicateGroups(batchId: string): Promise<DuplicateGroup[]> {
       level: page.level,
       previewUrl: page.previewKey ? publicUrl(page.previewKey) : null,
       matchNote: page.matchNote,
-      pendingAward: page.pendingAward,
-      pendingSchool: page.pendingSchool,
+      award: page.award,
+      rosterAward: page.rosterAward,
       isMatched: page.matchStatus === "MATCHED",
       studentNameTh: page.matchedStudent?.nameTh ?? null,
       studentNameEn: page.matchedStudent?.nameEn ?? null,

@@ -24,18 +24,31 @@
 ### ฝั่งผู้ดูแลระบบ (Admin Workflow)
 รองรับการประมวลผลไฟล์เกียรติบัตร 2 รูปแบบ:
 
-* **แบบที่ 1: เกียรติบัตรเฉพาะของไทย (Domestic)**
-  1. แอดมินอัปโหลดไฟล์ PDF รวมเล่ม (หลายหน้าในไฟล์เดียว)
-  2. ระบบดึงข้อความชื่อ-สกุลจากเนื้อหาในแต่ละหน้า แล้วตัดแยก (Split) ออกมาเป็นไฟล์รายบุคคล: `{FIRSTNAME}_{LASTNAME}_{EXAM_ID}.pdf` พร้อมสร้างรูป Preview
-  3. แอดมินอัปโหลดไฟล์รายชื่อ Excel สรุปผลสอบ
-  4. ระบบ Normalize ชื่อภาษาอังกฤษจาก Excel และนำมาจับคู่ (Match) กับชื่อไฟล์ PDF อัตโนมัติ ก่อนบันทึกข้อมูลลงฐานข้อมูล
+แอดมินอัปโหลด **ไฟล์ ZIP ที่แยกโฟลเดอร์ตามรางวัล** เพราะระบบอ่านรางวัลจากชื่อโฟลเดอร์
+(หน้าเกียรติบัตร Perfect Score ไม่มีข้อความรางวัลพิมพ์อยู่บนหน้า)
 
-* **แบบที่ 2: เกียรติบัตรรวมประเทศ (International)**
-  1. แอดมินอัปโหลดไฟล์ PDF รวมเล่ม
-  2. ระบบสแกนตรวจหาข้อความสัญชาติ เช่น `from THAILAND`
-     * หากไม่ใช่คนไทย: ข้ามหน้านั้นไปทันที
-     * หากเป็นคนไทย: ดึงชื่อ, ตัดแยกหน้าเฉพาะคนไทย, สร้างรูป Preview และเปลี่ยนชื่อไฟล์
-  3. แอดมินอัปโหลด Excel รายชื่อเฉพาะของไทย เพื่อ Match ข้อมูลและบันทึกลงระบบ
+```
+📦 HKIMO_Final_2026.zip
+ ├── 📁 gold/            *.pdf
+ ├── 📁 silver/          *.pdf
+ ├── 📁 bronze/          *.pdf
+ ├── 📁 merit/           *.pdf
+ └── 📁 perfect score/   *.pdf
+```
+
+1. แอดมินเลือก **รายการสอบ + รอบ (Heat/Final) + ปี ค.ศ.** แล้วอัปโหลด ZIP
+2. ระบบแตก ZIP อ่านรางวัลจากชื่อโฟลเดอร์ แล้วตัดแยกทีละหน้า
+   * **รอบ Heat** — ผู้เข้าสอบเป็นคนไทยทั้งหมด ตัดแยกทุกหน้า
+   * **รอบ Final** — ไฟล์รวมทุกประเทศ ตัดเฉพาะหน้าที่พบ `from THAILAND` ข้ามชาติอื่นทันที
+3. แต่ละหน้าจะถูกสกัด ชื่อ / เลขผู้เข้าสอบ / ระดับชั้น / ปี แล้วตั้งชื่อไฟล์เป็น
+   `{FIRSTNAME}_{LASTNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี}.pdf`
+   พร้อมสร้างรูป Preview แบบ WebP
+4. แอดมินอัปโหลด Excel รายชื่อ (`CANDIDATE NO`, `GRADE`, `CANDIDATE NAME`, `AWARD`)
+5. ระบบจับคู่ด้วย **เลขผู้เข้าสอบ** เป็นหลัก แล้วเทียบชื่อยืนยันอีกชั้น
+   อะไรที่ระบุตัวไม่ได้จะส่งให้แอดมินตัดสินเอง ไม่เดาให้
+6. แอดมินตรวจสรุปแล้วกดเผยแพร่ ผู้ปกครองจึงจะค้นเจอ
+
+> รายละเอียดครบถ้วนอยู่ใน [docs/data-intake-spec.md](docs/data-intake-spec.md)
 
 ---
 
@@ -98,7 +111,10 @@ OCEC-Cert/
 | [docs/name-normalization.md](docs/name-normalization.md) | **กฎ normalize ชื่อ — แหล่งความจริงเดียว** |
 | [docs/pdf-parsing-notes.md](docs/pdf-parsing-notes.md) | วิธีอ่านชื่อจากหน้าเกียรติบัตร และวิธีปรับจูนกับไฟล์จริง |
 | [docs/data-intake-spec.md](docs/data-intake-spec.md) | **สเปกการรับและนำเข้าข้อมูล (โครงสร้าง ZIP, ชื่อไฟล์, และการ Match)** |
-| [docs/deploy-railway.md](docs/deploy-railway.md) | ขั้นตอน deploy ทีละสเต็ป |
+| [docs/data-intake-spec.md](docs/data-intake-spec.md) | **สเปกการรับข้อมูล** — โครงสร้าง ZIP, Excel, กฎการจับคู่ |
+| [docs/setup-cloudflare-r2.md](docs/setup-cloudflare-r2.md) | ตั้งค่าที่เก็บไฟล์ทีละขั้น |
+| [docs/setup-railway.md](docs/setup-railway.md) | ตั้งค่าและ deploy ทีละขั้น |
+| [docs/go-live-checklist.md](docs/go-live-checklist.md) | เช็คลิสต์ก่อนเปิดใช้จริง |
 | [docs/runbook.md](docs/runbook.md) | คู่มือแก้ปัญหาเมื่อระบบมีปัญหา |
 
 ---
@@ -131,7 +147,8 @@ pnpm dev                        # http://localhost:3000
 ```bash
 cd apps/web && pnpm test                               # normalize ฝั่ง TypeScript
 docker compose exec worker python -m pytest -q         # normalize / extract / Excel ฝั่ง Python
-docker compose exec worker python scripts/e2e_demo.py  # ทั้งสายงาน ด้วยไฟล์สังเคราะห์
+docker compose exec worker python scripts/e2e_demo.py       # ทั้งสายงาน ด้วยไฟล์สังเคราะห์
+docker compose exec worker python scripts/check_real_files.py  # ตรวจตัวอ่านกับไฟล์จริงใน tmp/
 k6 run scripts/loadtest.js                             # จำลอง 600 คนค้นหาพร้อมกัน
 ```
 
@@ -139,11 +156,13 @@ k6 run scripts/loadtest.js                             # จำลอง 600 ค
 
 ## 7. สิ่งที่ต้องเตรียมก่อนใช้งานจริง
 
-- [ ] **ไฟล์ตัวอย่างจริง** — PDF รวมเล่มทั้งสองแบบ + Excel ที่คู่กัน
-      เพื่อปรับจูนการอ่านชื่อ (ดู [docs/pdf-parsing-notes.md](docs/pdf-parsing-notes.md))
+- [ ] **ไฟล์ ZIP ที่แยกโฟลเดอร์ตามรางวัล** ของแต่ละรายการสอบและรอบ
+- [ ] **ไฟล์ Excel รายชื่อ** ที่มีคอลัมน์ `CANDIDATE NO` (สำคัญที่สุด — ใช้เป็นคีย์จับคู่)
+- [ ] ถ้าเป็นรายการสอบใหม่ที่ยังไม่เคยนำเข้า ให้ตรวจโครงหน้าก่อนด้วย
+      `docker compose exec worker python scripts/check_real_files.py`
+      (ดู [docs/pdf-parsing-notes.md](docs/pdf-parsing-notes.md))
 - [ ] **Cloudflare R2** — bucket, API token, custom domain, CORS policy
 - [ ] **Railway** — Hobby Plan และเชื่อม GitHub repo
-- [ ] ตัดสินใจว่า `EXAM_ID` ในชื่อไฟล์คือรหัสรายการสอบหรือเลขที่นั่งสอบของผู้เข้าสอบ
 - [ ] ประเมินจำนวนเกียรติบัตรย้อนหลังทั้งหมด (มีผลต่อโควต้า 10 GB ของ R2)
 
 > **ข้อควรระวังด้านข้อมูลส่วนบุคคล:** พอร์ทัลนี้เปิดให้ใครก็ได้ค้นหาชื่อผู้อื่น

@@ -111,9 +111,9 @@ function StudentBlock({ student }: { student: SearchResult }) {
 
             <div className="space-y-5 border-l-2 border-[var(--color-gold)]/30 pl-4">
               {program.years.map((year) => (
-                <div key={year.academicYear}>
+                <div key={year.year}>
                   <h4 className="mb-3 text-sm font-semibold text-[var(--color-gold)]">
-                    ปีการศึกษา {year.academicYear}
+                    ปี {year.year}
                   </h4>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {year.certificates.map((cert) => (

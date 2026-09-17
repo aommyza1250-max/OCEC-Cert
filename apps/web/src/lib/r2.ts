@@ -57,9 +57,9 @@ export async function presignedUploadUrl(key: string, contentType: string, expir
 
 /** ตั้งชื่อ key ให้เป็นระเบียบ เดาไม่ได้ และรู้ว่าไฟล์ของ batch ไหน
  *  ส่วนของเกียรติบัตรรายคน worker เป็นคนตั้งชื่อ (ดู apps/worker/app/storage.py)
- *  รูปแบบคือ {FNAME}_{LNAME}_{รหัสรายการสอบ} ซึ่งตรงกับที่ใช้อยู่เดิมตอนตัดไฟล์ด้วยมือ */
+ *  รูปแบบคือ {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี} ตาม docs/data-intake-spec.md */
 export const keys = {
-  sourcePdf: (batchId: string) => `sources/${batchId}/bundle.pdf`,
+  sourceZip: (batchId: string) => `sources/${batchId}/bundle.zip`,
   sourceExcel: (batchId: string) => `sources/${batchId}/roster.xlsx`,
   certificatePdf: (batchId: string, stem: string) => `certificates/${batchId}/${stem}.pdf`,
   preview: (batchId: string, stem: string) => `previews/${batchId}/${stem}.webp`,

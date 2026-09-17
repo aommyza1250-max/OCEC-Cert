@@ -209,5 +209,118 @@
       "input": "โรงเรียน",
       "normalized": ""
     }
+  ],
+  "_readmeAward": "awardCases ใช้ทดสอบ normalizeAward/normalize_award — รางวัลเขียนมาจาก 3 แหล่งที่สะกดไม่เหมือนกัน: ชื่อโฟลเดอร์ใน ZIP, ข้อความบนหน้าเกียรติบัตร และคอลัมน์ AWARD ใน Excel",
+  "awardCases": [
+    {
+      "why": "ชื่อโฟลเดอร์",
+      "input": "Gold",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "ชื่อโฟลเดอร์ตัวเล็ก",
+      "input": "gold",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "ข้อความบนหน้าเกียรติบัตร",
+      "input": "Gold Award",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "คอลัมน์ AWARD ใน Excel",
+      "input": "GOLD AWARD",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "เงิน จากโฟลเดอร์",
+      "input": "Silver",
+      "normalized": "SILVER"
+    },
+    {
+      "why": "เงิน จาก Excel",
+      "input": "SILVER AWARD",
+      "normalized": "SILVER"
+    },
+    {
+      "why": "ทองแดง จากหน้าเกียรติบัตร",
+      "input": "Bronze Award",
+      "normalized": "BRONZE"
+    },
+    {
+      "why": "ชมเชย จากโฟลเดอร์",
+      "input": "Merit",
+      "normalized": "MERIT"
+    },
+    {
+      "why": "ชมเชย จาก Excel",
+      "input": "MERIT AWARD",
+      "normalized": "MERIT"
+    },
+    {
+      "why": "โฟลเดอร์จริงใช้ขีดล่าง",
+      "input": "Perfect_Score",
+      "normalized": "PERFECT_SCORE"
+    },
+    {
+      "why": "สเปกเขียนเว้นวรรค",
+      "input": "perfect score",
+      "normalized": "PERFECT_SCORE"
+    },
+    {
+      "why": "Excel จริงเขียน SCORER ไม่ใช่ SCORE",
+      "input": "PERFECT SCORER",
+      "normalized": "PERFECT_SCORE"
+    },
+    {
+      "why": "ใช้ยัติภังค์",
+      "input": "Perfect-Score",
+      "normalized": "PERFECT_SCORE"
+    },
+    {
+      "why": "เว้นวรรคเกิน",
+      "input": "  GOLD   AWARD  ",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "ชื่อไทย เหรียญทอง",
+      "input": "เหรียญทอง",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "ชื่อไทย เหรียญเงิน",
+      "input": "เหรียญเงิน",
+      "normalized": "SILVER"
+    },
+    {
+      "why": "ชื่อไทย เหรียญทองแดง ต้องไม่โดน 'ทอง' ตัดก่อน",
+      "input": "เหรียญทองแดง",
+      "normalized": "BRONZE"
+    },
+    {
+      "why": "ชื่อไทย ชมเชย",
+      "input": "รางวัลชมเชย",
+      "normalized": "MERIT"
+    },
+    {
+      "why": "ชื่อไทย คะแนนเต็ม",
+      "input": "คะแนนเต็ม",
+      "normalized": "PERFECT_SCORE"
+    },
+    {
+      "why": "รางวัลที่ระบบไม่รู้จัก ต้องคืนค่าว่าง ไม่ใช่เดา",
+      "input": "Participation",
+      "normalized": ""
+    },
+    {
+      "why": "โฟลเดอร์ขยะจาก macOS",
+      "input": "__MACOSX",
+      "normalized": ""
+    },
+    {
+      "why": "ว่าง",
+      "input": "",
+      "normalized": ""
+    }
   ]
 }

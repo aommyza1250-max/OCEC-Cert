@@ -3,11 +3,13 @@
 ตรรกะในไฟล์นี้อ้างอิงจากสคริปต์ `rename_pdf_text.py` ที่ทดสอบกับไฟล์จริงมาแล้ว
 ไม่ใช่การเดารูปแบบเอง หน้าเกียรติบัตรจริงมีโครงประมาณนี้:
 
-    Certificate No: 12345
+    Gold Award                                          <-- รางวัล (หน้า Perfect Score ไม่มีบรรทัดนี้)
     This is awarded to
-    SOMCHAI JAIDEE              <-- ชื่อ
-    from THAILAND               <-- สัญชาติ
-    for outstanding achievement in Primary 5    <-- ระดับชั้น
+    JAYTIPAT CHATRATANAMALAI                            <-- ชื่อ
+    from THAILAND                                       <-- สัญชาติ
+    for outstanding achievement in PRIMARY 3,           <-- ระดับชั้น
+    ... Mathematical Olympiad Final Round 2026,         <-- รอบ + ปี ค.ศ.
+    Cert No: 203297                                     <-- เลขผู้เข้าสอบ (= CANDIDATE NO ใน Excel)
 
 ชื่อหาได้ 2 ทาง (เผื่อแบบฟอร์มต่างรุ่นกัน):
   1. บรรทัด "ก่อน" บรรทัดที่ขึ้นต้นด้วย "from "
@@ -31,6 +33,11 @@ class PageInfo:
     level: str | None
     cert_no: str | None
     country: str | None
+    """รางวัลตามที่พิมพ์บนหน้า — เป็น None ได้เป็นปกติ (หน้า Perfect Score ไม่พิมพ์รางวัล)
+    แหล่งความจริงของรางวัลคือชื่อโฟลเดอร์ใน ZIP ค่านี้ใช้แค่ cross-check"""
+    award_on_page: str | None = None
+    round_on_page: str | None = None
+    year: int | None = None
 
 
 def page_text(page: Any) -> str:
@@ -56,11 +63,16 @@ def read_lines(lines: list[str]) -> PageInfo:
     name_anchor = cfg.name_anchor
     level_prefix = cfg.level_line_prefix
     cert_pattern = re.compile(cfg.cert_no_pattern)
+    award_pattern = re.compile(cfg.award_line_pattern)
+    round_pattern = re.compile(cfg.round_year_pattern, re.IGNORECASE)
 
     name: str | None = None
     level: str | None = None
     cert_no: str | None = None
     country: str | None = None
+    award_on_page: str | None = None
+    round_on_page: str | None = None
+    year: int | None = None
 
     for index, line in enumerate(lines):
         if line.startswith(country_prefix):
@@ -78,7 +90,26 @@ def read_lines(lines: list[str]) -> PageInfo:
             if found:
                 cert_no = (found.group(1) if found.groups() else found.group(0)).strip()
 
-    return PageInfo(name=validate_name(name), level=level, cert_no=cert_no, country=country)
+        if award_on_page is None:
+            found = award_pattern.match(line)
+            if found:
+                award_on_page = found.group(1).strip()
+
+        if year is None:
+            found = round_pattern.search(line)
+            if found:
+                round_on_page = found.group(1).upper()
+                year = int(found.group(2))
+
+    return PageInfo(
+        name=validate_name(name),
+        level=level,
+        cert_no=cert_no,
+        country=country,
+        award_on_page=award_on_page,
+        round_on_page=round_on_page,
+        year=year,
+    )
 
 
 def validate_name(name: str | None) -> str | None:

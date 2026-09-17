@@ -36,21 +36,30 @@ const WHITESPACE = /\s+/g;
 
 const MAX_PREFIX_PASSES = 3;
 
+/**
+ * ขั้นตอนทำความสะอาดพื้นฐาน (ขั้นที่ 1-4) ที่ทั้งชื่อคน ชื่อโรงเรียน และรางวัลใช้ร่วมกัน
+ *
+ * 1. NFD -> ลบ combining diacritic -> NFC
+ * 2. อักขระที่ไม่อนุญาต -> ช่องว่าง
+ * 3. ยุบช่องว่าง + ตัดหัวท้าย
+ * 4. พิมพ์ใหญ่ (ไม่กระทบตัวอักษรไทย)
+ */
+export function basicClean(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return raw
+    .normalize("NFD")
+    .replace(COMBINING, "")
+    .normalize("NFC")
+    .replace(DISALLOWED, " ")
+    .replace(WHITESPACE, " ")
+    .trim()
+    .toUpperCase();
+}
+
 /** แปลงชื่อให้เป็นรูปมาตรฐาน โดยคงลำดับคำไว้ */
 export function normalizeName(raw: string | null | undefined): string {
-  if (!raw) return "";
-
-  // ขั้นที่ 1: NFD -> ลบ combining diacritic -> NFC
-  let text = raw.normalize("NFD").replace(COMBINING, "").normalize("NFC");
-
-  // ขั้นที่ 2: อักขระที่ไม่อนุญาต -> ช่องว่าง
-  text = text.replace(DISALLOWED, " ");
-
-  // ขั้นที่ 3: ยุบช่องว่าง + ตัดหัวท้าย
-  text = text.replace(WHITESPACE, " ").trim();
-
-  // ขั้นที่ 4: พิมพ์ใหญ่ (ไม่กระทบตัวอักษรไทย)
-  text = text.toUpperCase();
+  let text = basicClean(raw);
+  if (!text) return "";
 
   // ขั้นที่ 5: ตัดคำนำหน้า วนจนไม่มีอะไรถูกตัด
   for (let i = 0; i < MAX_PREFIX_PASSES; i++) {
@@ -72,6 +81,63 @@ function stripOnePrefix(text: string): string {
   }
   return text;
 }
+
+/** คำที่ไม่ได้ช่วยระบุว่าเป็นรางวัลอะไร ต่างแหล่งเติมมาไม่เหมือนกัน
+ *  Excel เขียน "GOLD AWARD" / "PERFECT SCORER" ส่วนโฟลเดอร์เขียนแค่ "Gold" */
+const AWARD_NOISE = new Set(["AWARD", "AWARDS", "SCORER", "SCORERS", "MEDAL", "PRIZE"]);
+
+/** ค่ามาตรฐาน 5 ค่าที่ระบบใช้ทั้งในชื่อไฟล์และฐานข้อมูล */
+const AWARD_CANONICAL: Record<string, string> = {
+  GOLD: "GOLD",
+  SILVER: "SILVER",
+  BRONZE: "BRONZE",
+  MERIT: "MERIT",
+  PERFECT: "PERFECT_SCORE",
+  PERFECT_SCORE: "PERFECT_SCORE",
+};
+
+/** ชื่อรางวัลภาษาไทย — เรียงจากเจาะจงไปกว้าง ("ทองแดง" ต้องมาก่อน "ทอง") */
+const AWARD_THAI: [string, string][] = [
+  ["ทองแดง", "BRONZE"],
+  ["ทอง", "GOLD"],
+  ["เงิน", "SILVER"],
+  ["ชมเชย", "MERIT"],
+  ["คะแนนเต็ม", "PERFECT_SCORE"],
+];
+
+/**
+ * แปลงชื่อรางวัลให้เป็นค่ามาตรฐาน 1 ใน 5 ค่า
+ *
+ * รางวัลมาจาก 3 แหล่งที่สะกดไม่เหมือนกันเลย:
+ *   ชื่อโฟลเดอร์ใน ZIP    "Gold", "Perfect_Score"
+ *   ข้อความบนเกียรติบัตร  "Gold Award"
+ *   คอลัมน์ AWARD ใน Excel "GOLD AWARD", "PERFECT SCORER"
+ *
+ * รางวัลที่ไม่รู้จักคืนค่าว่าง ไม่ใช่เดา — เพราะรางวัลผิดจะไปโผล่บนหน้าเว็บของเด็ก
+ */
+export function normalizeAward(raw: string | null | undefined): string {
+  const text = basicClean(raw);
+  if (!text) return "";
+
+  for (const [thai, canonical] of AWARD_THAI) {
+    if (text.includes(thai)) return canonical;
+  }
+
+  const key = text
+    .split(" ")
+    .filter((t) => t && !AWARD_NOISE.has(t))
+    .join("_");
+  return AWARD_CANONICAL[key] ?? "";
+}
+
+/** ชื่อรางวัลที่แสดงให้คนอ่าน */
+export const AWARD_LABELS: Record<string, string> = {
+  GOLD: "เหรียญทอง",
+  SILVER: "เหรียญเงิน",
+  BRONZE: "เหรียญทองแดง",
+  MERIT: "ชมเชย",
+  PERFECT_SCORE: "คะแนนเต็ม",
+};
 
 /** คำนำหน้าชื่อโรงเรียนที่ไม่ได้ช่วยแยกความต่าง — เขียนบ้างไม่เขียนบ้างในไฟล์เดียวกัน
  *  ภาษาไทยตัดแบบ "ขึ้นต้นด้วย" ได้เลยเพราะเขียนติดกัน */

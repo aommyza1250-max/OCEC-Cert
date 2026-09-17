@@ -14,7 +14,6 @@ const createSchema = z.object({
     .regex(/^[A-Za-z0-9_]+$/, "รหัสใช้ได้เฉพาะ A-Z 0-9 และ _ (ห้ามเว้นวรรคหรือภาษาไทย)")
     .transform((v) => v.toUpperCase()),
   name: z.string().trim().min(1, "กรุณาระบุชื่อเต็มของรายการสอบ"),
-  kind: z.enum(["DOMESTIC", "INTERNATIONAL"]),
 });
 
 export async function GET() {

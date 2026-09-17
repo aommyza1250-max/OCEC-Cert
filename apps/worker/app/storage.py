@@ -32,6 +32,15 @@ def download_bytes(key: str) -> bytes:
     return buffer.getvalue()
 
 
+def download_to_file(key: str, path: str) -> None:
+    """ดาวน์โหลดลงดิสก์แทนการอมไว้ในหน่วยความจำ
+
+    ไฟล์ ZIP เกียรติบัตรจริงมีขนาดหลายร้อย MB (ของจริงที่ทดสอบ 359 MB)
+    ถ้าโหลดเข้าหน่วยความจำทั้งก้อนแล้วยังต้องอม PDF ข้างในอีก worker จะถูกฆ่าเพราะแรมไม่พอ
+    """
+    _client().download_file(settings().r2_bucket, key, path)
+
+
 def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     _client().put_object(
         Bucket=settings().r2_bucket, Key=key, Body=data, ContentType=content_type
@@ -59,18 +68,23 @@ def safe_part(text: str) -> str:
     return cleaned
 
 
-def certificate_stem(name_normalized: str, exam_code: str, page_number: int) -> str:
-    """ชื่อไฟล์ตามรูปแบบที่ใช้อยู่เดิม: {FNAME}_{LNAME}_{รายการสอบ}
+def certificate_stem(
+    name_normalized: str,
+    program_code: str,
+    exam_round: str,
+    award: str,
+    year: int | str,
+    page_number: int,
+) -> str:
+    """ชื่อไฟล์ตามสเปก: {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี}
 
-    ส่วน "รายการสอบ" เดิมมาจากชื่อโฟลเดอร์ที่เก็บไฟล์
-    ตอนนี้มาจากรหัสรายการสอบที่แอดมินเลือกตอนสร้างรอบนำเข้า
-    หน้าที่อ่านชื่อไม่ออกจะได้ชื่อไฟล์เป็นเลขหน้าแทน เพื่อให้ยังมีไฟล์ให้แอดมินไปจับคู่เองได้
+    ตัวอย่าง: JAYTIPAT_CHATRATANAMALAI_HKIMO_FINAL_GOLD_2026
+
+    หน้าที่อ่านชื่อไม่ออกจะได้เลขหน้าแทนชื่อ เพื่อให้ยังมีไฟล์ให้แอดมินไปจับคู่เองได้
     """
-    name_part = safe_part(name_normalized) if name_normalized else ""
-    code_part = safe_part(exam_code) or "UNKNOWN"
-    if not name_part:
-        return f"PAGE_{page_number:04d}_{code_part}"
-    return f"{name_part}_{code_part}"
+    name_part = safe_part(name_normalized) if name_normalized else f"PAGE_{page_number:04d}"
+    parts = [name_part, safe_part(program_code), safe_part(exam_round), safe_part(award)]
+    return "_".join([p for p in parts if p] + [str(year)])
 
 
 def unique_stem(stem: str, used: set[str]) -> str:

@@ -1,15 +1,14 @@
--- pg_trgm: ใช้ทำ trigram index สำหรับค้นหาชื่อบางส่วน (LIKE '%คำค้น%') ให้เร็วระดับมิลลิวินาที
--- ต้องสร้างก่อนตาราง เพราะ index ท้ายไฟล์อ้างถึง gin_trgm_ops
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- CreateExtension
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- CreateEnum
-CREATE TYPE "ExamKind" AS ENUM ('DOMESTIC', 'INTERNATIONAL');
+CREATE TYPE "ExamRound" AS ENUM ('HEAT', 'FINAL');
 
 -- CreateEnum
 CREATE TYPE "BatchStatus" AS ENUM ('DRAFT', 'SPLITTING', 'SPLIT_DONE', 'MATCHING', 'READY', 'PUBLISHED', 'FAILED');
 
 -- CreateEnum
-CREATE TYPE "MatchStatus" AS ENUM ('UNMATCHED', 'MATCHED', 'SKIPPED_FOREIGN', 'AMBIGUOUS');
+CREATE TYPE "MatchStatus" AS ENUM ('UNMATCHED', 'MATCHED', 'SKIPPED_FOREIGN', 'AMBIGUOUS', 'DUPLICATE_NAME', 'DISCARDED');
 
 -- CreateEnum
 CREATE TYPE "JobType" AS ENUM ('SPLIT', 'MATCH');
@@ -22,7 +21,6 @@ CREATE TABLE "exam_programs" (
     "id" UUID NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "kind" "ExamKind" NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -34,7 +32,8 @@ CREATE TABLE "exam_programs" (
 CREATE TABLE "exams" (
     "id" UUID NOT NULL,
     "program_id" UUID NOT NULL,
-    "academic_year" INTEGER NOT NULL,
+    "round" "ExamRound" NOT NULL,
+    "year" INTEGER NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "exams_pkey" PRIMARY KEY ("id")
@@ -48,6 +47,8 @@ CREATE TABLE "students" (
     "name_th_normalized" TEXT,
     "name_en_normalized" TEXT,
     "name_en_sort_key" TEXT,
+    "school" TEXT,
+    "school_normalized" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "students_pkey" PRIMARY KEY ("id")
@@ -79,12 +80,18 @@ CREATE TABLE "staging_pages" (
     "extracted_name_sort_key" TEXT,
     "cert_no" TEXT,
     "level" TEXT,
+    "award" TEXT,
+    "award_on_page" TEXT,
+    "cert_year" INTEGER,
+    "round_on_page" TEXT,
+    "source_file" TEXT,
     "pdf_key" TEXT,
     "preview_key" TEXT,
     "match_status" "MatchStatus" NOT NULL DEFAULT 'UNMATCHED',
     "matched_student_id" UUID,
     "matched_manually" BOOLEAN NOT NULL DEFAULT false,
     "match_note" TEXT,
+    "roster_award" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "staging_pages_pkey" PRIMARY KEY ("id")
@@ -100,8 +107,9 @@ CREATE TABLE "certificates" (
     "pdf_key" TEXT NOT NULL,
     "preview_key" TEXT,
     "page_number" INTEGER NOT NULL,
-    "award" TEXT,
+    "award" TEXT NOT NULL,
     "cert_no" TEXT,
+    "candidate_no" TEXT,
     "level" TEXT,
     "published_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -131,16 +139,22 @@ CREATE TABLE "jobs" (
 CREATE UNIQUE INDEX "exam_programs_code_key" ON "exam_programs"("code");
 
 -- CreateIndex
-CREATE INDEX "exams_academic_year_idx" ON "exams"("academic_year");
+CREATE INDEX "exams_year_idx" ON "exams"("year");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "exams_program_id_academic_year_key" ON "exams"("program_id", "academic_year");
+CREATE UNIQUE INDEX "exams_program_id_round_year_key" ON "exams"("program_id", "round", "year");
 
 -- CreateIndex
-CREATE INDEX "students_name_en_normalized_idx" ON "students"("name_en_normalized");
+CREATE INDEX "students_name_en_normalized_trgm_idx" ON "students" USING GIN ("name_en_normalized" gin_trgm_ops);
 
 -- CreateIndex
-CREATE INDEX "students_name_th_normalized_idx" ON "students"("name_th_normalized");
+CREATE INDEX "students_name_th_normalized_trgm_idx" ON "students" USING GIN ("name_th_normalized" gin_trgm_ops);
+
+-- CreateIndex
+CREATE INDEX "students_name_en_sort_key_idx" ON "students"("name_en_sort_key");
+
+-- CreateIndex
+CREATE INDEX "students_name_school_idx" ON "students"("name_en_normalized", "school_normalized");
 
 -- CreateIndex
 CREATE INDEX "batches_exam_id_idx" ON "batches"("exam_id");
@@ -155,6 +169,9 @@ CREATE INDEX "staging_pages_batch_id_match_status_idx" ON "staging_pages"("batch
 CREATE INDEX "staging_pages_extracted_name_normalized_idx" ON "staging_pages"("extracted_name_normalized");
 
 -- CreateIndex
+CREATE INDEX "staging_pages_batch_id_cert_no_idx" ON "staging_pages"("batch_id", "cert_no");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "staging_pages_batch_id_page_number_key" ON "staging_pages"("batch_id", "page_number");
 
 -- CreateIndex
@@ -167,7 +184,7 @@ CREATE INDEX "certificates_student_id_idx" ON "certificates"("student_id");
 CREATE INDEX "certificates_batch_id_idx" ON "certificates"("batch_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "certificates_exam_id_student_id_key" ON "certificates"("exam_id", "student_id");
+CREATE UNIQUE INDEX "certificates_exam_id_student_id_award_key" ON "certificates"("exam_id", "student_id", "award");
 
 -- CreateIndex
 CREATE INDEX "jobs_status_created_at_idx" ON "jobs"("status", "created_at");
@@ -201,21 +218,3 @@ ALTER TABLE "certificates" ADD CONSTRAINT "certificates_staging_page_id_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "jobs" ADD CONSTRAINT "jobs_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "batches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- ============================================================
--- Trigram index สำหรับค้นหาชื่อ (Prisma ประกาศ gin_trgm_ops ใน schema.prisma ตรง ๆ ไม่ได้)
--- รองรับการค้นหาแบบ LIKE '%...%' ซึ่ง btree index ธรรมดาช่วยไม่ได้
--- ============================================================
-CREATE INDEX "students_name_th_normalized_trgm_idx"
-  ON "students" USING GIN ("name_th_normalized" gin_trgm_ops);
-
-CREATE INDEX "students_name_en_normalized_trgm_idx"
-  ON "students" USING GIN ("name_en_normalized" gin_trgm_ops);
-
--- ใช้จับคู่แบบสลับชื่อ-นามสกุล (nameSortKey) ตอน match Excel
-CREATE INDEX "students_name_en_sort_key_idx"
-  ON "students" ("name_en_sort_key");
-
--- ใช้จับคู่ด้วยเลขเกียรติบัตร ซึ่งแม่นกว่าชื่อเมื่อมีคนชื่อซ้ำ
-CREATE INDEX "staging_pages_batch_id_cert_no_idx"
-  ON "staging_pages" ("batch_id", "cert_no");

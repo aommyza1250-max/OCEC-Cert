@@ -18,13 +18,16 @@ datasource db {
   extensions = [pg_trgm]
 }
 
-enum ExamKind {
-  DOMESTIC
-  INTERNATIONAL
+/// รอบการสอบ — กำหนดว่าต้องกรองสัญชาติหรือไม่
+/// HEAT  (รอบคัดเลือก) ผู้เข้าสอบเป็นคนไทยทั้งหมด ตัดแยกทุกหน้า
+/// FINAL (รอบชิงชนะเลิศ) ไฟล์รวมทุกประเทศ ต้องกรองเฉพาะ "from THAILAND"
+enum ExamRound {
+  HEAT
+  FINAL
 }
 
 enum BatchStatus {
-  DRAFT        // สร้างแล้วแต่ยังไม่อัปโหลด PDF
+  DRAFT        // สร้างแล้วแต่ยังไม่อัปโหลด ZIP
   SPLITTING    // worker กำลังตัดหน้า
   SPLIT_DONE   // ตัดเสร็จ รอ Excel
   MATCHING     // worker กำลังจับคู่กับ Excel
@@ -55,13 +58,12 @@ enum JobStatus {
 }
 
 /// รายการสอบที่หน่วยงานจัด เช่น HKIMO, TIMO — แอดมินจัดการรายการนี้เองได้
-/// `code` คือสิ่งที่ไปต่อท้ายชื่อไฟล์: {FNAME}_{LNAME}_{CODE}.pdf
-/// เดิมค่านี้มาจากชื่อโฟลเดอร์ที่เก็บไฟล์ ตอนนี้มาจากตัวเลือกที่แอดมินเลือกตอนสร้างรอบนำเข้า
+/// `code` คือส่วนหนึ่งของชื่อไฟล์: {FNAME}_{LNAME}_{CODE}_{ROUND}_{AWARD}_{YEAR}.pdf
+/// รายการสอบเดียวจัดได้ทั้งรอบ HEAT และ FINAL จึงไม่เก็บรอบไว้ที่นี่
 model ExamProgram {
-  id   String   @id @default(uuid()) @db.Uuid
-  code String   @unique
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique
   name String
-  kind ExamKind
   /// ปิดรายการที่เลิกจัดแล้ว โดยไม่ต้องลบ (ลบไม่ได้ถ้ามีข้อมูลเก่าอ้างอยู่)
   active Boolean @default(true)
 
@@ -73,19 +75,21 @@ model ExamProgram {
   @@map("exam_programs")
 }
 
-/// รายการสอบ 1 รายการใน 1 ปีการศึกษา
+/// รายการสอบ 1 รอบ ใน 1 ปี เช่น HKIMO รอบ FINAL ปี 2026
+/// `year` เป็น **ค.ศ.** ตามที่พิมพ์อยู่บนหน้าเกียรติบัตร ไม่ใช่ พ.ศ.
 model Exam {
-  id           String      @id @default(uuid()) @db.Uuid
-  programId    String      @map("program_id") @db.Uuid
-  program      ExamProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
-  academicYear Int         @map("academic_year")
-  createdAt    DateTime    @default(now()) @map("created_at")
+  id        String      @id @default(uuid()) @db.Uuid
+  programId String      @map("program_id") @db.Uuid
+  program   ExamProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  round     ExamRound
+  year      Int
+  createdAt DateTime    @default(now()) @map("created_at")
 
   batches      Batch[]
   certificates Certificate[]
 
-  @@unique([programId, academicYear])
-  @@index([academicYear])
+  @@unique([programId, round, year])
+  @@index([year])
   @@map("exams")
 }
 
@@ -122,14 +126,15 @@ model Student {
   @@map("students")
 }
 
-/// รอบการนำเข้า 1 ครั้ง = PDF รวมเล่ม 1 ไฟล์ + Excel 1 ไฟล์
+/// รอบการนำเข้า 1 ครั้ง = ZIP เกียรติบัตร 1 ไฟล์ + Excel รายชื่อ 1 ไฟล์
 model Batch {
   id     String      @id @default(uuid()) @db.Uuid
   examId String      @map("exam_id") @db.Uuid
   exam   Exam        @relation(fields: [examId], references: [id], onDelete: Restrict)
   status BatchStatus @default(DRAFT)
 
-  sourcePdfKey   String? @map("source_pdf_key")
+  /// ZIP ที่แอดมินอัปโหลด — ข้างในแยกโฟลเดอร์ตามรางวัล (gold/, silver/, ...)
+  sourceZipKey   String? @map("source_zip_key")
   sourceExcelKey String? @map("source_excel_key")
 
   // สรุปตัวเลข เช่น { pagesTotal, pagesSplit, foreignSkipped, matched, unmatched }
@@ -161,10 +166,23 @@ model StagingPage {
   extractedNameNormalized String? @map("extracted_name_normalized")
   extractedNameSortKey    String? @map("extracted_name_sort_key")
 
-  /// เลขเกียรติบัตรที่พิมพ์อยู่บนหน้า (No: 12345) — คีย์ที่เชื่อถือได้กว่าชื่อเมื่อมีคนชื่อซ้ำ
+  /// เลขบนหน้าเกียรติบัตร (Cert No: 203297) — ตรงกับ CANDIDATE NO ใน Excel
+  /// เป็นคีย์จับคู่หลัก เพราะแม่นกว่าชื่อเมื่อมีคนชื่อพ้องกัน
   certNo String? @map("cert_no")
-  /// ระดับชั้น/รุ่นที่อ่านได้จาก "for outstanding achievement in ..."
+  /// ระดับชั้นที่อ่านได้จาก "for outstanding achievement in ..." เช่น PRIMARY 3
   level  String?
+
+  /// รางวัล — มาจากชื่อโฟลเดอร์ใน ZIP ซึ่งเป็นแหล่งความจริงเดียวที่ครบ
+  /// (หน้า Perfect Score ไม่มีข้อความรางวัลพิมพ์อยู่เลย)
+  award String?
+  /// รางวัลตามที่พิมพ์บนหน้า ใช้ cross-check กับโฟลเดอร์ — null ได้เป็นปกติ
+  awardOnPage String? @map("award_on_page")
+  /// ปี ค.ศ. ที่อ่านได้จากหน้า ใช้ประกอบชื่อไฟล์
+  certYear Int? @map("cert_year")
+  /// รอบที่อ่านได้จากหน้า (HEAT/FINAL) ใช้ cross-check กับรอบที่แอดมินเลือก
+  roundOnPage String? @map("round_on_page")
+  /// ไฟล์ไหนใน ZIP — ไว้ไล่ย้อนกลับไปหาต้นทางเมื่อมีปัญหา
+  sourceFile String? @map("source_file")
 
   pdfKey     String? @map("pdf_key")
   previewKey String? @map("preview_key")
@@ -176,10 +194,9 @@ model StagingPage {
   matchedManually Boolean @default(false) @map("matched_manually")
   matchNote       String? @map("match_note")
 
-  /// ข้อมูลจากแถว Excel ที่จับคู่มาถึงหน้านี้ แต่ยังตัดสินไม่ได้ว่าเป็นของใคร
-  /// เก็บไว้เพื่อให้แอดมินเห็นครบตอนตัดสิน และไม่ต้องเปิด Excel มาพิมพ์ซ้ำ
-  pendingAward  String? @map("pending_award")
-  pendingSchool String? @map("pending_school")
+  /// รางวัลตามที่ Excel เขียน ใช้ cross-check กับรางวัลจากโฟลเดอร์
+  /// และให้แอดมินเห็นครบตอนตัดสิน โดยไม่ต้องเปิด Excel มาไล่หาเอง
+  rosterAward String? @map("roster_award")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -209,17 +226,25 @@ model Certificate {
   pdfKey     String  @map("pdf_key")
   previewKey String? @map("preview_key")
   pageNumber Int     @map("page_number")
-  award      String?
-  certNo     String? @map("cert_no")
-  level      String?
+
+  /// รางวัล (GOLD/SILVER/BRONZE/MERIT/PERFECT_SCORE) — บังคับต้องมี
+  /// เพราะเป็นส่วนหนึ่งของกติกา unique ด้านล่าง และ Postgres ถือว่า NULL ไม่เท่ากับ NULL
+  /// ถ้าปล่อยให้ว่างได้ กติกานั้นจะกันของซ้ำไม่ได้จริง
+  award String
+  /// เลขบนหน้าเกียรติบัตร = CANDIDATE NO ใน Excel
+  certNo      String? @map("cert_no")
+  candidateNo String? @map("candidate_no")
+  level       String?
 
   // ผู้ใช้ทั่วไปเห็นเฉพาะ published = true
   published DateTime? @map("published_at")
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  // คนเดียวกันมีเกียรติบัตรในรายการสอบเดียวกันได้ใบเดียว
-  @@unique([examId, studentId])
+  // คนเดียวกันมีได้หลายใบในรอบเดียวกัน ถ้าเป็นคนละรางวัล
+  // (ของจริง: ผู้ที่ได้ Perfect Score จะได้ใบ Gold มาด้วยอีกใบ)
+  // แต่รางวัลเดียวกันซ้ำสองใบไม่ได้ — นั่นแปลว่าจับคู่ผิดหรือไฟล์ซ้ำ
+  @@unique([examId, studentId, award])
   @@index([studentId])
   @@index([batchId])
   @@map("certificates")

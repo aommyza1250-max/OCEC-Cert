@@ -3,12 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-type Props = { batchId: string; kind: "pdf" | "excel"; accept: string };
+type Props = { batchId: string; kind: "zip" | "excel"; accept: string };
 
 /**
  * อัปโหลดไฟล์ขึ้น R2 โดยตรงด้วย presigned URL
  *
  * ลำดับ: ขอลิงก์ -> PUT ไฟล์ขึ้น R2 -> แจ้งเซิร์ฟเวอร์ว่าเสร็จแล้วให้ตั้งงาน
+ * ไฟล์ ZIP เกียรติบัตรมีขนาดหลายร้อย MB จึงต้องขึ้นตรง ไม่ผ่านเซิร์ฟเวอร์เว็บ
  * ใช้ XMLHttpRequest แทน fetch เพราะต้องการ progress ของการอัปโหลด ซึ่ง fetch ยังทำไม่ได้
  */
 export function UploadDropzone({ batchId, kind, accept }: Props) {
@@ -72,7 +73,7 @@ export function UploadDropzone({ batchId, kind, accept }: Props) {
       >
         {uploading
           ? `กำลังอัปโหลด... ${progress}%`
-          : `เลือกไฟล์${kind === "pdf" ? " PDF รวมเล่ม" : "รายชื่อ (.xlsx)"}`}
+          : `เลือกไฟล์${kind === "zip" ? " ZIP เกียรติบัตร" : "รายชื่อ (.xlsx)"}`}
       </button>
 
       {uploading && (

@@ -5,7 +5,6 @@ import { prisma } from "@/lib/db";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).optional(),
-  kind: z.enum(["DOMESTIC", "INTERNATIONAL"]).optional(),
   active: z.boolean().optional(),
 });
 

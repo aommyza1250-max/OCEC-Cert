@@ -4,14 +4,20 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Program } from "./ProgramManager";
 
-/** ปีการศึกษาไทยปัจจุบัน = ค.ศ. + 543 */
-const CURRENT_THAI_YEAR = new Date().getFullYear() + 543;
+/** ปีบนเกียรติบัตรเป็น ค.ศ. ไม่ใช่ พ.ศ. */
+const CURRENT_YEAR = new Date().getFullYear();
+
+const ROUNDS = [
+  { value: "FINAL", label: "Final (รอบชิงชนะเลิศ)", hint: "ไฟล์รวมทุกประเทศ — ระบบจะตัดเฉพาะหน้าของคนไทย" },
+  { value: "HEAT", label: "Heat (รอบคัดเลือก)", hint: "ผู้เข้าสอบเป็นคนไทยทั้งหมด — ตัดแยกทุกหน้า" },
+] as const;
 
 export function NewBatchForm({ programs }: { programs: Program[] }) {
   const router = useRouter();
   const active = programs.filter((p) => p.active);
   const [programId, setProgramId] = useState(active[0]?.id ?? "");
-  const [academicYear, setAcademicYear] = useState(String(CURRENT_THAI_YEAR));
+  const [round, setRound] = useState<"HEAT" | "FINAL">("FINAL");
+  const [year, setYear] = useState(String(CURRENT_YEAR));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +31,7 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
     const res = await fetch("/api/admin/batches", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ programId, academicYear }),
+      body: JSON.stringify({ programId, round, year }),
     });
     const data = await res.json().catch(() => ({}));
 
@@ -46,7 +52,7 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <label className="block">
           <span className="mb-1 block text-sm font-medium">รายการสอบ</span>
           <select
@@ -63,11 +69,26 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium">ปีการศึกษา (พ.ศ.)</span>
+          <span className="mb-1 block text-sm font-medium">รอบการสอบ</span>
+          <select
+            value={round}
+            onChange={(e) => setRound(e.target.value as "HEAT" | "FINAL")}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-[var(--color-brand)]"
+          >
+            {ROUNDS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">ปี (ค.ศ.)</span>
           <input
             type="number"
-            value={academicYear}
-            onChange={(e) => setAcademicYear(e.target.value)}
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-[var(--color-brand)]"
           />
         </label>
@@ -75,16 +96,11 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
 
       {selected && (
         <p className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          ประเภท:{" "}
-          <b>
-            {selected.kind === "DOMESTIC"
-              ? "เฉพาะของไทย — ตัดแยกทุกหน้า"
-              : "รวมประเทศ — ตัดเฉพาะหน้าของคนไทย"}
-          </b>
+          {ROUNDS.find((r) => r.value === round)?.hint}
           <br />
           ไฟล์ที่ได้จะชื่อ{" "}
           <code className="rounded bg-white px-1.5 py-0.5 text-xs">
-            SOMCHAI_JAIDEE_{selected.code}.pdf
+            SOMCHAI_JAIDEE_{selected.code}_{round}_GOLD_{year}.pdf
           </code>
         </p>
       )}

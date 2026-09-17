@@ -5,11 +5,13 @@ import { prisma } from "@/lib/db";
 
 const schema = z.object({
   programId: z.string().uuid("กรุณาเลือกรายการสอบ"),
-  academicYear: z.coerce.number().int().min(2500).max(2700),
+  round: z.enum(["HEAT", "FINAL"], { message: "กรุณาเลือกรอบการสอบ" }),
+  // ปี ค.ศ. ตามที่พิมพ์อยู่บนหน้าเกียรติบัตร ไม่ใช่ พ.ศ.
+  year: z.coerce.number().int().min(2000).max(2100),
   note: z.string().optional(),
 });
 
-/** สร้างรอบการนำเข้าใหม่ พร้อมสร้าง "รายการสอบ x ปีการศึกษา" ให้ถ้ายังไม่มี */
+/** สร้างรอบการนำเข้าใหม่ พร้อมสร้าง "รายการสอบ x รอบ x ปี" ให้ถ้ายังไม่มี */
 export async function POST(request: Request) {
   try {
     await requireAdmin();
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const { programId, academicYear, note } = parsed.data;
+  const { programId, round, year, note } = parsed.data;
 
   const program = await prisma.examProgram.findUnique({ where: { id: programId } });
   if (!program) {
@@ -32,9 +34,9 @@ export async function POST(request: Request) {
   }
 
   const exam = await prisma.exam.upsert({
-    where: { programId_academicYear: { programId, academicYear } },
+    where: { programId_round_year: { programId, round, year } },
     update: {},
-    create: { programId, academicYear },
+    create: { programId, round, year },
   });
 
   const batch = await prisma.batch.create({ data: { examId: exam.id, note: note || null } });

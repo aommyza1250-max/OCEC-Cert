@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nameSortKey, normalizeName, normalizeSchool } from "./normalize";
+import { nameSortKey, normalizeAward, normalizeName, normalizeSchool } from "./normalize";
 import cases from "../../../../shared/normalize-cases.json";
 
 /**
@@ -19,6 +19,14 @@ describe("normalizeSchool (ต้องตรงกับ apps/worker/app/normal
   for (const c of cases.schoolCases) {
     it(`${c.why}: ${JSON.stringify(c.input)}`, () => {
       expect(normalizeSchool(c.input)).toBe(c.normalized);
+    });
+  }
+});
+
+describe("normalizeAward (ต้องตรงกับ apps/worker/app/normalize.py)", () => {
+  for (const c of cases.awardCases) {
+    it(`${c.why}: ${JSON.stringify(c.input)}`, () => {
+      expect(normalizeAward(c.input)).toBe(c.normalized);
     });
   }
 });

@@ -7,7 +7,7 @@ import { UploadDropzone } from "./UploadDropzone";
 type Props = {
   batchId: string;
   status: string;
-  hasPdf: boolean;
+  hasZip: boolean;
   hasExcel: boolean;
   certificateCount: number;
   stats: Record<string, unknown>;
@@ -32,19 +32,19 @@ export function BatchWorkflow(props: Props) {
     <div className="space-y-6">
       <StepCard
         step={1}
-        title="อัปโหลดไฟล์ PDF รวมเล่ม"
-        done={props.hasPdf}
-        description="ไฟล์จะถูกส่งขึ้นที่เก็บไฟล์โดยตรง ไม่ผ่านเซิร์ฟเวอร์เว็บ จึงรองรับไฟล์ขนาดใหญ่ได้"
+        title="อัปโหลดไฟล์ ZIP เกียรติบัตร"
+        done={props.hasZip}
+        description="ข้างใน ZIP ต้องแยกโฟลเดอร์ตามรางวัล (gold, silver, bronze, merit, perfect score) เพราะระบบอ่านรางวัลจากชื่อโฟลเดอร์"
       >
-        <UploadDropzone batchId={props.batchId} kind="pdf" accept="application/pdf" />
+        <UploadDropzone batchId={props.batchId} kind="zip" accept="application/zip,.zip" />
       </StepCard>
 
       <StepCard
         step={2}
         title="อัปโหลดไฟล์รายชื่อ Excel"
         done={props.hasExcel}
-        disabled={!props.hasPdf || props.status === "SPLITTING"}
-        description="ระบบจะจับคู่ชื่อในไฟล์กับชื่อที่อ่านได้จากหน้าเกียรติบัตร"
+        disabled={!props.hasZip || props.status === "SPLITTING"}
+        description="ระบบจับคู่ด้วยเลขผู้เข้าสอบ (CANDIDATE NO) เป็นหลัก แล้วเทียบชื่อยืนยันอีกชั้น"
       >
         <UploadDropzone
           batchId={props.batchId}
@@ -131,19 +131,22 @@ function StatsPanel({
   counts: Record<string, number>;
 }) {
   const items: { label: string; value: number | string }[] = [
-    { label: "หน้าทั้งหมดในไฟล์", value: num(stats.pagesTotal) },
+    { label: "ไฟล์ใน ZIP", value: num(stats.bundles) },
+    { label: "หน้าทั้งหมด", value: num(stats.pagesTotal) },
     { label: "ตัดแยกแล้ว", value: num(stats.pagesSplit) },
     { label: "ข้าม (ไม่ใช่คนไทย)", value: num(stats.foreignSkipped) },
     { label: "อ่านชื่อไม่ออก", value: num(stats.nameNotFound) },
-    { label: "มีเลขเกียรติบัตร", value: num(stats.certNoFound) },
+    { label: "รางวัลบนหน้าไม่ตรงโฟลเดอร์", value: num(stats.awardMismatch) },
     { label: "รายชื่อใน Excel", value: num(stats.rosterRows) },
     { label: "จับคู่สำเร็จ", value: counts.MATCHED ?? num(stats.matched) },
-    { label: "จับด้วยเลขเกียรติบัตร", value: num(stats.matchedByCertNo) },
-    { label: "ชื่อซ้ำที่ส่งให้ตัดสิน", value: num(stats.duplicateNames) },
-    { label: "ชื่อตรงหลายหน้า", value: counts.AMBIGUOUS ?? 0 },
+    { label: "จับด้วยเลขผู้เข้าสอบ", value: num(stats.matchedByCertNo) },
+    { label: "จับด้วยชื่อ", value: num(stats.matchedByName) },
+    { label: "เลขตรงแต่ชื่อไม่ตรง", value: num(stats.nameMismatch) },
+    { label: "รางวัลไม่ตรงกับ Excel", value: num(stats.awardMismatchWithRoster) },
+    { label: "ระดับชั้นไม่ตรงกับ Excel", value: num(stats.levelMismatch) },
     { label: "ชื่อซ้ำ รอตัดสิน", value: counts.DUPLICATE_NAME ?? 0 },
-    { label: "ทิ้งเพราะซ้ำ", value: counts.DISCARDED ?? 0 },
     { label: "ยังไม่มีคู่", value: counts.UNMATCHED ?? 0 },
+    { label: "ทิ้งเพราะซ้ำ", value: counts.DISCARDED ?? 0 },
   ];
 
   if (items.every((i) => i.value === "—")) return null;
@@ -162,12 +165,12 @@ function StatsPanel({
       {Array.isArray(stats.unmatchedRows) && stats.unmatchedRows.length > 0 && (
         <details className="mt-4">
           <summary className="cursor-pointer text-sm text-amber-700">
-            รายชื่อใน Excel ที่หาหน้าเกียรติบัตรไม่เจอ ({stats.unmatchedRows.length})
+            รายชื่อใน Excel ที่ไม่มีหน้าเกียรติบัตร ({stats.unmatchedRows.length})
           </summary>
           <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-sm text-gray-600">
-            {(stats.unmatchedRows as { row: number; nameEn: string; nameTh: string }[]).map((r) => (
+            {(stats.unmatchedRows as { row: number; certNo: string; name: string }[]).map((r) => (
               <li key={r.row}>
-                แถวที่ {r.row}: {r.nameTh || r.nameEn}
+                แถวที่ {r.row} · เลข {r.certNo || "—"} · {r.name}
               </li>
             ))}
           </ul>

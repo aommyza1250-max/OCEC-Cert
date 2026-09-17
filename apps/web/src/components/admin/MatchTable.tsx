@@ -9,6 +9,7 @@ type Page = {
   extractedName: string | null;
   certNo: string | null;
   level: string | null;
+  award: string | null;
   matchStatus: string;
   matchNote: string | null;
   previewUrl: string | null;
@@ -38,7 +39,6 @@ function MatchRow({ page }: { page: Page }) {
   // เติมชื่อที่ระบบอ่านได้ไว้ให้ก่อน แอดมินมักแค่ต้องแก้เล็กน้อย
   const [nameEn, setNameEn] = useState(page.extractedName ?? "");
   const [school, setSchool] = useState("");
-  const [award, setAward] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +50,7 @@ function MatchRow({ page }: { page: Page }) {
     const res = await fetch(`/api/admin/pages/${page.id}/match`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nameTh, nameEn, school, award }),
+      body: JSON.stringify({ nameTh, nameEn, school }),
     });
 
     if (res.ok) router.refresh();
@@ -102,6 +102,11 @@ function MatchRow({ page }: { page: Page }) {
               </span>
             )}
             {page.level && <span className="text-sm text-gray-500">{page.level}</span>}
+            {page.award && (
+              <span className="rounded-full bg-[var(--color-brand-soft)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-brand)]">
+                {page.award}
+              </span>
+            )}
           </div>
 
           {page.matchNote && <p className="mb-3 text-sm text-amber-700">{page.matchNote}</p>}
@@ -124,12 +129,6 @@ function MatchRow({ page }: { page: Page }) {
                 value={school}
                 onChange={(e) => setSchool(e.target.value)}
                 placeholder="โรงเรียน (ช่วยแยกคนชื่อพ้อง)"
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]"
-              />
-              <input
-                value={award}
-                onChange={(e) => setAward(e.target.value)}
-                placeholder="รางวัล (ถ้ามี)"
                 className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]"
               />
             </div>

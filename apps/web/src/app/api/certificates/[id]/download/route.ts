@@ -33,13 +33,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ไม่พบเกียรติบัตรที่ต้องการ" }, { status: 404 });
   }
 
-  // ไฟล์ที่เก็บบน R2 ชื่อ {FNAME}_{LNAME}_{รหัสรายการสอบ} ตามรูปแบบเดิมที่ใช้ตัดไฟล์ด้วยมือ
-  // แต่ตอนส่งให้ผู้ปกครองเติมปีการศึกษาต่อท้ายด้วย เพราะคนเดียวกันอาจโหลด
-  // รายการสอบเดิมหลายปี แล้วจะแยกไม่ออกว่าไฟล์ไหนคือปีไหน
+  // ชื่อไฟล์ตามสเปก: {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี}
   const slug =
     normalizeName(certificate.student.nameEn ?? certificate.student.nameTh)?.replace(/ /g, "_") ||
     "certificate";
-  const filename = `${slug}_${certificate.exam.program.code}_${certificate.exam.academicYear}.pdf`;
+  const { program, round, year } = certificate.exam;
+  const filename = `${slug}_${program.code}_${round}_${certificate.award}_${year}.pdf`;
 
   const url = await presignedDownloadUrl(certificate.pdfKey, filename);
   return NextResponse.redirect(url, 302);

@@ -1,58 +1,68 @@
 """จับคู่รายชื่อจาก Excel เข้ากับหน้าที่ตัดแยกไว้แล้ว แล้วบันทึกเป็นเกียรติบัตรจริง
 
-หลักการสำคัญ: **ถ้าไม่มั่นใจ ห้ามเดา**
-ชื่อซ้ำกันระหว่างคนละคนเป็นเรื่องปกติ ถ้าชื่อหนึ่งไปตรงกับหลายหน้า ระบบจะทำเครื่องหมาย
-AMBIGUOUS แล้วปล่อยให้แอดมินตัดสินเอง ดีกว่าจับคู่ผิดแล้วผู้ปกครองโหลดได้เกียรติบัตรของคนอื่น
+**วนจาก "หน้าที่ตัดได้" ไม่ใช่ "แถวใน Excel"**
+เพราะ Excel 1 แถวรองรับได้หลายหน้า — ของจริงคนที่ได้ Perfect Score จะมีทั้งหน้า Gold
+และหน้า Perfect Score แต่มีแถวเดียวใน Excel เขียนว่า PERFECT SCORER
+ถ้าวนจากแถว หน้า Gold ของคนเหล่านี้จะหลุดหายไปเลย
+
+ลำดับความมั่นใจในการจับคู่:
+  1. เลขบนหน้า (Cert No) ตรงกับ CANDIDATE NO ใน Excel  <- ของจริงตรงกัน 242/242
+  2. ชื่อที่ normalize แล้วตรงกับแถวเดียว
+
+**รางวัลของใบที่ออกมาจากชื่อโฟลเดอร์ใน ZIP เสมอ ไม่ใช่จากคอลัมน์ AWARD ใน Excel**
+เพราะ Excel บันทึกรางวัลสูงสุดของคนนั้นแค่รางวัลเดียว
+
+หลักการสำคัญ: **ถ้าไม่มั่นใจ ห้ามเดา** อะไรที่ระบุตัวไม่ได้ให้ส่งต่อให้แอดมินดูใบจริง
+ดีกว่าจับคู่ผิดแล้วผู้ปกครองโหลดได้เกียรติบัตรของคนอื่น
 """
 
 import io
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from openpyxl import load_workbook
 
 from ..db import connection, new_id
-from ..normalize import name_sort_key, normalize_name, normalize_school
+from ..normalize import name_sort_key, normalize_award, normalize_name, normalize_school
 from ..storage import download_bytes
 
 log = logging.getLogger(__name__)
 
 ProgressFn = Callable[[dict[str, Any]], None]
 
-# หัวคอลัมน์ที่ยอมรับ — เทียบหลังตัดช่องว่างและทำตัวพิมพ์เล็กแล้ว
+# หัวคอลัมน์ที่ยอมรับ — เทียบหลังตัดช่องว่าง จุด ขีดล่าง และทำตัวพิมพ์เล็กแล้ว
 HEADER_ALIASES: dict[str, tuple[str, ...]] = {
-    "name_en": ("name", "fullname", "englishname", "nameenglish", "nameen", "nameeng",
-                "ชื่อภาษาอังกฤษ", "ชื่ออังกฤษ", "ชื่อ-นามสกุลภาษาอังกฤษ"),
+    # ของจริงใช้ CANDIDATE NO ซึ่งเป็นเลขเดียวกับ "Cert No" ที่พิมพ์บนหน้าเกียรติบัตร
+    "cert_no": ("candidateno", "candidatenumber", "certno", "certificateno", "certificatenumber",
+                "เลขที่นั่งสอบ", "เลขประจำตัวสอบ", "รหัสผู้เข้าสอบ", "เลขเกียรติบัตร",
+                "เลขที่เกียรติบัตร"),
+    "name_en": ("candidatename", "name", "fullname", "englishname", "nameenglish", "nameen",
+                "nameeng", "ชื่อภาษาอังกฤษ", "ชื่ออังกฤษ", "ชื่อ-นามสกุลภาษาอังกฤษ"),
     "first_en": ("firstname", "givenname", "given"),
     "last_en": ("lastname", "surname", "familyname", "family"),
     "name_th": ("ชื่อ-นามสกุล", "ชื่อ-สกุล", "ชื่อนามสกุล", "ชื่อภาษาไทย", "ชื่อไทย",
                 "ชื่อ-นามสกุลภาษาไทย", "thainame"),
     "first_th": ("ชื่อ", "ชื่อจริง"),
     "last_th": ("นามสกุล", "สกุล"),
-    "exam_code": ("เลขที่นั่งสอบ", "เลขประจำตัวสอบ", "รหัสผู้เข้าสอบ", "รหัสประจำตัว", "รหัส",
-                  "seatno", "seatnumber", "examid", "examcode", "code"),
-    # เลขเกียรติบัตรที่พิมพ์บนหน้ากระดาษ (No: 12345) — คีย์ที่แม่นที่สุดถ้า Excel มีให้
-    # ตั้งใจไม่รับ alias สั้น ๆ อย่าง "no" เพราะตารางไทยมักใช้เป็นคอลัมน์ลำดับแถว
-    "cert_no": ("เลขเกียรติบัตร", "เลขที่เกียรติบัตร", "certno", "certificateno",
-                "certificatenumber", "certificateid"),
+    "level": ("grade", "ระดับชั้น", "ชั้น", "class"),
     "award": ("รางวัล", "ผลการแข่งขัน", "ผลรางวัล", "award", "result", "medal", "prize"),
-    # โรงเรียน — ใช้แยกคนที่ชื่อพ้องกัน ซึ่งชื่ออย่างเดียวแยกไม่ได้
     "school": ("โรงเรียน", "สถานศึกษา", "ชื่อโรงเรียน", "school", "schoolname", "institution"),
 }
 
 MAX_HEADER_SCAN_ROWS = 10
-# จำนวนแถวที่จับคู่ไม่ได้ ที่เก็บรายละเอียดไว้ใน stats — เกินกว่านี้เก็บแค่ตัวเลข
-MAX_REPORTED_UNMATCHED = 200
+# จำนวนรายการที่เก็บรายละเอียดไว้ใน stats — เกินกว่านี้เก็บแค่ตัวเลข
+MAX_REPORTED = 200
 
 
 @dataclass
 class RosterRow:
     row_number: int
+    cert_no: str
     name_en: str
     name_th: str
-    exam_code: str
-    cert_no: str
+    level: str
     school: str
     award: str
 
@@ -65,67 +75,142 @@ def run_match(batch_id: str, on_progress: ProgressFn) -> dict[str, Any]:
     rows = parse_roster(download_bytes(batch["source_excel_key"]))
     log.info("อ่านรายชื่อจาก Excel ได้ %s แถว", len(rows))
 
+    by_cert_no = {r.cert_no: r for r in rows if r.cert_no}
+    by_name: dict[str, list[RosterRow]] = {}
+    for row in rows:
+        for key in {normalize_name(row.name_en), normalize_name(row.name_th)}:
+            if key:
+                by_name.setdefault(key, []).append(row)
+
+    # รันจับคู่ซ้ำได้: ล้างผลอัตโนมัติรอบก่อนทิ้งก่อนเสมอ
+    # (แอดมินอัปโหลด Excel ใหม่ทับได้บ่อย) แต่เก็บสิ่งที่แอดมินตัดสินด้วยมือไว้
+    _reset_previous_matches(batch_id)
+
     pages = _load_pages(batch_id)
-    by_cert_no = _index(pages, "cert_no")
-    by_normalized = _index(pages, "extracted_name_normalized")
-    by_sort_key = _index(pages, "extracted_name_sort_key")
+    stats = _new_stats(len(rows), len(pages))
 
-    stats: dict[str, Any] = {
-        "rosterRows": len(rows),
-        "matched": 0,
-        "ambiguous": 0,
-        "rowsNotFound": 0,
-        "matchedByCertNo": 0,
-        "duplicateNames": 0,
-        "unmatchedRows": [],
-    }
-    used_page_ids: set[str] = set()
-    # ผู้เข้าสอบที่ถูกจับคู่ไปแล้วในรอบนี้ — กันไม่ให้สองหน้าที่ชื่อเหมือนกันไปลงคนเดียวกัน
-    used_student_ids: set[str] = set()
+    # ภายในรอบนำเข้าเดียวกัน เลขเดียวกัน = คนเดียวกัน ไม่ต้องเดาจากชื่อ
+    student_by_cert: dict[str, str] = {}
+    # (ผู้เข้าสอบ, รางวัล) ที่ออกใบไปแล้วในรอบนี้ — ซ้ำคู่นี้แปลว่ามีอะไรผิด
+    # เริ่มจากใบที่แอดมินจับคู่ด้วยมือไว้แล้ว เพราะเราไม่แตะของพวกนั้น
+    issued: set[tuple[str, str]] = _manual_pairs(batch_id)
+    matched_rows: set[int] = set()
 
-    for i, row in enumerate(rows, start=1):
-        candidates, by_cert = _find_candidates(
-            row, by_cert_no, by_normalized, by_sort_key, used_page_ids
-        )
+    for index, page in enumerate(pages, start=1):
+        row, how = _find_row(page, by_cert_no, by_name)
 
-        if len(candidates) == 1:
-            page = candidates[0]
-            used_page_ids.add(page["id"])
-            student_id, conflict_page = _resolve_student(
-                row, batch["exam_id"], page["id"], used_student_ids
-            )
-
+        if row is None:
+            _mark(page["id"], "UNMATCHED", None)
+            stats["pagesUnmatched"] += 1
+        elif how == "cert" and not _names_agree(page, row):
+            _mark(page["id"], "AMBIGUOUS",
+                  f"เลข {page['cert_no']} ตรงกับ Excel แถวที่ {row.row_number} "
+                  f"แต่ชื่อไม่ตรงกัน: บนเกียรติบัตรเขียน '{page['extracted_name']}' "
+                  f"ส่วน Excel เขียน '{row.name_en or row.name_th}'",
+                  roster_award=row.award)
+            stats["nameMismatch"] += 1
+        elif how == "name_many":
+            _mark(page["id"], "AMBIGUOUS",
+                  f"ชื่อนี้ตรงกับ Excel มากกว่าหนึ่งแถว และหน้านี้ไม่มีเลขให้ยืนยัน", None)
+            stats["ambiguous"] += 1
+        else:
+            student_id = _resolve_student(page, row, student_by_cert)
             if student_id is None:
-                # ชื่อซ้ำกับหน้าที่จับคู่ไปแล้วในรายการสอบนี้
-                # ระบบไม่เดาให้ว่าเป็นคนเดียวกันหรือคนละคน — ส่งให้แอดมินดูใบจริงทั้งสองใบแล้วตัดสิน
-                _mark_duplicate_name(page["id"], conflict_page, row)
+                _mark(page["id"], "AMBIGUOUS",
+                      f"มีผู้เข้าสอบชื่อ '{row.name_en or row.name_th}' อยู่ในระบบมากกว่าหนึ่งคน "
+                      "และข้อมูลที่มีแยกไม่ออกว่าเป็นคนไหน "
+                      "กรุณาจับคู่ด้วยมือ โดยระบุโรงเรียนเพื่อให้รอบหน้าระบบแยกได้เอง",
+                      roster_award=row.award)
+                stats["ambiguous"] += 1
+                continue
+            key = (student_id, page["award"] or "")
+            if key in issued:
+                _mark(page["id"], "DUPLICATE_NAME",
+                      f"ผู้เข้าสอบคนนี้ได้รางวัล {page['award']} ไปแล้วจากหน้าอื่นในรอบนี้ "
+                      "กรุณาเทียบเกียรติบัตรทั้งสองใบว่าเป็นคนละคน หรือเป็นไฟล์ซ้ำ",
+                      roster_award=row.award)
                 stats["duplicateNames"] += 1
             else:
+                issued.add(key)
+                matched_rows.add(row.row_number)
                 _commit_match(batch, page, row, student_id)
                 stats["matched"] += 1
-                if by_cert:
-                    stats["matchedByCertNo"] += 1
-        elif len(candidates) > 1:
-            stats["ambiguous"] += 1
-            note = f"ชื่อนี้ตรงกับหน้าในไฟล์ PDF {len(candidates)} หน้า ต้องให้แอดมินเลือกเอง"
-            for page in candidates:
-                _mark_ambiguous(page["id"], note)
-        else:
-            stats["rowsNotFound"] += 1
-            if len(stats["unmatchedRows"]) < MAX_REPORTED_UNMATCHED:
-                stats["unmatchedRows"].append(
-                    {"row": row.row_number, "nameEn": row.name_en, "nameTh": row.name_th}
-                )
+                stats["matchedByCertNo" if how == "cert" else "matchedByName"] += 1
+                _cross_check(stats, page, row)
 
-        if i % 25 == 0 or i == len(rows):
-            on_progress({"stage": "match", "done": i, "total": len(rows)})
+        if index % 25 == 0 or index == len(pages):
+            on_progress({"stage": "match", "done": index, "total": len(pages)})
 
-    # หน้าที่ไม่มีใครใน Excel มาอ้างถึง = มีเกียรติบัตรแต่ไม่มีในรายชื่อ ต้องให้แอดมินดู
-    stats["pagesUnmatched"] = _count_unmatched_pages(batch_id)
+    unused = [r for r in rows if r.row_number not in matched_rows]
+    stats["rowsNotUsed"] = len(unused)
+    stats["unmatchedRows"] = [
+        {"row": r.row_number, "certNo": r.cert_no, "name": r.name_en or r.name_th}
+        for r in unused[:MAX_REPORTED]
+    ]
 
-    log.info("จับคู่ batch %s เสร็จ: matched=%s ambiguous=%s notFound=%s",
-             batch_id, stats["matched"], stats["ambiguous"], stats["rowsNotFound"])
+    log.info("จับคู่ batch %s เสร็จ: %s", batch_id, {k: v for k, v in stats.items()
+                                                    if k != "unmatchedRows"})
     return stats
+
+
+def _new_stats(row_count: int, page_count: int) -> dict[str, Any]:
+    return {
+        "rosterRows": row_count,
+        "pagesToMatch": page_count,
+        "matched": 0,
+        "matchedByCertNo": 0,
+        "matchedByName": 0,
+        "nameMismatch": 0,
+        "ambiguous": 0,
+        "duplicateNames": 0,
+        "pagesUnmatched": 0,
+        "rowsNotUsed": 0,
+        "awardMismatchWithRoster": 0,
+        "levelMismatch": 0,
+        "unmatchedRows": [],
+    }
+
+
+# ---------------------------------------------------------------- หาแถวที่คู่กัน
+
+def _find_row(
+    page: dict[str, Any],
+    by_cert_no: dict[str, RosterRow],
+    by_name: dict[str, list[RosterRow]],
+) -> tuple[RosterRow | None, str]:
+    """คืน (แถวที่คู่กัน, วิธีที่หาเจอ) — วิธีเป็น 'cert' / 'name' / 'name_many' / ''"""
+    cert_no = page.get("cert_no")
+    if cert_no and cert_no in by_cert_no:
+        return by_cert_no[cert_no], "cert"
+
+    key = page.get("extracted_name_normalized")
+    if key:
+        candidates = by_name.get(key, [])
+        if len(candidates) == 1:
+            return candidates[0], "name"
+        if len(candidates) > 1:
+            return candidates[0], "name_many"
+    return None, ""
+
+
+def _names_agree(page: dict[str, Any], row: RosterRow) -> bool:
+    """ชื่อบนหน้ากับชื่อใน Excel ต้องตรงกันเพื่อยืนยันว่าเลขไม่ได้ชนกันโดยบังเอิญ
+
+    ถ้าหน้านั้นอ่านชื่อไม่ออกเลย ให้เชื่อเลขไปก่อน — ดีกว่าทิ้งใบนั้นไปเฉย ๆ
+    """
+    page_name = page.get("extracted_name_normalized")
+    if not page_name:
+        return True
+    return page_name in {normalize_name(row.name_en), normalize_name(row.name_th)}
+
+
+def _cross_check(stats: dict[str, Any], page: dict[str, Any], row: RosterRow) -> None:
+    """เทียบข้อมูลที่ควรตรงกันแต่ไม่ถึงกับทำให้จับคู่ไม่ได้ — นับไว้ให้แอดมินเห็น"""
+    roster_award = normalize_award(row.award)
+    if roster_award and page.get("award") and roster_award != page["award"]:
+        stats["awardMismatchWithRoster"] += 1
+    if row.level and page.get("level") and row.level.strip().upper() != page["level"].strip().upper():
+        stats["levelMismatch"] += 1
 
 
 # ---------------------------------------------------------------- อ่าน Excel
@@ -198,67 +283,93 @@ def _build_row(raw: list[Any], columns: dict[str, int], row_number: int) -> Rost
         return None
     return RosterRow(
         row_number=row_number,
+        cert_no=_digits_only(value("cert_no")),
         name_en=name_en,
         name_th=name_th,
-        exam_code=value("exam_code"),
-        cert_no=_digits_only(value("cert_no")),
+        level=value("level"),
         school=value("school"),
         award=value("award"),
     )
 
 
 def _digits_only(text: str) -> str:
-    """Excel มักอ่านเลขเกียรติบัตรมาเป็น '12345.0' หรือมีช่องว่างปน ตัดให้เหลือแต่ตัวเลข"""
-    return "".join(ch for ch in text if ch.isdigit())
+    """ตัดให้เหลือแต่ตัวเลข
 
-
-# ---------------------------------------------------------------- จับคู่
-
-def _index(pages: list[dict[str, Any]], field: str) -> dict[str, list[dict[str, Any]]]:
-    index: dict[str, list[dict[str, Any]]] = {}
-    for page in pages:
-        key = page.get(field)
-        if key:
-            index.setdefault(key, []).append(page)
-    return index
-
-
-def _find_candidates(
-    row: RosterRow,
-    by_cert_no: dict[str, list[dict[str, Any]]],
-    by_normalized: dict[str, list[dict[str, Any]]],
-    by_sort_key: dict[str, list[dict[str, Any]]],
-    used: set[str],
-) -> tuple[list[dict[str, Any]], bool]:
-    """ไล่หาตามลำดับความมั่นใจ
-
-    1. เลขเกียรติบัตร — แม่นที่สุด เพราะไม่ซ้ำกันแม้คนจะชื่อเหมือนกัน
-    2. ชื่อที่ normalize แล้ว ตรงเป๊ะ
-    3. ชื่อแบบสลับชื่อ-นามสกุลได้
-
-    คืนค่า (รายการที่พบ, จับคู่ด้วยเลขเกียรติบัตรหรือไม่)
+    ต้องตัดส่วนทศนิยมทิ้งก่อน เพราะ openpyxl อ่านเซลล์ตัวเลขมาเป็น float
+    แล้ว str() ได้ '203297.0' — ถ้าเก็บแค่ตัวเลขตรง ๆ จะกลายเป็น '2032970'
+    ซึ่งทำให้เลขผู้เข้าสอบเพี้ยนทั้งไฟล์โดยไม่มีอะไรฟ้อง
     """
-    if row.cert_no:
-        found = [p for p in by_cert_no.get(row.cert_no, []) if p["id"] not in used]
-        if found:
-            return found, True
-
-    attempts = (
-        (by_normalized, normalize_name(row.name_en)),
-        (by_normalized, normalize_name(row.name_th)),
-        (by_sort_key, name_sort_key(row.name_en)),
-        (by_sort_key, name_sort_key(row.name_th)),
-    )
-    for index, key in attempts:
-        if not key:
-            continue
-        found = [p for p in index.get(key, []) if p["id"] not in used]
-        if found:
-            return found, False
-    return [], False
+    return "".join(ch for ch in re.sub(r"\.\d+$", "", text.strip()) if ch.isdigit())
 
 
 # ---------------------------------------------------------------- เขียนฐานข้อมูล
+
+def _resolve_student(
+    page: dict[str, Any],
+    row: RosterRow,
+    student_by_cert: dict[str, str],
+) -> str | None:
+    """หาว่าหน้านี้เป็นของผู้เข้าสอบคนไหน — คืน None ถ้าระบุตัวไม่ได้
+
+    ภายในรอบนำเข้าเดียวกัน เลขผู้เข้าสอบเดียวกัน = คนเดียวกันแน่นอน ไม่ต้องเดาจากชื่อ
+    ข้ามรอบ/ข้ามปีไม่มีเลขให้อ้าง จึงยังต้องใช้ชื่อ (+โรงเรียนถ้ามี) รวมคนเดิมเข้าด้วยกัน
+    ซึ่งเป็นสิ่งที่ทำให้หน้าค้นหารวมเกียรติบัตรทุกใบของคนคนนั้นไว้ที่เดียวได้
+
+    ถ้ามีคนชื่อเดียวกันในระบบหลายคนและแยกไม่ออก **ห้ามสร้างคนใหม่**
+    เพราะการสร้างคนใหม่ก็เป็นการเดาอย่างหนึ่ง (เดาว่า "เป็นคนละคน") และถ้ารันจับคู่ซ้ำ
+    จะเกิดผู้เข้าสอบซ้ำซ้อนขึ้นเรื่อย ๆ โดยไม่มีอะไรฟ้อง — ส่งให้แอดมินตัดสินแทน
+    """
+    cert_no = row.cert_no or page.get("cert_no") or ""
+    if cert_no and cert_no in student_by_cert:
+        return student_by_cert[cert_no]
+
+    name_en_norm = normalize_name(row.name_en) or None
+    name_th_norm = normalize_name(row.name_th) or None
+    school_norm = normalize_school(row.school) or None
+
+    with connection() as conn:
+        # ต้อง cast ::text ตรง ๆ ไม่งั้น Postgres เดาชนิดของพารามิเตอร์ใน 'IS NOT NULL' ไม่ออก
+        candidates = conn.execute(
+            """
+            SELECT id, school_normalized FROM students
+            WHERE (%s::text IS NOT NULL AND name_en_normalized = %s)
+               OR (%s::text IS NOT NULL AND name_th_normalized = %s)
+            ORDER BY created_at
+            """,
+            (name_en_norm, name_en_norm, name_th_norm, name_th_norm),
+        ).fetchall()
+
+        chosen = _narrow_by_school(candidates, school_norm)
+        if len(chosen) > 1:
+            return None
+        if len(chosen) == 1:
+            student_id = chosen[0]["id"]
+            _fill_missing_fields(conn, student_id, row, name_th_norm, name_en_norm, school_norm)
+        else:
+            student_id = _create_student(conn, row, name_th_norm, name_en_norm, school_norm)
+
+    if cert_no:
+        student_by_cert[cert_no] = student_id
+    return student_id
+
+
+def _narrow_by_school(
+    candidates: list[dict[str, Any]], school_norm: str | None
+) -> list[dict[str, Any]]:
+    """คัดผู้เข้าสอบชื่อพ้องให้เหลือเฉพาะคนที่อยู่โรงเรียนเดียวกัน
+
+    - เจอคนโรงเรียนเดียวกัน -> เอาเฉพาะกลุ่มนั้น
+    - ไม่เจอ แต่มีคนที่ยังไม่เคยบันทึกโรงเรียน -> ถือว่าน่าจะใช่ แล้วค่อยเติมโรงเรียนให้
+    - ทุกคนที่ชื่อนี้อยู่คนละโรงเรียน -> เป็นคนใหม่แน่นอน
+    """
+    if not school_norm or not candidates:
+        return candidates
+
+    same_school = [c for c in candidates if c["school_normalized"] == school_norm]
+    if same_school:
+        return same_school
+    return [c for c in candidates if not c["school_normalized"]]
+
 
 def _commit_match(
     batch: dict[str, Any], page: dict[str, Any], row: RosterRow, student_id: str
@@ -269,25 +380,27 @@ def _commit_match(
                 """
                 UPDATE staging_pages
                 SET match_status = 'MATCHED', matched_student_id = %s,
-                    matched_manually = false, match_note = NULL
+                    matched_manually = false, match_note = NULL, roster_award = %s
                 WHERE id = %s
                 """,
-                (student_id, page["id"]),
+                (student_id, row.award or None, page["id"]),
             )
             conn.execute(
                 """
                 INSERT INTO certificates
                   (id, student_id, exam_id, batch_id, staging_page_id,
-                   pdf_key, preview_key, page_number, award, cert_no, level)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (exam_id, student_id) DO UPDATE
+                   pdf_key, preview_key, page_number, award, cert_no, candidate_no, level,
+                   published_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        CASE WHEN %s = 'PUBLISHED' THEN NOW() ELSE NULL END)
+                ON CONFLICT (exam_id, student_id, award) DO UPDATE
                 SET staging_page_id = EXCLUDED.staging_page_id,
                     batch_id = EXCLUDED.batch_id,
                     pdf_key = EXCLUDED.pdf_key,
                     preview_key = EXCLUDED.preview_key,
                     page_number = EXCLUDED.page_number,
-                    award = EXCLUDED.award,
                     cert_no = EXCLUDED.cert_no,
+                    candidate_no = EXCLUDED.candidate_no,
                     level = EXCLUDED.level
                 """,
                 (
@@ -299,127 +412,15 @@ def _commit_match(
                     page["pdf_key"],
                     page["preview_key"],
                     page["page_number"],
-                    row.award or None,
-                    # เลขเกียรติบัตรและระดับชั้นอ่านจากหน้ากระดาษ ไม่ใช่จาก Excel
-                    # เพราะสิ่งที่พิมพ์อยู่บนเกียรติบัตรคือความจริงที่ผู้ปกครองถืออยู่ในมือ
+                    # รางวัลมาจากโฟลเดอร์ใน ZIP ไม่ใช่จาก Excel
+                    page["award"],
                     page["cert_no"],
-                    page["level"],
+                    row.cert_no or None,
+                    # ระดับชั้นอ่านจากหน้ากระดาษก่อน เพราะนั่นคือสิ่งที่ผู้ปกครองถืออยู่ในมือ
+                    page["level"] or row.level or None,
+                    batch["status"],
                 ),
             )
-
-
-def _resolve_student(
-    row: RosterRow, exam_id: str, page_id: str, used: set[str]
-) -> tuple[str | None, int | None]:
-    """หาว่าหน้านี้เป็นของผู้เข้าสอบคนไหน
-
-    คืน (student_id, None) เมื่อระบุตัวได้แน่นอน หรือสร้างใหม่
-    คืน (None, เลขหน้าที่ชนกัน) เมื่อระบุตัวไม่ได้ ต้องให้แอดมินตัดสิน
-
-    ลำดับการระบุตัว:
-      1. ชื่อที่ normalize แล้วตรงกัน — ทำให้รวมเกียรติบัตรทุกใบของคนคนนั้นไว้ด้วยกันได้
-      2. ถ้าชื่อพ้องกันหลายคน ใช้ "โรงเรียน" แยก เพราะชื่ออย่างเดียวไม่พอ
-      3. ถ้ายังแยกไม่ออก (ชื่อเดียวกัน โรงเรียนเดียวกัน) ไม่เดาให้
-         ส่งต่อให้แอดมินดูเกียรติบัตรจริงทั้งสองใบแล้วตัดสิน
-    """
-    name_en_norm = normalize_name(row.name_en) or None
-    name_th_norm = normalize_name(row.name_th) or None
-    school_norm = normalize_school(row.school) or None
-
-    # ต้อง cast ::text ตรง ๆ ไม่งั้น Postgres เดาชนิดของพารามิเตอร์ใน 'IS NOT NULL' ไม่ออก
-    with connection() as conn:
-        candidates = conn.execute(
-            """
-            SELECT id, school_normalized FROM students
-            WHERE (%s::text IS NOT NULL AND name_en_normalized = %s)
-               OR (%s::text IS NOT NULL AND name_th_normalized = %s)
-            ORDER BY created_at
-            """,
-            (name_en_norm, name_en_norm, name_th_norm, name_th_norm),
-        ).fetchall()
-
-        candidates = _narrow_by_school(candidates, school_norm)
-
-        conflict_page: int | None = None
-        free = []
-        for candidate in candidates:
-            student_id = candidate["id"]
-            if student_id in used:
-                conflict_page = conflict_page or _matched_page_number(conn, exam_id, student_id)
-                continue
-            other = _other_certificate_page(conn, exam_id, student_id, page_id)
-            if other is not None:
-                conflict_page = conflict_page or other
-                continue
-            free.append(student_id)
-
-        if len(free) == 1:
-            student_id = free[0]
-            _fill_missing_fields(conn, student_id, row, name_th_norm, name_en_norm, school_norm)
-            used.add(student_id)
-            return student_id, None
-
-        if candidates:
-            # มีคนชื่อนี้ (และโรงเรียนนี้) อยู่แล้ว แต่ระบุไม่ได้ว่าเป็นคนไหน
-            # อาจเพราะถูกใช้ไปหมดแล้วในรายการสอบนี้ หรือมีหลายคนที่แยกไม่ออก
-            return None, conflict_page
-
-        student_id = _create_student(conn, row, name_th_norm, name_en_norm, school_norm)
-
-    used.add(student_id)
-    return student_id, None
-
-
-def _narrow_by_school(
-    candidates: list[dict[str, Any]], school_norm: str | None
-) -> list[dict[str, Any]]:
-    """คัดผู้เข้าสอบชื่อพ้องให้เหลือเฉพาะคนที่อยู่โรงเรียนเดียวกัน
-
-    - เจอคนโรงเรียนเดียวกัน -> เอาเฉพาะกลุ่มนั้น
-    - ไม่เจอ แต่มีคนที่ยังไม่เคยบันทึกโรงเรียน -> ถือว่าน่าจะใช่ แล้วค่อยเติมโรงเรียนให้
-    - ทุกคนที่ชื่อนี้อยู่คนละโรงเรียน -> เป็นคนใหม่แน่นอน ไม่ต้องถามแอดมิน
-    """
-    if not school_norm or not candidates:
-        return candidates
-
-    same_school = [c for c in candidates if c["school_normalized"] == school_norm]
-    if same_school:
-        return same_school
-
-    unknown_school = [c for c in candidates if not c["school_normalized"]]
-    return unknown_school
-
-
-def _matched_page_number(conn: Any, exam_id: str, student_id: str) -> int | None:
-    row = conn.execute(
-        """
-        SELECT sp.page_number
-        FROM certificates c JOIN staging_pages sp ON sp.id = c.staging_page_id
-        WHERE c.exam_id = %s AND c.student_id = %s
-        LIMIT 1
-        """,
-        (exam_id, student_id),
-    ).fetchone()
-    return int(row["page_number"]) if row else None
-
-
-def _other_certificate_page(
-    conn: Any, exam_id: str, student_id: str, page_id: str
-) -> int | None:
-    """ผู้เข้าสอบคนนี้มีเกียรติบัตรในรายการสอบนี้จาก "หน้าอื่น" อยู่แล้วหรือไม่
-
-    เช็ค staging_page_id ด้วย เพื่อให้รันจับคู่ซ้ำรอบเดิมได้โดยไม่ถือว่าชนกับตัวเอง
-    """
-    row = conn.execute(
-        """
-        SELECT sp.page_number
-        FROM certificates c JOIN staging_pages sp ON sp.id = c.staging_page_id
-        WHERE c.exam_id = %s AND c.student_id = %s AND c.staging_page_id <> %s
-        LIMIT 1
-        """,
-        (exam_id, student_id, page_id),
-    ).fetchone()
-    return int(row["page_number"]) if row else None
 
 
 def _fill_missing_fields(
@@ -485,46 +486,62 @@ def _create_student(
     return student_id
 
 
-def _mark_duplicate_name(page_id: str, conflict_page: int | None, row: RosterRow) -> None:
-    """ยกให้แอดมินตัดสิน พร้อมเก็บข้อมูลจากแถว Excel ติดไปด้วย
+def _mark(page_id: str, status: str, note: str | None, roster_award: str | None = None) -> None:
+    with connection() as conn:
+        conn.execute(
+            """
+            UPDATE staging_pages
+            SET match_status = %s, match_note = %s, roster_award = COALESCE(%s, roster_award)
+            WHERE id = %s AND match_status <> 'MATCHED'
+            """,
+            (status, note, roster_award, page_id),
+        )
 
-    เก็บรางวัลกับโรงเรียนไว้เพราะตอนนี้ยังรู้อยู่ ถ้าไม่เก็บ แอดมินต้องเปิด Excel
-    มาไล่หาแล้วพิมพ์ใหม่เองตอนตัดสิน ซึ่งเสี่ยงพิมพ์ผิดและเสียเวลาโดยไม่จำเป็น
+
+def _reset_previous_matches(batch_id: str) -> None:
+    """ล้างผลจับคู่อัตโนมัติของรอบนำเข้านี้ เพื่อให้รันใหม่ได้ผลเหมือนเริ่มต้นใหม่
+
+    ไม่แตะหน้าที่ `matched_manually = true` เพราะนั่นคือการตัดสินของคน
+    ซึ่งไม่ควรถูกลบทิ้งเพราะแอดมินอัปโหลด Excel ใหม่
     """
-    where = f"หน้า {conflict_page}" if conflict_page else "หน้าอื่น"
-    note = (
-        f"ชื่อนี้ซ้ำกับ{where}ที่จับคู่ไปแล้วในรายการสอบเดียวกัน "
-        "กรุณาเทียบเกียรติบัตรทั้งสองใบแล้วเลือกว่าเป็นคนละคน หรือเป็นใบซ้ำ"
-    )
     with connection() as conn:
         conn.execute(
             """
-            UPDATE staging_pages
-            SET match_status = 'DUPLICATE_NAME', match_note = %s,
-                pending_award = %s, pending_school = %s
-            WHERE id = %s AND match_status <> 'MATCHED'
+            DELETE FROM certificates c
+            USING staging_pages sp
+            WHERE c.staging_page_id = sp.id
+              AND c.batch_id = %s
+              AND sp.matched_manually = false
             """,
-            (note, row.award or None, row.school or None, page_id),
+            (batch_id,),
         )
-
-
-def _mark_ambiguous(page_id: str, note: str) -> None:
-    with connection() as conn:
         conn.execute(
             """
             UPDATE staging_pages
-            SET match_status = 'AMBIGUOUS', match_note = %s
-            WHERE id = %s AND match_status <> 'MATCHED'
+            SET match_status = 'UNMATCHED', matched_student_id = NULL, match_note = NULL
+            WHERE batch_id = %s
+              AND matched_manually = false
+              AND match_status NOT IN ('SKIPPED_FOREIGN', 'DISCARDED')
             """,
-            (note, page_id),
+            (batch_id,),
         )
+
+
+def _manual_pairs(batch_id: str) -> set[tuple[str, str]]:
+    """คู่ (ผู้เข้าสอบ, รางวัล) ที่แอดมินจับไว้ด้วยมือแล้วในรอบนำเข้านี้"""
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT student_id, award FROM certificates WHERE batch_id = %s", (batch_id,)
+        ).fetchall()
+    return {(r["student_id"], r["award"]) for r in rows}
 
 
 def _load_batch(batch_id: str) -> dict[str, Any]:
     with connection() as conn:
         row = conn.execute(
             """
-            SELECT b.id, b.exam_id, b.source_excel_key, p.code AS exam_code, p.kind
+            SELECT b.id, b.exam_id, b.source_excel_key, b.status,
+                   p.code AS program_code, e.round, e.year
             FROM batches b
             JOIN exams e ON e.id = b.exam_id
             JOIN exam_programs p ON p.id = e.program_id
@@ -541,23 +558,13 @@ def _load_pages(batch_id: str) -> list[dict[str, Any]]:
     with connection() as conn:
         return conn.execute(
             """
-            SELECT id, page_number, pdf_key, preview_key, cert_no, level,
-                   extracted_name_normalized, extracted_name_sort_key
+            SELECT id, page_number, pdf_key, preview_key, cert_no, level, award,
+                   extracted_name, extracted_name_normalized
             FROM staging_pages
-            WHERE batch_id = %s AND match_status NOT IN ('SKIPPED_FOREIGN', 'DISCARDED')
+            WHERE batch_id = %s
+              AND matched_manually = false
+              AND match_status NOT IN ('SKIPPED_FOREIGN', 'DISCARDED')
             ORDER BY page_number
             """,
             (batch_id,),
         ).fetchall()
-
-
-def _count_unmatched_pages(batch_id: str) -> int:
-    with connection() as conn:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS n FROM staging_pages
-            WHERE batch_id = %s AND match_status IN ('UNMATCHED', 'AMBIGUOUS', 'DUPLICATE_NAME')
-            """,
-            (batch_id,),
-        ).fetchone()
-    return int(row["n"])

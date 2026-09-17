@@ -1,12 +1,13 @@
-"""ทดสอบทั้งสายงานจริงด้วยไฟล์สังเคราะห์ (ใช้ตอน dev เท่านั้น)
+"""ทดสอบทั้งสายงานด้วยไฟล์สังเคราะห์ที่เลียนโครงไฟล์จริง (ใช้ตอน dev เท่านั้น)
 
 รันในคอนเทนเนอร์ worker:
     docker compose exec worker python scripts/e2e_demo.py
 
 ทำตามลำดับเดียวกับที่แอดมินทำจริงทุกขั้น:
-  สร้าง batch -> อัปโหลด PDF -> ตั้งงาน SPLIT -> รอ -> อัปโหลด Excel -> ตั้งงาน MATCH -> รอ -> ตรวจผล
+  สร้างรอบนำเข้า -> อัปโหลด ZIP -> ตั้งงาน SPLIT -> รอ
+  -> อัปโหลด Excel -> ตั้งงาน MATCH -> รอ -> ตรวจผล
 
-ใช้พิสูจน์ว่าสายงานยังไม่พัง ก่อนที่จะมีไฟล์เกียรติบัตรจริงมาให้ทดสอบ
+ถ้าอยากตรวจกับไฟล์จริง ใช้ scripts/check_real_files.py แทน
 """
 
 import json
@@ -18,25 +19,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db import connection, new_id  # noqa: E402
 from app.storage import upload_bytes  # noqa: E402
-from tests.fixtures.builders import make_bundle_pdf, make_roster_xlsx  # noqa: E402
+from tests.fixtures.builders import (  # noqa: E402
+    make_award_zip,
+    make_bundle_pdf,
+    make_roster_xlsx,
+)
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 DOMESTIC = [
-    {"name": "SOMCHAI JAIDEE", "level": "Primary 5", "cert_no": "90001"},
-    {"name": "PIYADA SRISUK", "level": "Primary 6", "cert_no": "90002"},
-    {"name": "NATTAPONG WONGTHONG", "level": "Secondary 1", "cert_no": "90003"},
+    {"name": "ALPHA TESTONE", "level": "Primary 5", "cert_no": "90001"},
+    {"name": "BETA TESTTWO", "level": "Primary 6", "cert_no": "90002"},
+    {"name": "GAMMA TESTTHREE", "level": "Secondary 1", "cert_no": "90003"},
 ]
 INTERNATIONAL = [
-    {"name": "SOMCHAI JAIDEE", "country": "THAILAND", "level": "Primary 5", "cert_no": "91001"},
+    {"name": "ALPHA TESTONE", "country": "THAILAND", "level": "Primary 5", "cert_no": "91001"},
     {"name": "TARO YAMADA", "country": "JAPAN", "level": "Primary 5", "cert_no": "91002"},
-    {"name": "PIYADA SRISUK", "country": "THAILAND", "level": "Primary 6", "cert_no": "91003"},
+    {"name": "BETA TESTTWO", "country": "THAILAND", "level": "Primary 6", "cert_no": "91003"},
     {"name": "JOHN SMITH", "country": "UNITED STATES", "level": "Primary 6", "cert_no": "91004"},
 ]
 # ชื่อเหมือนกันเป๊ะ — ใช้ทดสอบทั้งกรณี "คนละโรงเรียน" และ "โรงเรียนเดียวกัน"
 DUPLICATE_NAMES = [
-    {"name": "SOMCHAI JAIDEE", "level": "Primary 5", "cert_no": "92001"},
-    {"name": "SOMCHAI JAIDEE", "level": "Secondary 2", "cert_no": "92002"},
+    {"name": "ALPHA TESTONE", "level": "Primary 5", "cert_no": "92001"},
+    {"name": "ALPHA TESTONE", "level": "Secondary 2", "cert_no": "92002"},
 ]
 
 HEADERS_WITH_SCHOOL = {
@@ -48,75 +53,116 @@ HEADERS_WITH_SCHOOL = {
 
 
 def main() -> int:
-    # ทุกรอบใช้ "รหัสรอบ" ของตัวเอง ทั้งรหัสรายการสอบและชื่อโรงเรียน
-    # ไม่งั้นข้อมูลจากรอบก่อนจะกลายเป็นผู้เข้าสอบชื่อพ้องที่ทำให้รอบถัดไปตีความต่างไป
+    # ทุกรอบใช้รหัสของตัวเอง ไม่งั้นข้อมูลจากรอบก่อนจะกลายเป็นผู้เข้าสอบชื่อพ้องที่ทำให้ผลเพี้ยน
     run = int(time.time()) % 100000
     ok = True
+
     ok &= run_case(
-        "เกียรติบัตรเฉพาะของไทย",
-        code="E2EDOM",
-        kind="DOMESTIC",
-        entries=DOMESTIC,
+        "รอบ Heat — ตัดแยกทุกหน้า ไม่กรองสัญชาติ",
+        code=f"E2EHEAT{run}",
+        exam_round="HEAT",
+        bundles={
+            "Gold": [
+                {"name": "ALPHA TESTONE", "level": "PRIMARY 5", "cert_no": "70001",
+                 "award": "Gold", "round": "Heat"},
+                {"name": "BETA TESTTWO", "level": "PRIMARY 6", "cert_no": "70002",
+                 "award": "Gold", "round": "Heat"},
+            ],
+            "Merit": [
+                {"name": "GAMMA TESTTHREE", "level": "SECONDARY 1", "cert_no": "70003",
+                 "award": "Merit", "round": "Heat"},
+            ],
+        },
         roster=[
-            {"name_en": "Mr. Somchai Jaidee", "school": f"โรงเรียนสวนกุหลาบ{run}", "award": "เหรียญทอง"},
-            {"name_en": "Piyada Srisuk", "school": f"รร.สตรีวิทยา{run}", "award": "เหรียญเงิน"},
-            {"name_en": "Nattapong Wongthong", "school": f"โรงเรียนราชวินิต{run}", "award": "เข้าร่วม"},
+            {"cert_no": 70001, "level": "PRIMARY 5", "name_en": "ALPHA TESTONE", "award": "GOLD AWARD"},
+            {"cert_no": 70002, "level": "PRIMARY 6", "name_en": "BETA TESTTWO", "award": "GOLD AWARD"},
+            {"cert_no": 70003, "level": "SECONDARY 1", "name_en": "GAMMA TESTTHREE", "award": "MERIT AWARD"},
         ],
-        headers={"name_en": "Name", "school": "โรงเรียน", "award": "Award"},
         expect_split=3,
         expect_skipped=0,
-        expect_matched=3,
+        expect_certificates=3,
     )
+
     ok &= run_case(
-        "เกียรติบัตรรวมประเทศ (ต้องข้ามคนต่างชาติ)",
-        code="E2EINT",
-        kind="INTERNATIONAL",
-        entries=INTERNATIONAL,
+        "รอบ Final — ต้องข้ามหน้าของคนต่างชาติ",
+        code=f"E2EFINAL{run}",
+        exam_round="FINAL",
+        bundles={
+            "Silver": [
+                {"name": "ALPHA TESTONE", "country": "THAILAND", "level": "PRIMARY 5",
+                 "cert_no": "71001", "award": "Silver"},
+                {"name": "TARO YAMADA", "country": "JAPAN", "level": "PRIMARY 5",
+                 "cert_no": "71002", "award": "Silver"},
+                {"name": "JOHN SMITH", "country": "UNITED STATES", "level": "PRIMARY 6",
+                 "cert_no": "71003", "award": "Silver"},
+            ],
+            "Bronze": [
+                {"name": "BETA TESTTWO", "country": "THAILAND", "level": "PRIMARY 6",
+                 "cert_no": "71004", "award": "Bronze"},
+            ],
+        },
         roster=[
-            {"name_en": "Somchai Jaidee", "school": f"โรงเรียนสวนกุหลาบ{run}", "award": "Gold"},
-            # สลับชื่อ-นามสกุล และเขียนชื่อโรงเรียนเว้นวรรคต่างจากรอบแรก ต้องยังจับคู่ได้
-            {"name_en": "Srisuk Piyada", "school": f"สตรี วิทยา{run}", "award": "Silver"},
+            {"cert_no": 71001, "level": "PRIMARY 5", "name_en": "ALPHA TESTONE", "award": "SILVER AWARD"},
+            {"cert_no": 71004, "level": "PRIMARY 6", "name_en": "BETA TESTTWO", "award": "BRONZE AWARD"},
         ],
-        headers={"name_en": "Name", "school": "โรงเรียน", "award": "Award"},
         expect_split=2,
         expect_skipped=2,
-        expect_matched=2,
+        expect_certificates=2,
     )
+
     ok &= run_case(
-        "ชื่อเหมือนกันแต่คนละโรงเรียน — ต้องแยกเป็นคนละคนได้เอง",
-        code="E2EDIF",
-        kind="DOMESTIC",
-        entries=DUPLICATE_NAMES,
+        "Perfect Scorer — คนเดียวได้ 2 ใบ ทั้งที่ Excel มีแถวเดียว",
+        code=f"E2EPS{run}",
+        exam_round="FINAL",
+        bundles={
+            "Gold": [
+                {"name": "JAYTIPAT CHATRATANAMALAI", "country": "THAILAND", "level": "PRIMARY 3",
+                 "cert_no": "72001", "award": "Gold"},
+                {"name": "NAPHAT CHALOKEPUNRAT", "country": "THAILAND", "level": "PRIMARY 3",
+                 "cert_no": "72002", "award": "Gold"},
+            ],
+            # หน้า Perfect Score ของจริงไม่มีบรรทัดรางวัล และใช้เลขเดียวกับใบ Gold ของคนเดียวกัน
+            "Perfect_Score": [
+                {"name": "JAYTIPAT CHATRATANAMALAI", "country": "THAILAND", "level": "PRIMARY 3",
+                 "cert_no": "72001"},
+            ],
+        },
         roster=[
-            {"name_en": "Somchai Jaidee", "school": f"โรงเรียนสวนกุหลาบ{run}",
-             "cert_no": "92001", "award": "Gold"},
-            {"name_en": "Somchai Jaidee", "school": f"โรงเรียนเทพศิรินทร์{run}",
-             "cert_no": "92002", "award": "Silver"},
+            # Excel บันทึกรางวัลสูงสุดแค่แถวเดียวต่อคน
+            {"cert_no": 72001, "level": "PRIMARY 3", "name_en": "JAYTIPAT CHATRATANAMALAI",
+             "award": "PERFECT SCORER"},
+            {"cert_no": 72002, "level": "PRIMARY 3", "name_en": "NAPHAT CHALOKEPUNRAT",
+             "award": "GOLD AWARD"},
         ],
-        headers=HEADERS_WITH_SCHOOL,
-        expect_split=2,
+        expect_split=3,
         expect_skipped=0,
-        expect_matched=2,
-        expect_duplicates=0,
+        # 3 ใบ: Gold 2 ใบ + Perfect Score 1 ใบ โดย JAYTIPAT ได้ 2 ใบจากแถว Excel แถวเดียว
+        expect_certificates=3,
+        expect_students=2,
     )
+
     ok &= run_case(
-        "ชื่อเหมือนกันและโรงเรียนเดียวกัน — ต้องส่งให้แอดมินตัดสิน ไม่ใช่เดาเอง",
-        code="E2ESAME",
-        kind="DOMESTIC",
-        entries=DUPLICATE_NAMES,
+        "ชื่อพ้องกับผู้เข้าสอบที่มีในระบบหลายคน — ต้องส่งให้แอดมิน ไม่ใช่สร้างคนใหม่",
+        code=f"E2EDUP{run}",
+        exam_round="HEAT",
+        bundles={
+            "Gold": [
+                # seed มีคนชื่อนี้อยู่ 2 คน (คนละโรงเรียน) ระบบจึงแยกไม่ออกว่าเป็นคนไหน
+                {"name": "SOMCHAI JAIDEE", "level": "PRIMARY 5", "cert_no": "73001",
+                 "award": "Gold", "round": "Heat"},
+            ],
+        },
         roster=[
-            {"name_en": "Somchai Jaidee", "school": f"โรงเรียนราชวินิตซ้ำ{run}",
-             "cert_no": "92001", "award": "Gold"},
-            {"name_en": "Somchai Jaidee", "school": f"โรงเรียนราชวินิตซ้ำ{run}",
-             "cert_no": "92002", "award": "Silver"},
+            {"cert_no": 73001, "level": "PRIMARY 5", "name_en": "SOMCHAI JAIDEE",
+             "award": "GOLD AWARD"},
         ],
-        headers=HEADERS_WITH_SCHOOL,
-        expect_split=2,
+        expect_split=1,
         expect_skipped=0,
-        # ใบแรกจับคู่ได้ ใบที่สองต้องค้างไว้ให้แอดมินดูเกียรติบัตรจริงก่อนตัดสิน
-        expect_matched=1,
-        expect_duplicates=1,
+        expect_certificates=0,
+        expect_matched_by_cert=0,
+        expect_ambiguous=1,
     )
+
     print("\n" + ("ผ่านทั้งหมด ✓" if ok else "มีเคสที่ไม่ผ่าน ✗"))
     return 0 if ok else 1
 
@@ -124,27 +170,25 @@ def main() -> int:
 def run_case(
     title: str,
     code: str,
-    kind: str,
-    entries: list[dict],
+    exam_round: str,
+    bundles: dict,
     roster: list[dict],
-    headers: dict,
     expect_split: int,
     expect_skipped: int,
-    expect_matched: int,
-    expect_duplicates: int = 0,
+    expect_certificates: int,
+    expect_students: int | None = None,
+    expect_matched_by_cert: int | None = None,
+    expect_ambiguous: int = 0,
 ) -> bool:
-    print(f"\n{'=' * 70}\n{title}\n{'=' * 70}")
-    batch_id, exam_code = create_batch(code, kind, title)
+    print(f"\n{'=' * 72}\n{title}\n{'=' * 72}")
+    batch_id = create_batch(code, exam_round, title)
 
-    upload_bytes(f"sources/{batch_id}/bundle.pdf", make_bundle_pdf(entries), "application/pdf")
-    set_source(batch_id, "source_pdf_key", f"sources/{batch_id}/bundle.pdf")
+    zip_bytes = make_award_zip({k: make_bundle_pdf(v) for k, v in bundles.items()})
+    upload_bytes(f"sources/{batch_id}/bundle.zip", zip_bytes, "application/zip")
+    set_source(batch_id, "source_zip_key", f"sources/{batch_id}/bundle.zip")
     wait_for(enqueue(batch_id, "SPLIT"), "ตัดแยกหน้า")
 
-    upload_bytes(
-        f"sources/{batch_id}/roster.xlsx",
-        make_roster_xlsx(roster, headers=headers),
-        XLSX_MIME,
-    )
+    upload_bytes(f"sources/{batch_id}/roster.xlsx", make_roster_xlsx(roster), XLSX_MIME)
     set_source(batch_id, "source_excel_key", f"sources/{batch_id}/roster.xlsx")
     wait_for(enqueue(batch_id, "MATCH"), "จับคู่รายชื่อ")
 
@@ -159,28 +203,29 @@ def run_case(
 
     print(f"  stats: {json.dumps(stats, ensure_ascii=False)}")
     print(f"  หน้าแยกตามสถานะ: {counts}")
-    for name, school, award, cert_no, level, pdf_key in certificates:
-        print(f"  ออกเกียรติบัตร: {name} [{school}] — {award} (No. {cert_no}, {level})")
+    for name, award, cert_no, level, pdf_key in certificates:
+        print(f"  ออกเกียรติบัตร: {name} — {award} (No. {cert_no}, {level})")
         print(f"    ชื่อไฟล์: {pdf_key.rsplit('/', 1)[-1]}")
 
-    # ชื่อไฟล์ต้องลงท้ายด้วยรหัสรายการสอบเสมอ
     naming_ok = all(
-        pdf_key.rsplit("/", 1)[-1].endswith(f"_{exam_code}.pdf")
-        or f"_{exam_code}_" in pdf_key.rsplit("/", 1)[-1]
-        for *_, pdf_key in certificates
+        f"_{code}_{exam_round}_" in pdf_key.rsplit("/", 1)[-1] for *_, pdf_key in certificates
     )
+    distinct_students = len({name for name, *_ in certificates})
 
     checks = [
         ("จำนวนหน้าที่ตัดแยก", stats.get("pagesSplit"), expect_split),
         ("จำนวนหน้าที่ข้าม", stats.get("foreignSkipped"), expect_skipped),
-        ("จำนวนที่จับคู่ได้", counts.get("MATCHED", 0), expect_matched),
-        ("จำนวนเกียรติบัตรที่ออก", len(certificates), expect_matched),
-        ("ชื่อไฟล์ลงท้ายด้วยรหัสรายการสอบ", naming_ok, True),
-        ("เก็บเลขเกียรติบัตรครบ", all(c[3] for c in certificates), True),
-        ("บันทึกโรงเรียนครบ", all(c[1] for c in certificates), True),
+        ("จำนวนเกียรติบัตรที่ออก", len(certificates), expect_certificates),
+        ("ชื่อไฟล์มีรายการสอบและรอบครบ", naming_ok, True),
+        ("จับคู่ด้วยเลขผู้เข้าสอบ", stats.get("matchedByCertNo"),
+         expect_certificates if expect_matched_by_cert is None else expect_matched_by_cert),
+        ("หน้าที่ส่งให้แอดมินตัดสิน", counts.get("AMBIGUOUS", 0), expect_ambiguous),
+        ("รางวัลบนหน้าตรงกับโฟลเดอร์", stats.get("awardMismatch"), 0),
         ("จับคู่ซ้ำแล้วไม่เกิดผู้เข้าสอบเพิ่ม", students_after, students_before),
-        ("หน้าที่รอแอดมินตัดสินชื่อซ้ำ", counts.get("DUPLICATE_NAME", 0), expect_duplicates),
     ]
+    if expect_students is not None:
+        checks.append(("จำนวนผู้เข้าสอบที่ได้ใบ", distinct_students, expect_students))
+
     passed = True
     for label, actual, expected in checks:
         mark = "✓" if actual == expected else "✗"
@@ -192,27 +237,25 @@ def run_case(
 
 # ------------------------------------------------------------------ helpers
 
-def create_batch(code: str, kind: str, title: str) -> tuple[str, str]:
+def create_batch(code: str, exam_round: str, title: str) -> str:
     program_id, exam_id, batch_id = new_id(), new_id(), new_id()
-    # ต่อท้ายด้วยเวลาเพื่อให้รันซ้ำได้โดยไม่ชนกับรอบก่อน
-    exam_code = f"{code}{int(time.time()) % 100000}"
     with connection() as conn:
         conn.execute(
             """
-            INSERT INTO exam_programs (id, code, name, kind, updated_at)
-            VALUES (%s, %s, %s, %s, NOW())
+            INSERT INTO exam_programs (id, code, name, updated_at)
+            VALUES (%s, %s, %s, NOW())
             """,
-            (program_id, exam_code, f"[E2E] {title}", kind),
+            (program_id, code, f"[E2E] {title}"),
         )
         conn.execute(
-            "INSERT INTO exams (id, program_id, academic_year) VALUES (%s, %s, %s)",
-            (exam_id, program_id, 2567),
+            "INSERT INTO exams (id, program_id, round, year) VALUES (%s, %s, %s, %s)",
+            (exam_id, program_id, exam_round, 2026),
         )
         conn.execute(
             "INSERT INTO batches (id, exam_id, status, updated_at) VALUES (%s, %s, 'DRAFT', NOW())",
             (batch_id, exam_id),
         )
-    return batch_id, exam_code
+    return batch_id
 
 
 def set_source(batch_id: str, column: str, key: str) -> None:
@@ -230,7 +273,7 @@ def enqueue(batch_id: str, job_type: str) -> str:
     return job_id
 
 
-def wait_for(job_id: str, label: str, timeout: float = 90.0) -> None:
+def wait_for(job_id: str, label: str, timeout: float = 120.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         with connection() as conn:
@@ -266,20 +309,17 @@ def fetch_page_counts(batch_id: str) -> dict:
     return {r["match_status"]: r["n"] for r in rows}
 
 
-def fetch_certificates(batch_id: str) -> list[tuple[str, str, str, str, str, str]]:
+def fetch_certificates(batch_id: str) -> list[tuple[str, str, str, str, str]]:
     with connection() as conn:
         rows = conn.execute(
             """
-            SELECT s.name_en, s.school, c.award, c.cert_no, c.level, c.pdf_key
+            SELECT s.name_en, c.award, c.cert_no, c.level, c.pdf_key
             FROM certificates c JOIN students s ON s.id = c.student_id
             WHERE c.batch_id = %s ORDER BY c.page_number
             """,
             (batch_id,),
         ).fetchall()
-    return [
-        (r["name_en"], r["school"], r["award"], r["cert_no"], r["level"], r["pdf_key"])
-        for r in rows
-    ]
+    return [(r["name_en"], r["award"], r["cert_no"], r["level"], r["pdf_key"]) for r in rows]
 
 
 if __name__ == "__main__":

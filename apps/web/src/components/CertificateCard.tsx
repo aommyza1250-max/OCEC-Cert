@@ -1,3 +1,4 @@
+import { AWARD_LABELS } from "@/lib/normalize";
 import type { CertificateItem } from "@/lib/search";
 import { PreviewLightbox } from "./PreviewLightbox";
 
@@ -15,7 +16,7 @@ export function CertificateCard({
       {cert.previewUrl ? (
         <PreviewLightbox
           src={cert.previewUrl}
-          alt={`เกียรติบัตร ${programCode} ปีการศึกษา ${cert.academicYear} ของ ${studentName}`}
+          alt={`เกียรติบัตร ${programCode} ปี ${cert.year} ของ ${studentName}`}
         />
       ) : (
         <div className="flex aspect-[842/595] w-full items-center justify-center rounded-lg bg-gray-100 text-sm text-gray-400">
@@ -24,15 +25,14 @@ export function CertificateCard({
       )}
 
       <div className="flex-1">
-        {cert.level && <p className="font-semibold leading-snug">{cert.level}</p>}
-        {cert.award && (
-          <span className="mt-2 inline-block rounded-full bg-[var(--color-brand-soft)] px-3 py-1 text-sm font-medium text-[var(--color-brand)]">
-            {cert.award}
-          </span>
-        )}
-        {cert.certNo && (
-          <p className="mt-2 text-xs text-gray-400">เลขที่ {cert.certNo}</p>
-        )}
+        <span className="inline-block rounded-full bg-[var(--color-brand-soft)] px-3 py-1 text-sm font-semibold text-[var(--color-brand)]">
+          {AWARD_LABELS[cert.award] ?? cert.award}
+        </span>
+        <p className="mt-2 text-sm text-gray-600">
+          รอบ {cert.round === "HEAT" ? "คัดเลือก" : "ชิงชนะเลิศ"}
+          {cert.level && ` · ${cert.level}`}
+        </p>
+        {cert.certNo && <p className="mt-1 text-xs text-gray-400">เลขที่ {cert.certNo}</p>}
       </div>
 
       {/* ลิงก์ตรงไป R2 ผ่าน redirect — ไฟล์ไม่วิ่งผ่านเซิร์ฟเวอร์เว็บ */}
