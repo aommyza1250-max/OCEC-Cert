@@ -31,4 +31,5 @@ COPY --from=deps /app/node_modules ./node_modules
 
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+
