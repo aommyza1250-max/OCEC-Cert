@@ -16,6 +16,9 @@ export type MissingItem = {
   reason: string;
   /** รางวัลของไฟล์ที่ขาด — ใช้เป็นค่าตั้งต้นถ้าหน้ากระดาษไม่มีข้อความรางวัล */
   expectedAward: string;
+  /** ผลของไฟล์ที่อัปเข้ามาให้คนนี้ครั้งล่าสุด ถ้าไม่ถูกรับ — อยู่ติดกับช่องอัปโหลดของคนนั้น
+   *  เก็บไว้ที่นี่เพื่อให้ยังเห็นอยู่หลังรีเฟรชหน้า โดยไม่ต้องไปขึ้นซ้ำที่อื่น */
+  lastError: string | null;
 };
 
 const MISSING_MEDAL = "มีใบ Perfect Score แต่ไม่มีใบเหรียญ — ไฟล์ใบเหรียญตกหล่น";
@@ -38,11 +41,42 @@ export async function loadMissingItems(batchId: string): Promise<MissingItem[]> 
         name: row.name,
         reason: NO_CERTIFICATE,
         expectedAward: row.award || "GOLD",
+        lastError: null,
       });
     }
   }
 
-  return [...items.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const errors = await lastUploadErrors(batchId);
+  return [...items.values()]
+    .map((item) => ({ ...item, lastError: errors.get(item.certNo) ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * ผลของไฟล์ที่อัปเข้ามาให้แต่ละคนครั้งล่าสุด เฉพาะที่ไม่ถูกรับ
+ *
+ * ดูจากงานล่าสุดของเลขผู้เข้าสอบนั้น ถ้าครั้งล่าสุดสำเร็จก็ไม่ต้องแสดงอะไร
+ */
+async function lastUploadErrors(batchId: string): Promise<Map<string, string>> {
+  const jobs = await prisma.job.findMany({
+    where: { batchId, type: "SPLIT" },
+    select: { status: true, error: true, userError: true, payload: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const seen = new Map<string, string>();
+  for (const job of jobs) {
+    const certNo = (job.payload as { expectCertNo?: unknown })?.expectCertNo;
+    if (typeof certNo !== "string" || seen.has(certNo)) continue;
+    // จองที่ไว้ทุกกรณี เพื่อให้เห็นเฉพาะผลของครั้งล่าสุด ไม่ใช่ครั้งที่พังครั้งไหนก็ได้
+    seen.set(certNo, "");
+    if (job.status === "FAILED" && job.userError && job.error) {
+      seen.set(certNo, job.error.split("\n")[0]);
+    }
+  }
+
+  return new Map([...seen].filter(([, message]) => message !== ""));
 }
 
 /**
@@ -91,6 +125,7 @@ async function fromHeldStudents(
         reason: MISSING_MEDAL,
         // Perfect Score ให้เฉพาะคนที่ได้เหรียญทอง ใบที่ขาดจึงเป็นเหรียญทองเสมอ
         expectedAward: "GOLD",
+        lastError: null,
       },
     ];
   });

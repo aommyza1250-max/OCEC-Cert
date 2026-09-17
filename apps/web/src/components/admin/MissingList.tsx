@@ -123,9 +123,9 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
         </div>
       )}
 
-      {error && (
+      {(error ?? item.lastError) && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          ไม่รับไฟล์นี้ — {error}
+          ไม่รับไฟล์นี้ — {error ?? item.lastError}
         </p>
       )}
     </article>
