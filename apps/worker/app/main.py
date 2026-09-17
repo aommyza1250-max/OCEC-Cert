@@ -38,13 +38,8 @@ def _authorize(secret: str | None) -> None:
 
 @app.get("/healthz")
 def healthz():
-    """Railway ใช้ตรวจว่า container ยังดีอยู่ไหม — ต้องเช็กถึงฐานข้อมูลด้วย"""
-    try:
-        with connection() as conn:
-            conn.execute("SELECT 1")
-        return {"ok": True}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"เชื่อมต่อฐานข้อมูลไม่ได้: {exc}") from exc
+    """Railway ใช้ตรวจว่า web server ทำงานอยู่ไหม"""
+    return {"ok": True}
 
 
 @app.post("/wake")
