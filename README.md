@@ -111,7 +111,8 @@ OCEC-Cert/
 | [docs/name-normalization.md](docs/name-normalization.md) | **กฎ normalize ชื่อ — แหล่งความจริงเดียว** |
 | [docs/pdf-parsing-notes.md](docs/pdf-parsing-notes.md) | วิธีอ่านชื่อจากหน้าเกียรติบัตร และวิธีปรับจูนกับไฟล์จริง |
 | [docs/data-intake-spec.md](docs/data-intake-spec.md) | **สเปกการรับและนำเข้าข้อมูล (โครงสร้าง ZIP, ชื่อไฟล์, และการ Match)** |
-| [docs/data-intake-spec.md](docs/data-intake-spec.md) | **สเปกการรับข้อมูล** — โครงสร้าง ZIP, Excel, กฎการจับคู่ |
+| [docs/admin-guide.md](docs/admin-guide.md) | **คู่มือแอดมิน** — นำเข้าและเพิ่มข้อมูลทีหลัง เริ่มอ่านที่นี่ถ้าเป็นคนใช้งาน |
+| [docs/data-intake-spec.md](docs/data-intake-spec.md) | สเปกการรับข้อมูล — โครงสร้าง ZIP, Excel, กฎการจับคู่ |
 | [docs/setup-cloudflare-r2.md](docs/setup-cloudflare-r2.md) | ตั้งค่าที่เก็บไฟล์ทีละขั้น |
 | [docs/setup-railway.md](docs/setup-railway.md) | ตั้งค่าและ deploy ทีละขั้น |
 | [docs/go-live-checklist.md](docs/go-live-checklist.md) | เช็คลิสต์ก่อนเปิดใช้จริง |

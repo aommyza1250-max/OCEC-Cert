@@ -10,7 +10,7 @@
 | `apps/web` | Next.js 15 (App Router) + Tailwind 4 + Prisma — หน้าค้นหาสาธารณะและหน้าแอดมิน |
 | `apps/worker` | Python 3.12 + FastAPI + PyMuPDF — ตัด PDF, สร้าง preview, จับคู่ Excel |
 | `shared/` | ไฟล์ที่ทั้งสองภาษาใช้ร่วมกัน (ตอนนี้มีเคสทดสอบ normalize) |
-| `docs/` | สเปกและคู่มือ — เริ่มที่ `data-intake-spec.md` ถ้าจะแตะเรื่องการนำเข้า |
+| `docs/` | สเปกและคู่มือ — `admin-guide.md` สำหรับคนใช้งาน, `data-intake-spec.md` สำหรับคนแก้โค้ด |
 | `infra/` | ไฟล์ตั้งค่า Railway และ CORS ของ R2 |
 
 ## กฎที่ห้ามพลาด
