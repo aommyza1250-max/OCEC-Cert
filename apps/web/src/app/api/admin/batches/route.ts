@@ -37,7 +37,24 @@ export async function POST(request: Request) {
     where: { programId_round_year: { programId, round, year } },
     update: {},
     create: { programId, round, year },
+    include: { batches: { orderBy: { createdAt: "asc" }, take: 1 } },
   });
+
+  // รายการสอบมีไม่กี่รายการ และแต่ละรายการแยกเป็นรอบกับปีอยู่แล้ว
+  // การสร้างซ้ำจึงแปลว่าแอดมินลืมหรือกดพลาด ไม่ใช่ความตั้งใจ
+  // ถ้าปล่อยให้สร้างได้ จะมีหน้ารอบนำเข้าสองหน้าของการสอบเดียวกัน
+  // งานกระจายคนละที่ และเกียรติบัตรจะถูกย้ายไปมาจนหน้าเดิมดูเหมือนว่างเปล่า
+  const existing = exam.batches[0];
+  if (existing) {
+    return NextResponse.json(
+      {
+        error: `${program.code} รอบ ${round === "HEAT" ? "Heat" : "Final"} ปี ${year} มีรอบการนำเข้าอยู่แล้ว`,
+        hint: "ถ้าต้องการเพิ่มไฟล์ที่ตกหล่นหรือแก้ไข ให้ทำที่รอบเดิม",
+        existingBatchId: existing.id,
+      },
+      { status: 409 },
+    );
+  }
 
   const batch = await prisma.batch.create({ data: { examId: exam.id, note: note || null } });
 

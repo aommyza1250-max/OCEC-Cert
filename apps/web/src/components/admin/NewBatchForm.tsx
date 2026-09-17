@@ -24,6 +24,9 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
   const [round, setRound] = useState<"HEAT" | "FINAL">("FINAL");
   const [year, setYear] = useState(String(CURRENT_YEAR));
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<{ message: string; hint: string; id: string } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
 
   const selected = active.find((p) => p.id === programId);
@@ -32,6 +35,7 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setDuplicate(null);
 
     const res = await fetch("/api/admin/batches", {
       method: "POST",
@@ -40,11 +44,17 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
     });
     const data = await res.json().catch(() => ({}));
 
-    if (res.ok) router.push(`/admin/batches/${data.id}`);
-    else {
-      setError(data.error ?? "สร้างไม่สำเร็จ");
-      setBusy(false);
+    if (res.ok) {
+      router.push(`/admin/batches/${data.id}`);
+      return;
     }
+
+    if (res.status === 409 && data.existingBatchId) {
+      setDuplicate({ message: data.error, hint: data.hint, id: data.existingBatchId });
+    } else {
+      setError(data.error ?? "สร้างไม่สำเร็จ");
+    }
+    setBusy(false);
   }
 
   if (active.length === 0) {
@@ -108,6 +118,20 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
             SOMCHAI_JAIDEE_{selected.code}_{round}_GOLD_{year}.pdf
           </code>
         </p>
+      )}
+
+      {duplicate && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="font-medium text-amber-900">{duplicate.message}</p>
+          <p className="mt-1 text-sm text-amber-800">{duplicate.hint}</p>
+          <button
+            type="button"
+            onClick={() => router.push(`/admin/batches/${duplicate.id}`)}
+            className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            ไปที่รอบการนำเข้าเดิม
+          </button>
+        </div>
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
