@@ -46,7 +46,52 @@
 
 ## 3. ผูกโดเมนสำหรับเสิร์ฟรูป preview
 
-รูป preview ต้องโหลดตรงจาก CDN ไม่ผ่านเซิร์ฟเวอร์เว็บ จึงต้องมีโดเมนสาธารณะ
+รูป preview ต้องโหลดตรงจาก CDN ไม่ผ่านเซิร์ฟเวอร์เว็บ จึงต้องมี URL สาธารณะ
+เลือกทำวิธีใดวิธีหนึ่งตามความสะดวก:
+
+### ทางเลือก ก: ใช้ Cloudflare Worker (แนะนำสำหรับผู้ที่ไม่มีโดเมน — ฟรี 100%)
+วิธีนี้ได้ URL ฟรี (`*.workers.dev`) และทำหน้าที่แทนข้อ 4 (บล็อกโฟลเดอร์ลับ) ได้ในตัว
+
+1. เมนูซ้ายของ Cloudflare เลือก **Compute (Workers & Pages)** → **Create** → **Create Worker**
+2. ตั้งชื่อ เช่น `ocec-cert-preview` → กด **Deploy**
+3. กดปุ่ม **Edit code** → ลบโค้ดเดิมทั้งหมดแล้ววางโค้ดนี้:
+   ```javascript
+   export default {
+     async fetch(request, env) {
+       const url = new URL(request.url);
+       const key = url.pathname.slice(1);
+
+       // บล็อกไม่ให้อ่านไฟล์ PDF รายคน และ ZIP/Excel ต้นฉบับ
+       if (!key.startsWith('previews/')) {
+         return new Response('Forbidden', { status: 403 });
+       }
+
+       const object = await env.MY_BUCKET.get(key);
+       if (!object) {
+         return new Response('Not Found', { status: 404 });
+       }
+
+       const headers = new Headers();
+       object.writeHttpMetadata(headers);
+       headers.set('etag', object.httpEtag);
+       headers.set('cache-control', 'public, max-age=31536000, immutable');
+
+       return new Response(object.body, { headers });
+     }
+   };
+   ```
+4. กด **Deploy** มุมขวาบน
+5. ไปที่แท็บ **Settings** ของ Worker → **Bindings** (หรือ **Variables and Secrets** → **R2 Bucket Bindings**)
+   - กด **Add binding** (เลือกชนิด R2 bucket)
+   - Variable name: ใส่ `MY_BUCKET`
+   - R2 bucket: เลือก `ocec-cert`
+   - กด **Save and deploy**
+6. คัดลอก URL ของ Worker เช่น `https://ocec-cert-preview.<ชื่อคุณ>.workers.dev`
+   (ค่านี้คือ `R2_PUBLIC_BASE_URL` และ**สามารถข้ามข้อ 4 ไปทำข้อ 5 ได้เลย**)
+
+---
+
+### ทางเลือก ข: ใช้ Custom Domain (สำหรับผู้ที่มีโดเมนอยู่แล้วบน Cloudflare)
 
 1. เข้า bucket `ocec-cert` → แท็บ **Settings**
 2. หัวข้อ **Public access** → **Custom Domains** → **Connect Domain**
@@ -60,12 +105,13 @@
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" https://files.example.com/
 # ได้ 404 ถือว่าใช้ได้ (แปลว่าโดเมนต่อถึง bucket แล้ว แค่ยังไม่มีไฟล์ชื่อนั้น)
-# ถ้าได้ 000 หรือ error DNS แปลว่ายังไม่ Active ให้รอแล้วลองใหม่
 ```
 
 ---
 
-## 4. ⚠️ ตั้งสิทธิ์รายโฟลเดอร์ (ขั้นที่พลาดไม่ได้)
+## 4. ⚠️ ตั้งสิทธิ์รายโฟลเดอร์ (*เฉพาะผู้ที่เลือกทางเลือก ข: Custom Domain*)
+
+> **หมายเหตุ:** ถ้าใช้ **ทางเลือก ก (Cloudflare Worker)** ให้ข้ามขั้นตอนนี้ไปข้อ 5 ได้เลย เพราะโค้ดใน Worker ดักบล็อกให้แล้ว
 
 ระบบแบ่งไฟล์ใน bucket เป็น 3 กลุ่ม และ **สิทธิ์ต้องต่างกัน**
 
@@ -78,9 +124,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://files.example.com/
 ไฟล์ PDF เข้าถึงผ่าน **presigned URL ที่หมดอายุใน 15 นาที** ซึ่งระบบสร้างให้ตอนผู้ใช้กดดาวน์โหลด
 ถ้าเผลอเปิด `certificates/` เป็นสาธารณะ ใครก็ตามที่เดา URL ถูกจะโหลดเกียรติบัตรของเด็กคนอื่นได้ทันที
 
-**วิธีตั้ง:** Custom Domain ที่ผูกในข้อ 3 จะเปิดทั้ง bucket ให้อ่านได้
-จึงต้องใส่ **WAF rule** บล็อกสองโฟลเดอร์ที่เหลือ:
-
+**วิธีตั้งสำหรับ Custom Domain:**
 1. เข้าโดเมนใน Cloudflare → **Security** → **WAF** → **Custom rules** → **Create rule**
 2. ตั้งชื่อ `block-private-cert-paths`
 3. เงื่อนไข (ใช้ Expression Editor วางตรง ๆ ได้):
