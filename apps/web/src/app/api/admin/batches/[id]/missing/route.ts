@@ -52,6 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         mode: "append",
         pdfKey: parsed.data.key,
         expectCertNo: item.certNo,
+        expectName: item.name,
         expectedAward: item.expectedAward,
       },
     },

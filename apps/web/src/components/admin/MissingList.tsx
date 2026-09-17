@@ -35,6 +35,7 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleFile(file: File) {
@@ -58,16 +59,26 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
         body: JSON.stringify({ key, certNo: item.certNo }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "รับไฟล์ไม่สำเร็จ");
+      const { jobId } = await res.json();
 
+      // ต้องรอผลจริง ไม่ใช่จบที่ "อัปโหลดขึ้นแล้ว"
+      // เพราะการตรวจว่าไฟล์เป็นของคนนี้จริงเกิดทีหลัง ถ้าไม่รอ แอดมินจะไม่รู้ว่าถูกปฏิเสธ
       setProgress(null);
-      router.refresh();
+      setWorking(true);
+      const result = await waitForJob(jobId);
+      setWorking(false);
+
+      if (result.error) setError(result.error);
+      else router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ");
       setProgress(null);
+      setWorking(false);
     }
   }
 
   const uploading = progress !== null;
+  const busy = uploading || working;
 
   return (
     <article className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
@@ -95,11 +106,15 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={uploading}
+        disabled={busy}
         className="mt-3 w-full rounded-lg border-2 border-dashed border-amber-300 px-4 py-4 text-sm
                    text-amber-800 transition hover:border-amber-500 disabled:opacity-50"
       >
-        {uploading ? `กำลังอัปโหลด... ${progress}%` : "เลือกไฟล์ PDF ที่ได้มาใหม่"}
+        {uploading
+          ? `กำลังอัปโหลด... ${progress}%`
+          : working
+            ? "กำลังตรวจไฟล์และประมวลผล..."
+            : "เลือกไฟล์ PDF ที่ได้มาใหม่"}
       </button>
 
       {uploading && (
@@ -108,9 +123,31 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          ไม่รับไฟล์นี้ — {error}
+        </p>
+      )}
     </article>
   );
+}
+
+/** รอจนกว่างานเบื้องหลังจะจบ แล้วคืนข้อความผิดพลาด (ถ้ามี) */
+async function waitForJob(jobId: string, timeoutMs = 180_000): Promise<{ error: string | null }> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const res = await fetch(`/api/admin/jobs/${jobId}`);
+    if (!res.ok) continue;
+
+    const job = await res.json();
+    if (job.status === "DONE") return { error: null };
+    if (job.status === "FAILED") {
+      return { error: job.error ?? "ประมวลผลไม่สำเร็จ" };
+    }
+  }
+  return { error: "ใช้เวลานานผิดปกติ ลองรีเฟรชหน้าเพื่อดูผลอีกครั้ง" };
 }
 
 function putWithProgress(

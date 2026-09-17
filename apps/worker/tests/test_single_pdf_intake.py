@@ -54,6 +54,28 @@ def test_หยิบไฟล์ผิดคนต้องไม่รับ_�
         assert "JAYTIPAT CHATRATANAMALAI" in message
 
 
+def test_แก้ชื่อมาแต่ลืมแก้เลข_ต้องบอกให้ชัดว่าต้องแก้อะไร():
+    # เคสจริงที่เจอ: แอดมินแก้ไฟล์เอง เปลี่ยนแค่ชื่อ ลืมแก้บรรทัด Cert No
+    # ถ้าบอกแค่ "ไม่ตรง" แอดมินจะไม่รู้ว่าต้องไปแก้อะไรต่อ
+    wrong_number = dict(SOMEONE_ELSE, name="PUTTHITHADA ARNON")
+    with tempfile.TemporaryDirectory() as d:
+        path = write_pdf(os.path.join(d, "x.pdf"), [wrong_number])
+        with pytest.raises(ValueError) as err:
+            _verify_belongs_to(path, "203336", "PUTTHITHADA ARNON")
+        message = str(err.value)
+        assert "ชื่อบนเกียรติบัตรตรงกับ" in message
+        assert "203297" in message      # เลขที่อยู่บนหน้าจริง
+        assert "203336" in message      # เลขที่ควรจะเป็น
+        assert "Cert No" in message     # บอกว่าต้องไปแก้บรรทัดไหน
+
+
+def test_ชื่อก็ไม่ตรงเลขก็ไม่ตรง_บอกว่าเป็นไฟล์ของใคร():
+    with tempfile.TemporaryDirectory() as d:
+        path = write_pdf(os.path.join(d, "x.pdf"), [SOMEONE_ELSE])
+        with pytest.raises(ValueError, match="JAYTIPAT CHATRATANAMALAI"):
+            _verify_belongs_to(path, "203336", "PUTTHITHADA ARNON")
+
+
 def test_ไฟล์ที่มีหลายหน้า_ขอแค่มีหน้าของคนนั้นอยู่ด้วย():
     with tempfile.TemporaryDirectory() as d:
         path = write_pdf(os.path.join(d, "x.pdf"), [SOMEONE_ELSE, PUTTHITHADA])

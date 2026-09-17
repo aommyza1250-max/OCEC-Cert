@@ -112,7 +112,7 @@ def _prepare_single_pdf(
 
     expect_cert_no = str(payload.get("expectCertNo") or "").strip()
     if expect_cert_no:
-        _verify_belongs_to(pdf_path, expect_cert_no)
+        _verify_belongs_to(pdf_path, expect_cert_no, str(payload.get("expectName") or ""))
 
     # ห่อเป็น ZIP ที่มีโฟลเดอร์รางวัลเดียว เพื่อให้ทางเดินหลังจากนี้เหมือนกับการอัป ZIP ทุกอย่าง
     # ไม่ต้องมีโค้ดสองทางให้ดูแล และได้ตรรกะข้ามของซ้ำกับการตั้งชื่อไฟล์เหมือนกันฟรี ๆ
@@ -125,14 +125,34 @@ def _prepare_single_pdf(
     return zip_path, read_award_bundles(zip_path)
 
 
-def _verify_belongs_to(pdf_path: str, expect_cert_no: str) -> None:
+def _verify_belongs_to(pdf_path: str, expect_cert_no: str, expect_name: str = "") -> None:
+    """ตรวจว่าไฟล์นี้เป็นของผู้เข้าสอบคนที่ควรจะเป็นจริง
+
+    เทียบด้วย **เลขบนหน้ากระดาษ** เพราะนั่นคือสิ่งที่ผู้ปกครองถืออยู่ในมือ
+    ชื่ออย่างเดียวไม่พอ คนชื่อพ้องกันมีจริง
+
+    กรณีที่เจอบ่อย: แอดมินแก้ไฟล์เองโดยเปลี่ยนแค่ชื่อ ลืมแก้เลข
+    ข้อความจึงต้องบอกให้ชัดว่าต้องแก้อะไร ไม่ใช่แค่บอกว่า "ไม่ตรง"
+    """
+    expect_normalized = normalize_name(expect_name)
     found: list[str] = []
+    name_matched: list[str] = []
+
     with pymupdf.open(pdf_path) as doc:
         for index in range(doc.page_count):
             info = read_lines(page_lines(page_text(doc[index])))
             if info.cert_no == expect_cert_no:
                 return
             found.append(f"{info.cert_no or 'อ่านเลขไม่ได้'} ({info.name or 'อ่านชื่อไม่ได้'})")
+            if expect_normalized and normalize_name(info.name or "") == expect_normalized:
+                name_matched.append(info.cert_no or "อ่านเลขไม่ได้")
+
+    if name_matched:
+        raise ValueError(
+            f"ชื่อบนเกียรติบัตรตรงกับ {expect_name} แล้ว "
+            f"แต่เลขบนหน้าเป็น {name_matched[0]} ซึ่งเป็นของคนอื่น "
+            f"ต้องเป็น {expect_cert_no} — ถ้าแก้ไฟล์เอง อย่าลืมแก้บรรทัด Cert No ด้วย"
+        )
 
     raise ValueError(
         f"ไฟล์นี้ไม่มีหน้าของผู้เข้าสอบเลข {expect_cert_no} "
