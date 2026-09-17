@@ -23,4 +23,4 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 FROM base AS runtime
 # 1 worker process พอ — งานหนักเป็น CPU-bound และรันทีละ job อยู่แล้ว
 # เพิ่ม process ไม่ช่วยให้เร็วขึ้น แถมกินแรมบน Railway
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
