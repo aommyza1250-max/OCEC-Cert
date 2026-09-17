@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 
 export async function POST(request: Request) {
   // จำกัดการเดารหัสผ่าน — ระบบนี้มีรหัสเดียว ถ้าไม่จำกัดจะโดน brute force ได้
-  if (!checkRateLimit(`login:${clientIp(await headers())}`).ok) {
+  if (!checkRateLimit(clientIp(await headers()), "login").ok) {
     return NextResponse.json({ error: "พยายามเข้าสู่ระบบถี่เกินไป" }, { status: 429 });
   }
 

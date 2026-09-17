@@ -24,6 +24,15 @@
       ```bash
       curl -s -o /dev/null -w "previews: %{http_code}\n" https://files.example.com/previews/<ไฟล์จริง>.webp
       ```
+- [ ] **ตรวจว่าปลอม IP ข้ามการจำกัดไม่ได้**
+      ```bash
+      # ยิง 400 ครั้งด้วย header ปลอม (ลิมิตค้นหา 300/นาที) ต้องมี 429 โผล่มา
+      for i in $(seq 1 400); do
+        curl -s -o /dev/null -w "%{http_code}\n" \
+          -H "x-forwarded-for: 203.0.113.99" "https://<โดเมน>/?q=SOMCHAI"
+      done | sort | uniq -c
+      ```
+      ถ้าได้ 200 ครบทั้ง 400 แปลว่าอ่าน IP ผิดฝั่ง ใครก็ดูดรายชื่อได้
 - [ ] ไม่มีไฟล์ `.env` หรือไฟล์เกียรติบัตรจริงหลุดเข้า git
       ```bash
       git status --short --untracked-files=all | grep -E "\.env$|\.pdf$|\.xlsx$" || echo "สะอาด"
@@ -71,7 +80,10 @@
 
 - [ ] รันทดสอบโหลดจำลองผู้ใช้ 600 คนพร้อมกัน
       ```bash
+      # ต้องปิดการจำกัดชั่วคราวก่อน ไม่งั้นจะวัดแต่ 429
+      # Railway -> web -> Variables -> SEARCH_RATE_LIMIT_PER_MIN=0
       BASE_URL=https://cert.example.com k6 run scripts/loadtest.js
+      # เสร็จแล้ว **ลบตัวแปรนั้นออก** เพื่อให้กลับมาจำกัดตามปกติ
       ```
       **เกณฑ์ผ่าน:** `http_req_duration p(95) < 500ms` และ `http_req_failed < 1%`
 - [ ] ถ้าไม่ผ่าน ตรวจว่า index ค้นหายังอยู่ครบ
