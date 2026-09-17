@@ -41,3 +41,6 @@ test-results/
 .DS_Store
 .idea/
 *.swp
+
+# build cache ของ TypeScript — เปลี่ยนทุกครั้งที่ build ไม่ควรเข้า git
+*.tsbuildinfo

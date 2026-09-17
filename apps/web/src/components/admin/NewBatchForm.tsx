@@ -15,7 +15,12 @@ const ROUNDS = [
 export function NewBatchForm({ programs }: { programs: Program[] }) {
   const router = useRouter();
   const active = programs.filter((p) => p.active);
-  const [programId, setProgramId] = useState(active[0]?.id ?? "");
+  const [picked, setPicked] = useState("");
+
+  // ห้ามเก็บค่าที่เลือกไว้ใน state เฉย ๆ เพราะ useState ตั้งค่าแค่ตอน mount ครั้งแรก
+  // ถ้าเปิดหน้ามาตอนยังไม่มีรายการสอบ แล้วเพิ่งเพิ่มรายการสอบทีหลัง
+  // ค่าที่จำไว้จะยังเป็นค่าว่าง ทำให้ปุ่มถูกปิดทั้งที่ dropdown มีตัวเลือกให้เห็นแล้ว
+  const programId = active.some((p) => p.id === picked) ? picked : (active[0]?.id ?? "");
   const [round, setRound] = useState<"HEAT" | "FINAL">("FINAL");
   const [year, setYear] = useState(String(CURRENT_YEAR));
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +62,7 @@ export function NewBatchForm({ programs }: { programs: Program[] }) {
           <span className="mb-1 block text-sm font-medium">รายการสอบ</span>
           <select
             value={programId}
-            onChange={(e) => setProgramId(e.target.value)}
+            onChange={(e) => setPicked(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-[var(--color-brand)]"
           >
             {active.map((program) => (
