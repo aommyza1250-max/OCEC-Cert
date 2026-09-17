@@ -8,6 +8,15 @@
   HEAT  (รอบคัดเลือก)    ผู้เข้าสอบเป็นคนไทยทั้งหมด ตัดแยกทุกหน้า
   FINAL (รอบชิงชนะเลิศ)  ไฟล์รวมทุกประเทศ ตัดเฉพาะหน้าที่พบ "from THAILAND"
 
+มี 2 โหมด:
+  replace  ตัดใหม่ทั้งรอบ ลบผลเดิมทิ้งก่อน — ใช้ตอนอัปโหลดครั้งแรก หรือตอนไฟล์ชุดเดิมผิด
+  append   เติมไฟล์ที่ตกหล่นเข้ารอบเดิม หน้าที่มีอยู่แล้วไม่ถูกแตะ
+           หน้าที่ซ้ำกับที่นำเข้าไปแล้วจะถูกข้าม โดยดูจาก (เลขผู้เข้าสอบ + รางวัล)
+
+ทำไมต้องดูทั้งเลขและรางวัลคู่กัน: คนเดียวได้หลายใบคนละรางวัลเป็นเรื่องปกติ
+ของจริงเคยเจอว่าต้นทางส่งใบ Perfect Score มาให้ แต่ใบ Gold ของคนเดียวกันหายไป
+พอทวงแล้วได้ใบ Gold ตามมา ถ้าตรวจซ้ำด้วยเลขอย่างเดียว ใบ Gold จะถูกมองว่าซ้ำแล้วโดนทิ้ง
+
 ผลลัพธ์ลงตาราง staging_pages เท่านั้น ยังไม่แตะ students/certificates
 เพราะยังไม่รู้ว่าหน้าไหนเป็นของใครจนกว่าจะได้ไฟล์ Excel มาจับคู่
 """
@@ -15,6 +24,7 @@
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import pymupdf
@@ -39,11 +49,17 @@ log = logging.getLogger(__name__)
 ProgressFn = Callable[[dict[str, Any]], None]
 
 
-def run_split(batch_id: str, on_progress: ProgressFn) -> dict[str, Any]:
+def run_split(
+    batch_id: str, on_progress: ProgressFn, payload: dict[str, Any] | None = None
+) -> dict[str, Any]:
     cfg = settings()
     batch = _load_batch(batch_id)
+    payload = payload or {}
 
-    if not batch["source_zip_key"]:
+    zip_key = payload.get("zipKey") or batch["source_zip_key"]
+    append = payload.get("mode") == "append"
+
+    if not zip_key:
         raise ValueError("batch นี้ยังไม่มีไฟล์ ZIP ต้นทาง")
 
     program_code = batch["program_code"]
@@ -51,23 +67,27 @@ def run_split(batch_id: str, on_progress: ProgressFn) -> dict[str, Any]:
     exam_year = batch["year"]
     filter_nationality = exam_round == "FINAL"
 
-    log.info("เริ่มตัดแยก batch %s (%s %s %s)", batch_id, program_code, exam_round, exam_year)
+    log.info(
+        "เริ่มตัดแยก batch %s (%s %s %s) โหมด %s",
+        batch_id, program_code, exam_round, exam_year, "append" if append else "replace",
+    )
 
     # ดาวน์โหลดลงดิสก์ ไม่ใช่หน่วยความจำ — ZIP จริงขนาดหลายร้อย MB
     with tempfile.TemporaryDirectory() as workdir:
         zip_path = os.path.join(workdir, "bundle.zip")
-        download_to_file(batch["source_zip_key"], zip_path)
+        download_to_file(zip_key, zip_path)
         bundles = read_award_bundles(zip_path)
         log.info("พบไฟล์ใน ZIP %s ไฟล์: %s", len(bundles), [b.source_file for b in bundles])
 
-        # รันซ้ำได้: ล้างผลรอบก่อนทิ้งก่อนเสมอ
-        # (certificates ที่อ้าง staging_pages เดิมจะถูกลบตาม ON DELETE CASCADE ด้วย
-        #  ถ้าเคย match ไปแล้วต้อง match ใหม่หลังตัดใหม่)
-        _clear_previous_pages(batch_id)
+        if not append:
+            # ตัดใหม่ทั้งรอบ: ล้างผลรอบก่อนทิ้งก่อน
+            # (certificates ที่อ้าง staging_pages เดิมจะถูกลบตาม ON DELETE CASCADE ด้วย)
+            _clear_previous_pages(batch_id)
 
+        existing = _existing_state(batch_id)
         return _process(
             batch_id, zip_path, bundles, program_code, exam_round, exam_year,
-            filter_nationality, cfg, on_progress,
+            filter_nationality, append, existing, cfg, on_progress,
         )
 
 
@@ -79,14 +99,18 @@ def _process(
     exam_round: str,
     exam_year: int,
     filter_nationality: bool,
+    append: bool,
+    existing: "ExistingState",
     cfg: Any,
     on_progress: ProgressFn,
 ) -> dict[str, Any]:
 
     stats: dict[str, Any] = {
+        "mode": "append" if append else "replace",
         "bundles": len(bundles),
         "pagesTotal": 0,
         "pagesSplit": 0,
+        "pagesSkippedExisting": 0,
         "foreignSkipped": 0,
         "nameNotFound": 0,
         "certNoFound": 0,
@@ -94,20 +118,26 @@ def _process(
         "roundMismatch": 0,
         "byAward": {},
     }
-    used_stems: set[str] = set()
-    page_number = 0
+    # เอาชื่อไฟล์ที่ใช้ไปแล้วมาด้วย ไม่งั้นหน้าใหม่ที่ชื่อชนกันจะเขียนทับไฟล์เดิมบน R2
+    used_stems: set[str] = set(existing.stems)
+    page_number = existing.max_page
     total_pages = _count_pages(zip_path, bundles)
 
     with open_bundles(zip_path, bundles) as stream:
         for bundle in stream:
             with pymupdf.open(stream=bundle.data, filetype="pdf") as doc:
                 for index in range(doc.page_count):
-                    page_number += 1
                     stats["pagesTotal"] += 1
                     page = doc[index]
                     text = page_text(page)
                     info = _read(page, text, cfg.name_pattern)
 
+                    if append and _already_imported(existing, info, bundle):
+                        # หน้านี้นำเข้าไปแล้ว ข้ามไปโดยไม่กินเลขหน้า
+                        stats["pagesSkippedExisting"] += 1
+                        continue
+
+                    page_number += 1
                     if filter_nationality and not is_thai_national(text, cfg.nationality_pattern):
                         _insert_page(
                             batch_id, page_number, text, info, bundle, None, None, "SKIPPED_FOREIGN"
@@ -145,8 +175,83 @@ def _process(
                     if page_number % 10 == 0 or page_number == total_pages:
                         on_progress({"stage": "split", "done": page_number, "total": total_pages})
 
+    stats.update(_batch_totals(batch_id))
     log.info("ตัดแยก batch %s เสร็จ: %s", batch_id, stats)
     return stats
+
+
+@dataclass
+class ExistingState:
+    """สิ่งที่มีอยู่แล้วในรอบนำเข้านี้ ใช้ตอนเติมไฟล์ที่ตกหล่น"""
+
+    max_page: int
+    stems: set[str]
+    keys: set[tuple[str, str]]
+
+
+def _existing_state(batch_id: str) -> ExistingState:
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT page_number, pdf_key, cert_no, extracted_name_normalized, award
+            FROM staging_pages WHERE batch_id = %s
+            """,
+            (batch_id,),
+        ).fetchall()
+
+    stems = {
+        row["pdf_key"].rsplit("/", 1)[-1].removesuffix(".pdf")
+        for row in rows
+        if row["pdf_key"]
+    }
+    keys = {k for row in rows if (k := _dedupe_key(row["cert_no"],
+                                                   row["extracted_name_normalized"],
+                                                   row["award"]))}
+    return ExistingState(
+        max_page=max((r["page_number"] for r in rows), default=0),
+        stems=stems,
+        keys=keys,
+    )
+
+
+def _dedupe_key(
+    cert_no: str | None, name_normalized: str | None, award: str | None
+) -> tuple[str, str] | None:
+    """คีย์ที่ใช้บอกว่า "หน้านี้มีอยู่แล้ว"
+
+    ต้องมีรางวัลประกอบเสมอ เพราะคนเดียวได้หลายใบคนละรางวัลเป็นเรื่องปกติ
+    ถ้าไม่มีทั้งเลขและชื่อ แปลว่าบอกไม่ได้ว่าซ้ำหรือไม่ — คืน None แล้วให้เติมเข้าไป
+    ดีกว่าเผลอทิ้งใบที่ควรมี
+    """
+    identity = cert_no or name_normalized
+    if not identity or not award:
+        return None
+    return (identity, award)
+
+
+def _already_imported(existing: ExistingState, info: PageInfo, bundle: Bundle) -> bool:
+    key = _dedupe_key(info.cert_no, normalize_name(info.name or "") or None, bundle.award)
+    return key is not None and key in existing.keys
+
+
+def _batch_totals(batch_id: str) -> dict[str, Any]:
+    """ยอดรวมของทั้งรอบนำเข้าหลังจบงาน — ต่างจากยอดของการรันครั้งนี้เมื่อเป็นโหมดเติมไฟล์"""
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT award, match_status, COUNT(*) AS n
+            FROM staging_pages WHERE batch_id = %s GROUP BY 1, 2
+            """,
+            (batch_id,),
+        ).fetchall()
+
+    by_award: dict[str, int] = {}
+    total = 0
+    for row in rows:
+        total += row["n"]
+        if row["match_status"] != "SKIPPED_FOREIGN" and row["award"]:
+            by_award[row["award"]] = by_award.get(row["award"], 0) + row["n"]
+    return {"pagesInBatch": total, "byAward": by_award}
 
 
 def _tally(stats: dict[str, Any], info: PageInfo, bundle: Bundle, exam_round: str) -> None:

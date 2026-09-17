@@ -36,7 +36,9 @@ export function BatchWorkflow(props: Props) {
         done={props.hasZip}
         description="ข้างใน ZIP ต้องแยกโฟลเดอร์ตามรางวัล (gold, silver, bronze, merit, perfect score) เพราะระบบอ่านรางวัลจากชื่อโฟลเดอร์"
       >
-        <UploadDropzone batchId={props.batchId} kind="zip" accept="application/zip,.zip" />
+        {props.hasZip ? <ZipActions batchId={props.batchId} /> : (
+          <UploadDropzone batchId={props.batchId} kind="zip" accept="application/zip,.zip" />
+        )}
       </StepCard>
 
       <StepCard
@@ -80,6 +82,60 @@ export function BatchWorkflow(props: Props) {
           (props.counts.DUPLICATE_NAME ?? 0)
         }
       />
+    </div>
+  );
+}
+
+/**
+ * หลังนำเข้ารอบแรกแล้ว ปุ่มอัปโหลดต้องแยกให้ชัดว่าเป็นการ "เติม" หรือ "ตัดใหม่"
+ *
+ * เคสที่เกิดบ่อยคือต้นทางส่งเกียรติบัตรมาไม่ครบ แล้วส่งตามมาทีหลัง
+ * ถ้าปุ่มเดียวแล้วตัดใหม่ทั้งรอบ ของที่นำเข้าไปแล้วจะหายหมดรวมถึงที่จับคู่ด้วยมือไว้
+ */
+function ZipActions({ batchId }: { batchId: string }) {
+  const [showDanger, setShowDanger] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      <UploadDropzone
+        batchId={batchId}
+        kind="zip"
+        accept="application/zip,.zip"
+        mode="append"
+        label="เลือกไฟล์ ZIP ที่มีเกียรติบัตรตกหล่น"
+      />
+      <p className="text-sm text-gray-500">
+        หน้าที่นำเข้าไปแล้วจะไม่ถูกแตะ ระบบเติมเฉพาะใบที่ยังไม่มี
+        (ดูจากเลขผู้เข้าสอบคู่กับรางวัล) จะอัป ZIP ชุดเต็มทั้งก้อนก็ได้ ไม่ต้องแยกไฟล์
+        {" "}และถ้านำเข้ารายชื่อไว้แล้ว ระบบจะจับคู่ต่อให้อัตโนมัติ
+      </p>
+
+      {showDanger ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="mb-3 text-sm text-red-800">
+            <b>ตัดใหม่ทั้งรอบ</b> จะลบหน้าที่นำเข้าไปแล้วทั้งหมดของรอบนี้ทิ้ง
+            รวมถึงเกียรติบัตรที่ออกไปแล้วและที่จับคู่ด้วยมือไว้
+            ใช้เฉพาะตอนไฟล์ชุดเดิมผิดทั้งชุดเท่านั้น
+          </p>
+          <UploadDropzone
+            batchId={batchId}
+            kind="zip"
+            accept="application/zip,.zip"
+            mode="replace"
+            danger
+            label="เลือกไฟล์ ZIP ชุดใหม่ (ลบของเดิมทิ้ง)"
+            confirmText="ยืนยันลบหน้าที่นำเข้าไปแล้วทั้งหมดของรอบนี้ แล้วตัดใหม่จากไฟล์ที่เลือก?"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowDanger(true)}
+          className="text-sm text-gray-400 underline hover:text-red-600"
+        >
+          ไฟล์ชุดเดิมผิดทั้งชุด ต้องการตัดใหม่ทั้งรอบ
+        </button>
+      )}
     </div>
   );
 }
@@ -134,6 +190,7 @@ function StatsPanel({
     { label: "ไฟล์ใน ZIP", value: num(stats.bundles) },
     { label: "หน้าทั้งหมด", value: num(stats.pagesTotal) },
     { label: "ตัดแยกแล้ว", value: num(stats.pagesSplit) },
+    { label: "ข้ามเพราะมีอยู่แล้ว", value: num(stats.pagesSkippedExisting) },
     { label: "ข้าม (ไม่ใช่คนไทย)", value: num(stats.foreignSkipped) },
     { label: "อ่านชื่อไม่ออก", value: num(stats.nameNotFound) },
     { label: "รางวัลบนหน้าไม่ตรงโฟลเดอร์", value: num(stats.awardMismatch) },

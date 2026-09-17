@@ -59,7 +59,9 @@ export async function presignedUploadUrl(key: string, contentType: string, expir
  *  ส่วนของเกียรติบัตรรายคน worker เป็นคนตั้งชื่อ (ดู apps/worker/app/storage.py)
  *  รูปแบบคือ {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี} ตาม docs/data-intake-spec.md */
 export const keys = {
-  sourceZip: (batchId: string) => `sources/${batchId}/bundle.zip`,
+  /** ZIP แต่ละครั้งเก็บแยกไฟล์ ไม่เขียนทับของเดิม เพราะรอบนำเข้าหนึ่งอาจมีหลายครั้ง
+   *  (ไฟล์ตกหล่นแล้วตามมาทีหลัง) และต้องย้อนกลับไปดูต้นทางได้ว่าใบไหนมาจากไฟล์ไหน */
+  sourceZip: (batchId: string, stamp: string) => `sources/${batchId}/bundle-${stamp}.zip`,
   sourceExcel: (batchId: string) => `sources/${batchId}/roster.xlsx`,
   certificatePdf: (batchId: string, stem: string) => `certificates/${batchId}/${stem}.pdf`,
   preview: (batchId: string, stem: string) => `previews/${batchId}/${stem}.webp`,

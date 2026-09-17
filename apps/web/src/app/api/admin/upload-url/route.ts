@@ -36,7 +36,12 @@ export async function POST(request: Request) {
   const batch = await prisma.batch.findUnique({ where: { id: batchId } });
   if (!batch) return NextResponse.json({ error: "ไม่พบรอบการนำเข้านี้" }, { status: 404 });
 
-  const key = kind === "zip" ? keys.sourceZip(batchId) : keys.sourceExcel(batchId);
+  // ZIP ใช้ชื่อไฟล์ใหม่ทุกครั้ง เพื่อให้เติมไฟล์ที่ตกหล่นเข้ารอบเดิมได้โดยไม่ทับของเดิม
+  // ส่วน Excel ทับได้ เพราะรายชื่อฉบับล่าสุดคือฉบับที่ถูกต้อง
+  const key =
+    kind === "zip"
+      ? keys.sourceZip(batchId, new Date().toISOString().replace(/[:.]/g, "-"))
+      : keys.sourceExcel(batchId);
   const url = await presignedUploadUrl(key, CONTENT_TYPES[kind]);
 
   return NextResponse.json({ url, key, contentType: CONTENT_TYPES[kind] });

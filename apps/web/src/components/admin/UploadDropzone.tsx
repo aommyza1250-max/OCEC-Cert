@@ -3,7 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-type Props = { batchId: string; kind: "zip" | "excel"; accept: string };
+type Props = {
+  batchId: string;
+  kind: "zip" | "excel";
+  accept: string;
+  /** append = เติมไฟล์ที่ตกหล่น | replace = ตัดใหม่ทั้งรอบ (ลบผลเดิม) */
+  mode?: "append" | "replace";
+  label?: string;
+  /** ข้อความยืนยันก่อนเริ่ม — ใส่เมื่อการกระทำนั้นลบของเดิมทิ้ง */
+  confirmText?: string;
+  danger?: boolean;
+};
 
 /**
  * อัปโหลดไฟล์ขึ้น R2 โดยตรงด้วย presigned URL
@@ -12,7 +22,15 @@ type Props = { batchId: string; kind: "zip" | "excel"; accept: string };
  * ไฟล์ ZIP เกียรติบัตรมีขนาดหลายร้อย MB จึงต้องขึ้นตรง ไม่ผ่านเซิร์ฟเวอร์เว็บ
  * ใช้ XMLHttpRequest แทน fetch เพราะต้องการ progress ของการอัปโหลด ซึ่ง fetch ยังทำไม่ได้
  */
-export function UploadDropzone({ batchId, kind, accept }: Props) {
+export function UploadDropzone({
+  batchId,
+  kind,
+  accept,
+  mode = "replace",
+  label,
+  confirmText,
+  danger,
+}: Props) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -29,14 +47,14 @@ export function UploadDropzone({ batchId, kind, accept }: Props) {
         body: JSON.stringify({ batchId, kind }),
       });
       if (!urlRes.ok) throw new Error((await urlRes.json()).error ?? "ขอลิงก์อัปโหลดไม่สำเร็จ");
-      const { url, contentType } = await urlRes.json();
+      const { url, key, contentType } = await urlRes.json();
 
       await putWithProgress(url, file, contentType, setProgress);
 
       const attachRes = await fetch(`/api/admin/batches/${batchId}/attach`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify({ kind, key, mode }),
       });
       if (!attachRes.ok) throw new Error((await attachRes.json()).error ?? "เริ่มประมวลผลไม่สำเร็จ");
 
@@ -59,7 +77,7 @@ export function UploadDropzone({ batchId, kind, accept }: Props) {
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          if (file && (!confirmText || confirm(confirmText))) handleFile(file);
           e.target.value = "";
         }}
       />
@@ -68,12 +86,16 @@ export function UploadDropzone({ batchId, kind, accept }: Props) {
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-6 text-sm
-                   text-gray-600 transition hover:border-[var(--color-brand)] disabled:opacity-50"
+        className={`w-full rounded-lg border-2 border-dashed px-4 py-6 text-sm transition
+                    disabled:opacity-50 ${
+                      danger
+                        ? "border-red-300 text-red-700 hover:border-red-500"
+                        : "border-gray-300 text-gray-600 hover:border-[var(--color-brand)]"
+                    }`}
       >
         {uploading
           ? `กำลังอัปโหลด... ${progress}%`
-          : `เลือกไฟล์${kind === "zip" ? " ZIP เกียรติบัตร" : "รายชื่อ (.xlsx)"}`}
+          : (label ?? `เลือกไฟล์${kind === "zip" ? " ZIP เกียรติบัตร" : "รายชื่อ (.xlsx)"}`)}
       </button>
 
       {uploading && (

@@ -56,6 +56,23 @@ def _loop() -> None:
             wake.clear()
 
 
+def _queue_match_if_roster_ready(batch_id: str) -> None:
+    from .db import connection, new_id
+
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT source_excel_key FROM batches WHERE id = %s", (batch_id,)
+        ).fetchone()
+        if not row or not row["source_excel_key"]:
+            return
+        conn.execute(
+            "INSERT INTO jobs (id, type, batch_id) VALUES (%s, 'MATCH', %s)",
+            (new_id(), batch_id),
+        )
+    log.info("ตั้งงานจับคู่ต่อให้ batch %s อัตโนมัติ หลังเติมไฟล์", batch_id)
+    wake.set()
+
+
 def _run_one() -> bool:
     job = claim_next_job()
     if job is None:
@@ -70,9 +87,13 @@ def _run_one() -> bool:
     try:
         if job_type == "SPLIT":
             set_batch_status(batch_id, "SPLITTING")
-            stats = run_split(batch_id, on_progress)
+            stats = run_split(batch_id, on_progress, job.get("payload") or {})
             merge_batch_stats(batch_id, stats)
             set_batch_status(batch_id, "SPLIT_DONE")
+            # เติมไฟล์ที่ตกหล่นเข้ารอบที่เคยจับคู่ไปแล้ว ให้จับคู่ต่อให้เลย
+            # แอดมินจะได้ไม่ต้องอัป Excel ชุดเดิมซ้ำเพียงเพื่อกดจับคู่ใหม่
+            if stats.get("mode") == "append" and stats.get("pagesSplit"):
+                _queue_match_if_roster_ready(batch_id)
         elif job_type == "MATCH":
             set_batch_status(batch_id, "MATCHING")
             stats = run_match(batch_id, on_progress)

@@ -141,6 +141,8 @@ def main() -> int:
         expect_students=2,
     )
 
+    # เคสนี้ต้องมีคนชื่อพ้องอยู่ในระบบก่อน ไม่พึ่งข้อมูล seed เพราะฐานข้อมูลอาจถูกล้างมา
+    seed_same_name_students("SOMCHAI JAIDEE")
     ok &= run_case(
         "ชื่อพ้องกับผู้เข้าสอบที่มีในระบบหลายคน — ต้องส่งให้แอดมิน ไม่ใช่สร้างคนใหม่",
         code=f"E2EDUP{run}",
@@ -236,6 +238,28 @@ def run_case(
 
 
 # ------------------------------------------------------------------ helpers
+
+def seed_same_name_students(name: str) -> None:
+    """ทำให้มีผู้เข้าสอบชื่อเดียวกัน 2 คน (คนละโรงเรียน) อยู่ในระบบ
+
+    เคสทดสอบ "ชื่อพ้องแล้วแยกไม่ออก" ต้องมีเงื่อนไขนี้ก่อน
+    ถ้าไปอาศัยข้อมูล seed เทสจะพังทันทีที่ใครล้างฐานข้อมูล
+    """
+    with connection() as conn:
+        existing = conn.execute(
+            "SELECT COUNT(*) AS n FROM students WHERE name_en_normalized = %s", (name,)
+        ).fetchone()["n"]
+        for i in range(2 - int(existing)):
+            conn.execute(
+                """
+                INSERT INTO students
+                  (id, name_en, name_en_normalized, name_en_sort_key, school, school_normalized)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (new_id(), name, name, " ".join(sorted(name.split())),
+                 f"โรงเรียนทดสอบ{i}", f"ทดสอบ{i}"),
+            )
+
 
 def create_batch(code: str, exam_round: str, title: str) -> str:
     program_id, exam_id, batch_id = new_id(), new_id(), new_id()
