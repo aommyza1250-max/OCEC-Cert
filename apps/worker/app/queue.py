@@ -80,11 +80,12 @@ def fail_job(job_id: str, error: str, attempts: int, permanent: bool = False) ->
             UPDATE jobs
             SET status = %s,
                 error = %s,
+                user_error = %s,
                 finished_at = CASE WHEN %s THEN NULL ELSE NOW() END,
                 locked_at = NULL
             WHERE id = %s
             """,
-            ("QUEUED" if requeue else "FAILED", error[:4000], requeue, job_id),
+            ("QUEUED" if requeue else "FAILED", error[:4000], permanent, requeue, job_id),
         )
     log.warning("job %s ล้มเหลว (ครั้งที่ %s): %s", job_id, attempts, error)
 

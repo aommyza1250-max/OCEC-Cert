@@ -12,7 +12,14 @@ type Props = {
   certificateCount: number;
   stats: Record<string, unknown>;
   counts: Record<string, number>;
-  latestJob: { id: string; type: string; status: string; error: string | null } | null;
+  latestJob: {
+    id: string;
+    type: string;
+    status: string;
+    error: string | null;
+    /** true = ไฟล์ที่อัปเข้ามาไม่ถูก ไม่ใช่ระบบพัง */
+    userError: boolean;
+  } | null;
   publishState: PublishState;
 };
 
@@ -75,14 +82,26 @@ export function BatchWorkflow(props: Props) {
         </p>
       )}
 
-      {props.latestJob?.status === "FAILED" && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="font-medium text-red-800">ประมวลผลล้มเหลว</p>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-red-700">
-            {props.latestJob.error}
-          </pre>
-        </div>
-      )}
+      {props.latestJob?.status === "FAILED" &&
+        (props.latestJob.userError ? (
+          // ไฟล์ที่อัปเข้ามาไม่ถูก ไม่ใช่ระบบพัง — ของที่นำเข้าไปแล้วยังใช้งานได้ตามปกติ
+          // จึงไม่ควรขึ้นเป็นกล่องแดงให้ตกใจ และไม่ต้องมี traceback ให้อ่าน
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <p className="font-medium text-amber-900">ไฟล์ที่อัปล่าสุดยังไม่ถูกรับ</p>
+            <p className="mt-1 text-sm text-amber-800">{props.latestJob.error}</p>
+            <p className="mt-2 text-sm text-amber-700">
+              ข้อมูลเดิมไม่ถูกแตะเลย แก้ไฟล์แล้วอัปใหม่ได้ ข้อความนี้จะอัปเดตตามผลครั้งล่าสุด
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
+            <p className="font-medium text-red-800">ประมวลผลล้มเหลว</p>
+            <p className="mt-1 text-sm text-red-700">{props.latestJob.error}</p>
+            <p className="mt-2 text-sm text-red-600">
+              ถ้าแก้เองไม่ได้ ให้ดู docs/runbook.md หรือส่งข้อความนี้ให้ผู้ดูแลระบบ
+            </p>
+          </div>
+        ))}
 
       <StatsPanel stats={props.stats} counts={props.counts} />
 

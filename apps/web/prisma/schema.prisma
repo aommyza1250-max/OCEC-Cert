@@ -275,6 +275,9 @@ model Job {
 
   attempts Int     @default(0)
   error    String? @db.Text
+  /// true = ล้มเหลวเพราะไฟล์ที่แอดมินอัปเข้ามาไม่ถูก ไม่ใช่ระบบพัง
+  /// แยกไว้เพื่อให้หน้าจอไม่ขึ้นกล่องแดง "ประมวลผลล้มเหลว" กับความผิดพลาดของคนใช้งาน
+  userError Boolean @default(false) @map("user_error")
 
   lockedAt   DateTime? @map("locked_at")
   createdAt  DateTime  @default(now()) @map("created_at")

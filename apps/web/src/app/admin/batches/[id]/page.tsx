@@ -85,7 +85,9 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                 id: batch.jobs[0].id,
                 type: batch.jobs[0].type,
                 status: batch.jobs[0].status,
-                error: batch.jobs[0].error,
+                // เอาเฉพาะบรรทัดแรก ส่วนที่เหลือเป็น traceback สำหรับคนแก้โค้ด ไม่ใช่สำหรับแอดมิน
+                error: batch.jobs[0].error?.split("\n")[0] ?? null,
+                userError: batch.jobs[0].userError,
               }
             : null
         }
