@@ -63,6 +63,8 @@ export const keys = {
    *  (ไฟล์ตกหล่นแล้วตามมาทีหลัง) และต้องย้อนกลับไปดูต้นทางได้ว่าใบไหนมาจากไฟล์ไหน */
   sourceZip: (batchId: string, stamp: string) => `sources/${batchId}/bundle-${stamp}.zip`,
   sourceExcel: (batchId: string) => `sources/${batchId}/roster.xlsx`,
+  /** ไฟล์ของคนที่ตกหล่น อัปทีละใบเข้าไปในบล็อกของคนนั้น */
+  missingPdf: (batchId: string, stamp: string) => `sources/${batchId}/missing-${stamp}.pdf`,
   certificatePdf: (batchId: string, stem: string) => `certificates/${batchId}/${stem}.pdf`,
   preview: (batchId: string, stem: string) => `previews/${batchId}/${stem}.webp`,
 };

@@ -24,7 +24,8 @@
 import logging
 import os
 import tempfile
-from dataclasses import dataclass
+import zipfile
+from dataclasses import dataclass, replace
 from typing import Any, Callable
 
 import pymupdf
@@ -56,10 +57,11 @@ def run_split(
     batch = _load_batch(batch_id)
     payload = payload or {}
 
-    zip_key = payload.get("zipKey") or batch["source_zip_key"]
     append = payload.get("mode") == "append"
+    pdf_key = payload.get("pdfKey")
+    zip_key = payload.get("zipKey") or (None if pdf_key else batch["source_zip_key"])
 
-    if not zip_key:
+    if not pdf_key and not zip_key:
         raise ValueError("batch นี้ยังไม่มีไฟล์ ZIP ต้นทาง")
 
     program_code = batch["program_code"]
@@ -74,10 +76,14 @@ def run_split(
 
     # ดาวน์โหลดลงดิสก์ ไม่ใช่หน่วยความจำ — ZIP จริงขนาดหลายร้อย MB
     with tempfile.TemporaryDirectory() as workdir:
-        zip_path = os.path.join(workdir, "bundle.zip")
-        download_to_file(zip_key, zip_path)
-        bundles = read_award_bundles(zip_path)
-        log.info("พบไฟล์ใน ZIP %s ไฟล์: %s", len(bundles), [b.source_file for b in bundles])
+        if pdf_key:
+            # เติมไฟล์ของคนที่ตกหล่นทีละใบ — แอดมินโยน PDF เข้ามาตรง ๆ ไม่ต้องอัด ZIP
+            source_path, bundles = _prepare_single_pdf(workdir, pdf_key, payload)
+        else:
+            source_path = os.path.join(workdir, "bundle.zip")
+            download_to_file(zip_key, source_path)
+            bundles = read_award_bundles(source_path)
+            log.info("พบไฟล์ใน ZIP %s ไฟล์: %s", len(bundles), [b.source_file for b in bundles])
 
         if not append:
             # ตัดใหม่ทั้งรอบ: ล้างผลรอบก่อนทิ้งก่อน
@@ -86,9 +92,53 @@ def run_split(
 
         existing = _existing_state(batch_id)
         return _process(
-            batch_id, zip_path, bundles, program_code, exam_round, exam_year,
+            batch_id, source_path, bundles, program_code, exam_round, exam_year,
             filter_nationality, append, existing, cfg, on_progress,
+            prefer_page_award=bool(pdf_key),
         )
+
+
+def _prepare_single_pdf(
+    workdir: str, pdf_key: str, payload: dict[str, Any]
+) -> tuple[str, list[Bundle]]:
+    """เตรียมไฟล์ PDF ใบเดียวที่แอดมินโยนเข้ามาให้คนที่ตกหล่น
+
+    ตรวจ **ก่อน** ลงมือประมวลผล ว่าไฟล์นี้เป็นของคนที่ควรจะเป็นจริง
+    ถ้าหยิบไฟล์ผิดคนแล้วปล่อยผ่าน เกียรติบัตรจะไปโผล่ในชื่อผิดคนบนหน้าเว็บ
+    ตรวจก่อนจึงไม่ทิ้งไฟล์ขยะไว้บน R2 และไม่ต้องย้อนลบอะไร
+    """
+    pdf_path = os.path.join(workdir, "single.pdf")
+    download_to_file(pdf_key, pdf_path)
+
+    expect_cert_no = str(payload.get("expectCertNo") or "").strip()
+    if expect_cert_no:
+        _verify_belongs_to(pdf_path, expect_cert_no)
+
+    # ห่อเป็น ZIP ที่มีโฟลเดอร์รางวัลเดียว เพื่อให้ทางเดินหลังจากนี้เหมือนกับการอัป ZIP ทุกอย่าง
+    # ไม่ต้องมีโค้ดสองทางให้ดูแล และได้ตรรกะข้ามของซ้ำกับการตั้งชื่อไฟล์เหมือนกันฟรี ๆ
+    award = normalize_award(payload.get("expectedAward") or "") or "GOLD"
+    name = os.path.basename(pdf_key)
+    zip_path = os.path.join(workdir, "single.zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(pdf_path, f"{award}/{name}")
+
+    return zip_path, read_award_bundles(zip_path)
+
+
+def _verify_belongs_to(pdf_path: str, expect_cert_no: str) -> None:
+    found: list[str] = []
+    with pymupdf.open(pdf_path) as doc:
+        for index in range(doc.page_count):
+            info = read_lines(page_lines(page_text(doc[index])))
+            if info.cert_no == expect_cert_no:
+                return
+            found.append(f"{info.cert_no or 'อ่านเลขไม่ได้'} ({info.name or 'อ่านชื่อไม่ได้'})")
+
+    raise ValueError(
+        f"ไฟล์นี้ไม่มีหน้าของผู้เข้าสอบเลข {expect_cert_no} "
+        f"— ในไฟล์พบ: {', '.join(found) or '(ไม่มีหน้าเลย)'} "
+        "กรุณาตรวจว่าหยิบไฟล์ถูกคนหรือไม่"
+    )
 
 
 def _process(
@@ -103,6 +153,7 @@ def _process(
     existing: "ExistingState",
     cfg: Any,
     on_progress: ProgressFn,
+    prefer_page_award: bool = False,
 ) -> dict[str, Any]:
 
     stats: dict[str, Any] = {
@@ -131,6 +182,7 @@ def _process(
                     page = doc[index]
                     text = page_text(page)
                     info = _read(page, text, cfg.name_pattern)
+                    bundle = _resolve_award(bundle, info, prefer_page_award)
 
                     if append and _already_imported(existing, info, bundle):
                         # หน้านี้นำเข้าไปแล้ว ข้ามไปโดยไม่กินเลขหน้า
@@ -252,6 +304,21 @@ def _batch_totals(batch_id: str) -> dict[str, Any]:
         if row["match_status"] != "SKIPPED_FOREIGN" and row["award"]:
             by_award[row["award"]] = by_award.get(row["award"], 0) + row["n"]
     return {"pagesInBatch": total, "byAward": by_award}
+
+
+def _resolve_award(bundle: Bundle, info: PageInfo, prefer_page_award: bool) -> Bundle:
+    """รางวัลของหน้านี้
+
+    ทางปกติ (อัป ZIP) รางวัลมาจากชื่อโฟลเดอร์เสมอ เพราะเป็นแหล่งเดียวที่ครบ
+    แต่ตอนเติมไฟล์ทีละใบไม่มีโฟลเดอร์ให้อ้าง จึงเชื่อรางวัลที่พิมพ์บนหน้าก่อน
+    แล้วค่อยถอยไปใช้รางวัลที่ระบบคาดไว้ (ซึ่งหน้า Perfect Score จะไม่มีให้อ่าน)
+    """
+    if not prefer_page_award or not info.award_on_page:
+        return bundle
+    from_page = normalize_award(info.award_on_page)
+    if not from_page or from_page == bundle.award:
+        return bundle
+    return replace(bundle, award=from_page)
 
 
 def _tally(stats: dict[str, Any], info: PageInfo, bundle: Bundle, exam_round: str) -> None:

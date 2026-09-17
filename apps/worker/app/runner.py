@@ -56,14 +56,14 @@ def _loop() -> None:
             wake.clear()
 
 
-def _is_published(batch_id: str) -> bool:
+def _batch_status(batch_id: str) -> str:
     from .db import connection
 
     with connection() as conn:
         row = conn.execute(
             "SELECT status FROM batches WHERE id = %s", (batch_id,)
         ).fetchone()
-    return bool(row and row["status"] == "PUBLISHED")
+    return row["status"] if row else "DRAFT"
 
 
 def _queue_match_if_roster_ready(batch_id: str) -> None:
@@ -93,7 +93,8 @@ def _run_one() -> bool:
 
     # รอบที่เผยแพร่ไปแล้วต้องยังเผยแพร่อยู่หลังเติมไฟล์หรือจับคู่ใหม่
     # ไม่งั้นผู้ปกครองจะค้นไม่เจอทั้งรอบทันทีที่แอดมินเติมไฟล์ตกหล่นเข้าไป
-    was_published = _is_published(batch_id)
+    previous_status = _batch_status(batch_id)
+    was_published = previous_status == "PUBLISHED"
 
     def on_progress(progress: dict[str, Any]) -> None:
         set_progress(job_id, progress)
@@ -119,9 +120,15 @@ def _run_one() -> bool:
         finish_job(job_id, {"stage": "done", **{k: v for k, v in stats.items() if k != "unmatchedRows"}})
         log.info("งาน %s เสร็จแล้ว", job_id)
     except Exception as exc:
-        fail_job(job_id, f"{exc}\n{traceback.format_exc()}", job["attempts"] + 1)
-        # ถ้าหมดโควต้าลองใหม่แล้ว ให้ batch แสดงว่าพัง แอดมินจะได้เห็น
-        if job["attempts"] + 1 >= settings().max_attempts:
+        # ความผิดพลาดของไฟล์ที่อัปเข้ามา (หยิบไฟล์ผิดคน, จัดโฟลเดอร์ไม่ถูก) ลองใหม่ไปก็เหมือนเดิม
+        # และไม่ได้แปลว่ารอบนำเข้าพัง ของที่นำเข้าไปแล้วยังใช้งานได้ตามปกติ
+        permanent = isinstance(exc, ValueError)
+        fail_job(job_id, f"{exc}\n{traceback.format_exc()}", job["attempts"] + 1, permanent)
+
+        if permanent:
+            set_batch_status(batch_id, previous_status)
+        elif job["attempts"] + 1 >= settings().max_attempts:
+            # พังด้วยเหตุอื่นจนหมดโควต้าลองใหม่ ให้ batch แสดงว่าพัง แอดมินจะได้เห็น
             set_batch_status(batch_id, "FAILED")
 
     return True

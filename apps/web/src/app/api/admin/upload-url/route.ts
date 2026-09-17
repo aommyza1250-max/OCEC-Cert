@@ -6,12 +6,14 @@ import { keys, presignedUploadUrl } from "@/lib/r2";
 
 const schema = z.object({
   batchId: z.string().uuid(),
-  kind: z.enum(["zip", "excel"]),
+  kind: z.enum(["zip", "excel", "missing-pdf"]),
 });
 
 const CONTENT_TYPES = {
   zip: "application/zip",
   excel: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  // ไฟล์ของคนที่ตกหล่น อัปทีละใบ ไม่ต้องอัด ZIP
+  "missing-pdf": "application/pdf",
 } as const;
 
 /**
@@ -38,10 +40,13 @@ export async function POST(request: Request) {
 
   // ZIP ใช้ชื่อไฟล์ใหม่ทุกครั้ง เพื่อให้เติมไฟล์ที่ตกหล่นเข้ารอบเดิมได้โดยไม่ทับของเดิม
   // ส่วน Excel ทับได้ เพราะรายชื่อฉบับล่าสุดคือฉบับที่ถูกต้อง
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const key =
     kind === "zip"
-      ? keys.sourceZip(batchId, new Date().toISOString().replace(/[:.]/g, "-"))
-      : keys.sourceExcel(batchId);
+      ? keys.sourceZip(batchId, stamp)
+      : kind === "missing-pdf"
+        ? keys.missingPdf(batchId, stamp)
+        : keys.sourceExcel(batchId);
   const url = await presignedUploadUrl(key, CONTENT_TYPES[kind]);
 
   return NextResponse.json({ url, key, contentType: CONTENT_TYPES[kind] });

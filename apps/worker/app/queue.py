@@ -67,13 +67,13 @@ def finish_job(job_id: str, progress: dict[str, Any] | None = None) -> None:
         )
 
 
-def fail_job(job_id: str, error: str, attempts: int) -> None:
+def fail_job(job_id: str, error: str, attempts: int, permanent: bool = False) -> None:
     """งานที่ยังไม่ครบโควต้าความพยายาม ให้กลับไปเข้าคิวใหม่
 
-    ตั้งใจไม่ทำ exponential backoff เพราะงานส่วนใหญ่ที่พังคือ "ไฟล์ผิดรูปแบบ"
-    ซึ่งลองใหม่กี่ครั้งก็พังเหมือนเดิม — ปล่อยให้ fail เร็ว ๆ แล้วให้คนดูดีกว่า
+    `permanent` ใช้กับความผิดพลาดที่ลองใหม่ไปก็ได้ผลเหมือนเดิม เช่นแอดมินหยิบไฟล์ผิดคน
+    หรือจัดโฟลเดอร์ใน ZIP ไม่ถูก — ลองซ้ำมีแต่เสียเวลาและทำให้ log รก
     """
-    requeue = attempts < settings().max_attempts
+    requeue = not permanent and attempts < settings().max_attempts
     with connection() as conn:
         conn.execute(
             """

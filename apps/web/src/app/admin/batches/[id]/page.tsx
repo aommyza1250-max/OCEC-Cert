@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BatchWorkflow, type PublishState } from "@/components/admin/BatchWorkflow";
 import { DuplicateReview, type DuplicateGroup } from "@/components/admin/DuplicateReview";
+import { MissingList } from "@/components/admin/MissingList";
 import { MatchTable } from "@/components/admin/MatchTable";
 import { isAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { loadMissingItems } from "@/lib/missing";
 import { decidePublish, needsPolicyDecision, PERFECT_SCORE } from "@/lib/publish";
 import { publicUrl } from "@/lib/r2";
 
@@ -33,6 +35,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
   const duplicateGroups = await loadDuplicateGroups(id);
   const publishState = await loadPublishState(id, batch.multiAwardPolicy);
+  const missingItems = await loadMissingItems(id);
 
   const counts = await prisma.stagingPage.groupBy({
     by: ["matchStatus"],
@@ -87,6 +90,8 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
             : null
         }
       />
+
+      <MissingList batchId={id} items={missingItems} />
 
       <DuplicateReview groups={duplicateGroups} />
 

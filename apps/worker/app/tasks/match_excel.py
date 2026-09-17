@@ -147,7 +147,13 @@ def run_match(batch_id: str, on_progress: ProgressFn) -> dict[str, Any]:
     unused = [r for r in rows if r.row_number not in matched_rows]
     stats["rowsNotUsed"] = len(unused)
     stats["unmatchedRows"] = [
-        {"row": r.row_number, "certNo": r.cert_no, "name": r.name_en or r.name_th}
+        {
+            "row": r.row_number,
+            "certNo": r.cert_no,
+            "name": r.name_en or r.name_th,
+            # รางวัลที่ควรจะเป็น เอาไปบอกระบบตอนแอดมินอัปไฟล์ที่ขาดเข้ามาทีหลัง
+            "award": normalize_award(r.award) or None,
+        }
         for r in unused[:MAX_REPORTED]
     ]
 
