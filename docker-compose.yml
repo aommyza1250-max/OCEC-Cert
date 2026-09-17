@@ -54,7 +54,8 @@ services:
   # ตัวประมวลผล PDF/Excel — dev รันใน container เพราะต้องใช้ Python 3.12 + PyMuPDF
   worker:
     build:
-      context: ./apps/worker
+      context: .
+      dockerfile: apps/worker/Dockerfile
       target: dev          # มี pytest/ruff และเปิด --reload ให้ด้วย
     container_name: ocec-worker
     depends_on:

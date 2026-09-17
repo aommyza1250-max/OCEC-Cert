@@ -54,7 +54,7 @@
 2. **Settings → General → Service Name** ตั้งเป็น **`worker`** ตรงตัวพิมพ์เล็ก
    > ⚠️ ชื่อนี้สำคัญ เพราะ web จะเรียกผ่าน `http://worker.railway.internal:8000`
    > ถ้าตั้งชื่ออื่นต้องแก้ `WORKER_BASE_URL` ให้ตรงกัน
-3. **Settings → Source (หรือ General) → Root Directory** ใส่ **`/apps/worker`** *(สำคัญมาก เป็น Monorepo ต้องระบุโฟลเดอร์)*
+3. **Settings → Source (หรือ General) → Root Directory** ปล่อยเป็น `/` (ค่าเริ่มต้น)
 4. **Settings → Build → Config as code** ใส่ `infra/railway.worker.json`
 5. **Variables** ใส่:
    ```
@@ -78,7 +78,7 @@
 
 1. **New** → **GitHub Repo** → เลือก repo เดิม
 2. **Service Name** ตั้งเป็น `web`
-3. **Settings → Source (หรือ General) → Root Directory** ใส่ **`/apps/web`** *(สำคัญมาก)*
+3. **Settings → Source (หรือ General) → Root Directory** ปล่อยเป็น `/` (ค่าเริ่มต้น)
 4. **Settings → Build → Config as code** ใส่ `infra/railway.web.json`
 5. **Variables** ใส่:
    ```
