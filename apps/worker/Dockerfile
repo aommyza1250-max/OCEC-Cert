@@ -6,8 +6,8 @@ FROM python:3.12-slim AS base
 WORKDIR /app
 
 # ต้อง COPY app ก่อน pip install เพราะ setuptools ต้องเห็นตัวแพ็กเกจจริงตอน build wheel
-COPY pyproject.toml ./
-COPY app ./app
+COPY apps/worker/pyproject.toml ./pyproject.toml
+COPY apps/worker/app ./app
 RUN pip install --no-cache-dir . && rm -rf /root/.cache
 
 ENV PYTHONUNBUFFERED=1
