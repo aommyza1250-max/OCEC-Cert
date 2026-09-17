@@ -82,6 +82,9 @@ def run_match(batch_id: str, on_progress: ProgressFn) -> dict[str, Any]:
             if key:
                 by_name.setdefault(key, []).append(row)
 
+    # จำสถานะเผยแพร่เดิมไว้ก่อนล้าง ไม่งั้นรันจับคู่ซ้ำทีไร ผู้ปกครองจะค้นไม่เจอจนกว่าจะกดเผยแพร่ใหม่
+    published = _published_snapshot(batch_id)
+
     # รันจับคู่ซ้ำได้: ล้างผลอัตโนมัติรอบก่อนทิ้งก่อนเสมอ
     # (แอดมินอัปโหลด Excel ใหม่ทับได้บ่อย) แต่เก็บสิ่งที่แอดมินตัดสินด้วยมือไว้
     _reset_previous_matches(batch_id)
@@ -133,7 +136,7 @@ def run_match(batch_id: str, on_progress: ProgressFn) -> dict[str, Any]:
             else:
                 issued.add(key)
                 matched_rows.add(row.row_number)
-                _commit_match(batch, page, row, student_id)
+                _commit_match(batch, page, row, student_id, published)
                 stats["matched"] += 1
                 stats["matchedByCertNo" if how == "cert" else "matchedByName"] += 1
                 _cross_check(stats, page, row)
@@ -372,7 +375,11 @@ def _narrow_by_school(
 
 
 def _commit_match(
-    batch: dict[str, Any], page: dict[str, Any], row: RosterRow, student_id: str
+    batch: dict[str, Any],
+    page: dict[str, Any],
+    row: RosterRow,
+    student_id: str,
+    published: dict[tuple[str, str], Any],
 ) -> None:
     with connection() as conn:
         with conn.transaction():
@@ -391,8 +398,7 @@ def _commit_match(
                   (id, student_id, exam_id, batch_id, staging_page_id,
                    pdf_key, preview_key, page_number, award, cert_no, candidate_no, level,
                    published_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        CASE WHEN %s = 'PUBLISHED' THEN NOW() ELSE NULL END)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (exam_id, student_id, award) DO UPDATE
                 SET staging_page_id = EXCLUDED.staging_page_id,
                     batch_id = EXCLUDED.batch_id,
@@ -418,7 +424,11 @@ def _commit_match(
                     row.cert_no or None,
                     # ระดับชั้นอ่านจากหน้ากระดาษก่อน เพราะนั่นคือสิ่งที่ผู้ปกครองถืออยู่ในมือ
                     page["level"] or row.level or None,
-                    batch["status"],
+                    # คงสถานะเผยแพร่เดิมไว้ ไม่ตัดสินใหม่เอง
+                    # การตัดสินว่าใบไหนเผยแพร่มีที่เดียวคือปุ่มเผยแพร่ฝั่งเว็บ (apps/web/src/lib/publish.ts)
+                    # ถ้าตัวจับคู่มาตั้งเองด้วย กฎจะเหลื่อมกันแล้วใบที่ควรถูกกันไว้จะหลุดออกไปเงียบ ๆ
+                    published.get((page["cert_no"], page["award"]))
+                    or published.get((student_id, page["award"])),
                 ),
             )
 
@@ -498,6 +508,29 @@ def _mark(page_id: str, status: str, note: str | None, roster_award: str | None 
         )
 
 
+def _published_snapshot(batch_id: str) -> dict[tuple[str, str], Any]:
+    """สถานะเผยแพร่ของเกียรติบัตรที่มีอยู่ ก่อนจะถูกลบแล้วสร้างใหม่
+
+    ทำคีย์ไว้สองแบบ: (เลขผู้เข้าสอบ, รางวัล) ซึ่งเสถียรที่สุด
+    และ (ผู้เข้าสอบ, รางวัล) เผื่อหน้าที่อ่านเลขไม่ได้
+    """
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT cert_no, student_id, award, published_at
+            FROM certificates WHERE batch_id = %s AND published_at IS NOT NULL
+            """,
+            (batch_id,),
+        ).fetchall()
+
+    snapshot: dict[tuple[str, str], Any] = {}
+    for row in rows:
+        if row["cert_no"]:
+            snapshot[(row["cert_no"], row["award"])] = row["published_at"]
+        snapshot[(row["student_id"], row["award"])] = row["published_at"]
+    return snapshot
+
+
 def _reset_previous_matches(batch_id: str) -> None:
     """ล้างผลจับคู่อัตโนมัติของรอบนำเข้านี้ เพื่อให้รันใหม่ได้ผลเหมือนเริ่มต้นใหม่
 
@@ -540,7 +573,7 @@ def _load_batch(batch_id: str) -> dict[str, Any]:
     with connection() as conn:
         row = conn.execute(
             """
-            SELECT b.id, b.exam_id, b.source_excel_key, b.status,
+            SELECT b.id, b.exam_id, b.source_excel_key,
                    p.code AS program_code, e.round, e.year
             FROM batches b
             JOIN exams e ON e.id = b.exam_id

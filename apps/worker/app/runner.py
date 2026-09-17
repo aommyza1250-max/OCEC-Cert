@@ -56,6 +56,16 @@ def _loop() -> None:
             wake.clear()
 
 
+def _is_published(batch_id: str) -> bool:
+    from .db import connection
+
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT status FROM batches WHERE id = %s", (batch_id,)
+        ).fetchone()
+    return bool(row and row["status"] == "PUBLISHED")
+
+
 def _queue_match_if_roster_ready(batch_id: str) -> None:
     from .db import connection, new_id
 
@@ -81,6 +91,10 @@ def _run_one() -> bool:
     job_id, batch_id, job_type = job["id"], job["batch_id"], job["type"]
     log.info("เริ่มงาน %s (%s) ของ batch %s", job_id, job_type, batch_id)
 
+    # รอบที่เผยแพร่ไปแล้วต้องยังเผยแพร่อยู่หลังเติมไฟล์หรือจับคู่ใหม่
+    # ไม่งั้นผู้ปกครองจะค้นไม่เจอทั้งรอบทันทีที่แอดมินเติมไฟล์ตกหล่นเข้าไป
+    was_published = _is_published(batch_id)
+
     def on_progress(progress: dict[str, Any]) -> None:
         set_progress(job_id, progress)
 
@@ -89,7 +103,7 @@ def _run_one() -> bool:
             set_batch_status(batch_id, "SPLITTING")
             stats = run_split(batch_id, on_progress, job.get("payload") or {})
             merge_batch_stats(batch_id, stats)
-            set_batch_status(batch_id, "SPLIT_DONE")
+            set_batch_status(batch_id, "PUBLISHED" if was_published else "SPLIT_DONE")
             # เติมไฟล์ที่ตกหล่นเข้ารอบที่เคยจับคู่ไปแล้ว ให้จับคู่ต่อให้เลย
             # แอดมินจะได้ไม่ต้องอัป Excel ชุดเดิมซ้ำเพียงเพื่อกดจับคู่ใหม่
             if stats.get("mode") == "append" and stats.get("pagesSplit"):
@@ -98,7 +112,7 @@ def _run_one() -> bool:
             set_batch_status(batch_id, "MATCHING")
             stats = run_match(batch_id, on_progress)
             merge_batch_stats(batch_id, stats)
-            set_batch_status(batch_id, "READY")
+            set_batch_status(batch_id, "PUBLISHED" if was_published else "READY")
         else:
             raise ValueError(f"ไม่รู้จักงานชนิด {job_type}")
 

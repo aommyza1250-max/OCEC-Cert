@@ -13,6 +13,20 @@ type Props = {
   stats: Record<string, unknown>;
   counts: Record<string, number>;
   latestJob: { id: string; type: string; status: string; error: string | null } | null;
+  publishState: PublishState;
+};
+
+export type PublishState = {
+  policy: "UNDECIDED" | "ALL" | "MEDAL_ONLY";
+  /** ต้องให้แอดมินเลือกก่อนไหม — จริงเฉพาะเมื่อมีคนถือทั้งใบเหรียญและ Perfect Score */
+  needsDecision: boolean;
+  publishedCount: number;
+  /** คนที่ถูกกันไว้เพราะข้อมูลยังไม่ครบ */
+  held: { name: string; certNo: string | null; reason: string }[];
+  /** คนที่ถือทั้งใบเหรียญและ Perfect Score ในรอบนี้ */
+  multiAward: { name: string; awards: string[] }[];
+  /** ข้อมูลครบแล้วแต่ยังไม่ถูกเผยแพร่ — เกิดหลังเติมไฟล์ที่ตกหล่น */
+  readyToPublish: number;
 };
 
 const RUNNING = new Set(["SPLITTING", "MATCHING"]);
@@ -75,6 +89,7 @@ export function BatchWorkflow(props: Props) {
       <PublishPanel
         batchId={props.batchId}
         status={props.status}
+        state={props.publishState}
         certificateCount={props.certificateCount}
         unresolved={
           (props.counts.UNMATCHED ?? 0) +
@@ -244,53 +259,182 @@ function num(value: unknown): number | string {
 function PublishPanel({
   batchId,
   status,
+  state,
   certificateCount,
   unresolved,
 }: {
   batchId: string;
   status: string;
+  state: PublishState;
   certificateCount: number;
   unresolved: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const published = status === "PUBLISHED";
 
-  async function toggle() {
+  async function call(path: string, body: object) {
     setBusy(true);
-    await fetch(`/api/admin/batches/${batchId}/publish`, {
+    setError(null);
+    const res = await fetch(`/api/admin/batches/${batchId}/${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ published: !published }),
+      body: JSON.stringify(body),
     });
+    if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? "ทำรายการไม่สำเร็จ");
     setBusy(false);
     router.refresh();
   }
 
   if (certificateCount === 0) return null;
 
+  const blocked = state.needsDecision && state.policy === "UNDECIDED";
+
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="font-semibold">เผยแพร่ให้ค้นหาได้</h2>
-      <p className="mt-1 text-sm text-gray-500">
-        {published
-          ? `เผยแพร่อยู่ — ผู้ปกครองค้นเจอเกียรติบัตร ${certificateCount} ใบนี้แล้ว`
-          : `ยังไม่เผยแพร่ — เกียรติบัตร ${certificateCount} ใบนี้ยังไม่ปรากฏในหน้าค้นหา`}
-      </p>
+    <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+      <div>
+        <h2 className="font-semibold">เผยแพร่ให้ค้นหาได้</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          เผยแพร่ทีละคน คนที่ข้อมูลครบออกไปก่อน ส่วนคนที่ยังไม่ครบค้างไว้จนกว่าจะได้ไฟล์
+        </p>
+      </div>
+
+      {state.multiAward.length > 0 && (
+        <PolicyChooser
+          state={state}
+          busy={busy}
+          onPick={(policy) => call("policy", { policy })}
+        />
+      )}
+
+      {state.held.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="font-medium text-amber-900">
+            ค้างไว้เพราะข้อมูลไม่ครบ {state.held.length} คน
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-amber-800">
+            {state.held.map((h) => (
+              <li key={h.name + h.certNo}>
+                {h.name}
+                {h.certNo && <span className="text-amber-700"> (เลข {h.certNo})</span>} — {h.reason}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-sm text-amber-700">
+            ขอไฟล์จากต้นทางแล้วใช้ปุ่ม &ldquo;เลือกไฟล์ ZIP ที่มีเกียรติบัตรตกหล่น&rdquo; ด้านบน
+            จากนั้นกดเผยแพร่อีกครั้ง คนที่พร้อมแล้วจะตามออกไปเอง
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="flex-1 text-sm text-gray-600">
+          {published
+            ? `เผยแพร่อยู่ ${state.publishedCount} ใบ จากทั้งหมด ${certificateCount} ใบ`
+            : `ยังไม่เผยแพร่ — เกียรติบัตร ${certificateCount} ใบยังไม่ปรากฏในหน้าค้นหา`}
+        </p>
+
+        {published && state.readyToPublish > 0 && (
+          <button
+            onClick={() => call("publish", { published: true })}
+            disabled={busy}
+            className="rounded-lg bg-green-700 px-5 py-2.5 font-semibold text-white disabled:opacity-40"
+          >
+            {busy ? "กำลังบันทึก..." : `เผยแพร่เพิ่ม ${state.readyToPublish} ใบ`}
+          </button>
+        )}
+
+        <button
+          onClick={() => call("publish", { published: !published })}
+          disabled={busy || (!published && blocked)}
+          className={`rounded-lg px-5 py-2.5 font-semibold text-white disabled:opacity-40 ${
+            published ? "bg-gray-600" : "bg-green-700"
+          }`}
+        >
+          {busy ? "กำลังบันทึก..." : published ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
+        </button>
+      </div>
+
+      {!published && blocked && (
+        <p className="text-sm text-amber-700">
+          รอบนี้มีผู้เข้าสอบที่ถือทั้งใบเหรียญและใบ Perfect Score กรุณาเลือกด้านบนก่อน
+        </p>
+      )}
       {!published && unresolved > 0 && (
-        <p className="mt-2 text-sm text-amber-700">
+        <p className="text-sm text-amber-700">
           ยังมี {unresolved} หน้าที่จับคู่ไม่ได้ เผยแพร่ได้แต่หน้าเหล่านั้นจะยังค้นไม่เจอ
         </p>
       )}
-      <button
-        onClick={toggle}
-        disabled={busy}
-        className={`mt-4 rounded-lg px-5 py-2.5 font-semibold text-white disabled:opacity-40 ${
-          published ? "bg-gray-600" : "bg-green-700"
-        }`}
-      >
-        {busy ? "กำลังบันทึก..." : published ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
-      </button>
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </section>
+  );
+}
+
+/**
+ * ให้แอดมินบอกว่าฮ่องกงส่งเกียรติบัตรฉบับจริงมาแบบไหนในรอบนี้
+ *
+ * Perfect Score เป็นรางวัลเสริมที่ให้คนได้เหรียญทองซึ่งทำคะแนนได้ดี
+ * บางรอบฮ่องกงส่งฉบับจริงมาทั้งสองใบ บางรอบส่งมาแค่ใบเหรียญ
+ * ระบบเดาแทนไม่ได้ และถ้าเดาผิดผู้ปกครองจะโหลดใบที่ไม่มีฉบับจริงไป
+ */
+function PolicyChooser({
+  state,
+  busy,
+  onPick,
+}: {
+  state: PublishState;
+  busy: boolean;
+  onPick: (policy: "ALL" | "MEDAL_ONLY") => void;
+}) {
+  const options = [
+    { value: "ALL", label: "ทั้งสองใบ", hint: "ผู้ปกครองเห็นทั้งใบเหรียญและใบ Perfect Score" },
+    {
+      value: "MEDAL_ONLY",
+      label: "เฉพาะใบเหรียญ",
+      hint: `ผู้ปกครองเห็นแค่ใบเหรียญ — ซ่อนใบ Perfect Score ${state.multiAward.length} ใบ`,
+    },
+  ] as const;
+
+  return (
+    <div className="rounded-lg border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] p-4">
+      <p className="font-medium text-[var(--color-brand)]">
+        ฮ่องกงส่งเกียรติบัตรฉบับจริงแบบไหนสำหรับรอบนี้
+      </p>
+      <p className="mt-1 text-sm text-gray-600">
+        มีผู้เข้าสอบ {state.multiAward.length} คนที่ถือทั้งใบเหรียญและใบ Perfect Score
+      </p>
+
+      <ul className="mt-2 text-sm text-gray-600">
+        {state.multiAward.map((p) => (
+          <li key={p.name}>
+            {p.name} — {p.awards.join(" + ")}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 flex flex-col gap-2">
+        {options.map((o) => (
+          <label
+            key={o.value}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-white px-3 py-2 ${
+              state.policy === o.value ? "border-[var(--color-brand)]" : "border-gray-200"
+            }`}
+          >
+            <input
+              type="radio"
+              className="mt-1"
+              checked={state.policy === o.value}
+              disabled={busy}
+              onChange={() => onPick(o.value)}
+            />
+            <span>
+              <b>{o.label}</b>
+              <span className="block text-sm text-gray-500">{o.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }

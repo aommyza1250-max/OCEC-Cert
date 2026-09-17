@@ -45,6 +45,15 @@ enum MatchStatus {
   DISCARDED       // แอดมินตัดสินแล้วว่าเป็นใบซ้ำ ไม่ต้องนำเข้า
 }
 
+/// ฮ่องกงส่งเกียรติบัตรฉบับจริงให้แบบไหนในรอบนั้น
+/// Perfect Score เป็นรางวัลเสริมที่ให้คนได้เหรียญทองที่ทำคะแนนได้ดี
+/// บางรอบส่งฉบับจริงมาทั้งสองใบ บางรอบส่งมาแค่ใบเหรียญ
+enum MultiAwardPolicy {
+  UNDECIDED  // ยังไม่ได้เลือก — เผยแพร่ไม่ได้จนกว่าจะเลือก (ถ้ารอบนั้นมีคนได้ Perfect Score)
+  ALL        // เผยแพร่ทุกใบ
+  MEDAL_ONLY // เผยแพร่เฉพาะใบเหรียญ ซ่อนใบ Perfect Score ของคนที่มีทั้งสองใบ
+}
+
 enum JobType {
   SPLIT
   MATCH
@@ -136,6 +145,9 @@ model Batch {
   /// ZIP ที่แอดมินอัปโหลด — ข้างในแยกโฟลเดอร์ตามรางวัล (gold/, silver/, ...)
   sourceZipKey   String? @map("source_zip_key")
   sourceExcelKey String? @map("source_excel_key")
+
+  /// ฮ่องกงส่งฉบับจริงแบบไหนในรอบนี้ — มีผลกับคนที่ถือทั้งใบเหรียญและใบ Perfect Score
+  multiAwardPolicy MultiAwardPolicy @default(UNDECIDED) @map("multi_award_policy")
 
   // สรุปตัวเลข เช่น { pagesTotal, pagesSplit, foreignSkipped, matched, unmatched }
   stats Json @default("{}")

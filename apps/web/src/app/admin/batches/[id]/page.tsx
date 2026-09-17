@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { BatchWorkflow } from "@/components/admin/BatchWorkflow";
+import { BatchWorkflow, type PublishState } from "@/components/admin/BatchWorkflow";
 import { DuplicateReview, type DuplicateGroup } from "@/components/admin/DuplicateReview";
 import { MatchTable } from "@/components/admin/MatchTable";
 import { isAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { decidePublish, needsPolicyDecision, PERFECT_SCORE } from "@/lib/publish";
 import { publicUrl } from "@/lib/r2";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   });
 
   const duplicateGroups = await loadDuplicateGroups(id);
+  const publishState = await loadPublishState(id, batch.multiAwardPolicy);
 
   const counts = await prisma.stagingPage.groupBy({
     by: ["matchStatus"],
@@ -73,6 +75,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
         certificateCount={batch._count.certificates}
         stats={batch.stats as Record<string, unknown>}
         counts={Object.fromEntries(counts.map((c) => [c.matchStatus, c._count]))}
+        publishState={publishState}
         latestJob={
           batch.jobs[0]
             ? {
@@ -158,4 +161,65 @@ async function loadDuplicateGroups(batchId: string): Promise<DuplicateGroup[]> {
     groups.set(key, group);
   }
   return [...groups.values()];
+}
+
+/**
+ * สรุปสถานะการเผยแพร่ให้หน้าเว็บแสดง
+ *
+ * ใช้ตรรกะเดียวกับตอนกดเผยแพร่จริง (src/lib/publish.ts) เพื่อให้สิ่งที่แอดมินเห็น
+ * ตรงกับสิ่งที่จะเกิดขึ้นจริงเสมอ ไม่ใช่คำนวณคนละแบบแล้วเหลื่อมกัน
+ */
+async function loadPublishState(
+  batchId: string,
+  policy: PublishState["policy"],
+): Promise<PublishState> {
+  const certificates = await prisma.certificate.findMany({
+    where: { batchId },
+    select: {
+      id: true,
+      award: true,
+      certNo: true,
+      published: true,
+      studentId: true,
+      student: { select: { nameEn: true, nameTh: true } },
+    },
+    orderBy: { pageNumber: "asc" },
+  });
+
+  const byStudent = new Map<string, typeof certificates>();
+  for (const c of certificates) {
+    byStudent.set(c.studentId, [...(byStudent.get(c.studentId) ?? []), c]);
+  }
+
+  const people = [...byStudent.entries()].map(([studentId, certs]) => ({
+    studentId,
+    certificates: certs.map((c) => ({ id: c.id, award: c.award })),
+  }));
+
+  const decision = decidePublish(people, policy);
+  const publishedIds = new Set(certificates.filter((c) => c.published).map((c) => c.id));
+  const nameOf = (studentId: string) => {
+    const first = byStudent.get(studentId)?.[0];
+    return first?.student.nameEn ?? first?.student.nameTh ?? "ไม่ระบุชื่อ";
+  };
+
+  return {
+    policy,
+    needsDecision: needsPolicyDecision(people),
+    publishedCount: publishedIds.size,
+    held: decision.heldStudents.map((h) => ({
+      name: nameOf(h.studentId),
+      certNo: byStudent.get(h.studentId)?.[0]?.certNo ?? null,
+      reason: h.reason,
+    })),
+    multiAward: people
+      .filter(
+        (p) =>
+          p.certificates.some((c) => c.award === PERFECT_SCORE) &&
+          p.certificates.some((c) => c.award !== PERFECT_SCORE),
+      )
+      .map((p) => ({ name: nameOf(p.studentId), awards: p.certificates.map((c) => c.award) })),
+    // ข้อมูลครบแล้วแต่ยังไม่ถูกเผยแพร่ — เกิดหลังเติมไฟล์ที่ตกหล่นเข้ารอบที่เผยแพร่ไปแล้ว
+    readyToPublish: decision.publish.filter((certId) => !publishedIds.has(certId)).length,
+  };
 }
