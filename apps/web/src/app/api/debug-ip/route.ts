@@ -1,0 +1,56 @@
+/**
+ * ⚠️ endpoint ชั่วคราวสำหรับวินิจฉัยเท่านั้น — ลบทิ้งทันทีที่ได้คำตอบ
+ *
+ * มีไว้ดูว่า header เกี่ยวกับ IP ที่วิ่งมาถึงแอปบน Railway หน้าตาเป็นยังไงจริง ๆ
+ * เพราะการจำกัดจำนวนครั้งต่อ IP พึ่งค่านี้ และรอบที่แล้วเดาเอาแล้วผิด
+ * (เดาว่า proxy ต่อท้าย IP จริงลงใน x-forwarded-for ซึ่งไม่เป็นอย่างนั้น)
+ *
+ * อ่านอย่างเดียว ไม่แตะฐานข้อมูลและไม่แตะไฟล์ใด ๆ
+ * ต้องเข้าสู่ระบบแอดมินก่อนถึงจะเรียกได้ เพราะค่าที่คืนออกมาเป็นข้อมูลโครงสร้างภายใน
+ */
+import { headers } from "next/headers";
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+
+/** ไอดีสุ่มตอน process เริ่มทำงาน — เปิดหน้านี้ซ้ำหลายครั้งแล้วนับว่าได้กี่ค่า
+ *  จะรู้ว่า Railway รันอยู่กี่ instance ซึ่งมีผลกับตัวนับที่เก็บใน memory */
+const PROCESS_ID = Math.random().toString(36).slice(2, 10);
+
+const IP_HEADERS = [
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+  "x-envoy-external-address",
+  "x-envoy-internal",
+  "cf-connecting-ip",
+  "true-client-ip",
+  "x-client-ip",
+  "forwarded",
+  "x-railway-edge",
+  "x-railway-request-id",
+  "x-request-start",
+];
+
+export async function GET() {
+  try {
+    await requireAdmin();
+  } catch (response) {
+    return response as Response;
+  }
+
+  const h = await headers();
+  const seen: Record<string, string> = {};
+  for (const name of IP_HEADERS) {
+    const value = h.get(name);
+    if (value !== null) seen[name] = value;
+  }
+
+  return NextResponse.json({
+    processId: PROCESS_ID,
+    seen,
+    allHeaderNames: [...h.keys()].sort(),
+  });
+}
