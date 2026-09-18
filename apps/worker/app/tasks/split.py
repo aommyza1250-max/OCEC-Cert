@@ -13,6 +13,10 @@
   append   เติมไฟล์ที่ตกหล่นเข้ารอบเดิม หน้าที่มีอยู่แล้วไม่ถูกแตะ
            หน้าที่ซ้ำกับที่นำเข้าไปแล้วจะถูกข้าม โดยดูจาก (เลขผู้เข้าสอบ + รางวัล)
 
+โหมด append รับ PDF ทีละใบได้ด้วย (payload มี pdfKey) — ใช้กับบล็อกรายคนบนหน้าแอดมิน
+ไฟล์ที่โยนเข้ามาเป็นเล่มรวมหลายหน้าได้ แต่จะถูกคัดเหลือ **หน้าของคนนั้นหน้าเดียว**
+ก่อนเข้าทางเดินปกติ ดูเหตุผลที่ _prepare_single_pdf
+
 ทำไมต้องดูทั้งเลขและรางวัลคู่กัน: คนเดียวได้หลายใบคนละรางวัลเป็นเรื่องปกติ
 ของจริงเคยเจอว่าต้นทางส่งใบ Perfect Score มาให้ แต่ใบ Gold ของคนเดียวกันหายไป
 พอทวงแล้วได้ใบ Gold ตามมา ถ้าตรวจซ้ำด้วยเลขอย่างเดียว ใบ Gold จะถูกมองว่าซ้ำแล้วโดนทิ้ง
@@ -76,9 +80,10 @@ def run_split(
 
     # ดาวน์โหลดลงดิสก์ ไม่ใช่หน่วยความจำ — ZIP จริงขนาดหลายร้อย MB
     with tempfile.TemporaryDirectory() as workdir:
+        single: dict[str, Any] = {}
         if pdf_key:
             # เติมไฟล์ของคนที่ตกหล่นทีละใบ — แอดมินโยน PDF เข้ามาตรง ๆ ไม่ต้องอัด ZIP
-            source_path, bundles = _prepare_single_pdf(workdir, pdf_key, payload)
+            source_path, bundles, single = _prepare_single_pdf(workdir, pdf_key, payload)
         else:
             source_path = os.path.join(workdir, "bundle.zip")
             download_to_file(zip_key, source_path)
@@ -91,72 +96,156 @@ def run_split(
             _clear_previous_pages(batch_id)
 
         existing = _existing_state(batch_id)
-        return _process(
+        stats = _process(
             batch_id, source_path, bundles, program_code, exam_round, exam_year,
             filter_nationality, append, existing, cfg, on_progress,
             prefer_page_award=bool(pdf_key),
         )
+        if single:
+            # เรื่องของงานชิ้นนี้เท่านั้น — runner ไม่เอาไปรวมกับสถิติของรอบนำเข้า
+            stats["singlePdf"] = single
+        return stats
 
 
 def _prepare_single_pdf(
     workdir: str, pdf_key: str, payload: dict[str, Any]
-) -> tuple[str, list[Bundle]]:
-    """เตรียมไฟล์ PDF ใบเดียวที่แอดมินโยนเข้ามาให้คนที่ตกหล่น
+) -> tuple[str, list[Bundle], dict[str, Any]]:
+    """เตรียมไฟล์ PDF ที่แอดมินโยนเข้ามาให้คนที่ตกหล่น
 
-    ตรวจ **ก่อน** ลงมือประมวลผล ว่าไฟล์นี้เป็นของคนที่ควรจะเป็นจริง
+    ตรวจ **ก่อน** ลงมือประมวลผล ว่าไฟล์นี้มีหน้าของคนที่ควรจะเป็นจริง
     ถ้าหยิบไฟล์ผิดคนแล้วปล่อยผ่าน เกียรติบัตรจะไปโผล่ในชื่อผิดคนบนหน้าเว็บ
     ตรวจก่อนจึงไม่ทิ้งไฟล์ขยะไว้บน R2 และไม่ต้องย้อนลบอะไร
+
+    ของจริงต้นทางมักส่งไฟล์รวมเล่มกลับมา ไม่ได้แยกหน้าให้
+    จึงต้อง **คัดเฉพาะหน้าของคนนี้ออกมาหน้าเดียว** แล้วประมวลผลแค่หน้านั้น
+    ถ้าปล่อยทั้งเล่มเข้าไป ระบบจะไล่อ่านใหม่ทุกหน้าเหมือนนำเข้าทั้งรอบ
+    (ดูเหมือนระบบทำงานผิด) และหน้าของคนอื่นที่ยังไม่มีในรอบจะถูกเติมเข้าไปด้วย
+    โดยรางวัลของหน้าเหล่านั้นจะถูกเดาจากรางวัลที่คาดไว้ของ "คนนี้" ซึ่งอาจผิด
     """
     pdf_path = os.path.join(workdir, "single.pdf")
     download_to_file(pdf_key, pdf_path)
 
+    award = normalize_award(payload.get("expectedAward") or "") or "GOLD"
     expect_cert_no = str(payload.get("expectCertNo") or "").strip()
+
+    source = pdf_path
+    note: dict[str, Any] = {}
     if expect_cert_no:
-        _verify_belongs_to(pdf_path, expect_cert_no, str(payload.get("expectName") or ""))
+        picked = os.path.join(workdir, "picked.pdf")
+        note = _pick_own_page(
+            pdf_path, picked, expect_cert_no, str(payload.get("expectName") or ""), award
+        )
+        source = picked
 
     # ห่อเป็น ZIP ที่มีโฟลเดอร์รางวัลเดียว เพื่อให้ทางเดินหลังจากนี้เหมือนกับการอัป ZIP ทุกอย่าง
     # ไม่ต้องมีโค้ดสองทางให้ดูแล และได้ตรรกะข้ามของซ้ำกับการตั้งชื่อไฟล์เหมือนกันฟรี ๆ
-    award = normalize_award(payload.get("expectedAward") or "") or "GOLD"
     name = os.path.basename(pdf_key)
     zip_path = os.path.join(workdir, "single.zip")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(pdf_path, f"{award}/{name}")
+        zf.write(source, f"{award}/{name}")
 
-    return zip_path, read_award_bundles(zip_path)
+    return zip_path, read_award_bundles(zip_path), note
 
 
-def _verify_belongs_to(pdf_path: str, expect_cert_no: str, expect_name: str = "") -> None:
-    """ตรวจว่าไฟล์นี้เป็นของผู้เข้าสอบคนที่ควรจะเป็นจริง
+# จำนวนหน้าที่ยกตัวอย่างในข้อความผิดพลาด — ไฟล์รวมเล่มมีหลายร้อยหน้า ไล่ทั้งหมดอ่านไม่รู้เรื่อง
+MAX_LISTED_PAGES = 5
+
+
+def _pick_own_page(
+    pdf_path: str, dest: str, expect_cert_no: str, expect_name: str = "", expected_award: str = ""
+) -> dict[str, Any]:
+    """คัดหน้าของผู้เข้าสอบเลข expect_cert_no ออกมาเก็บไว้ที่ dest เป็นไฟล์หน้าเดียว
 
     เทียบด้วย **เลขบนหน้ากระดาษ** เพราะนั่นคือสิ่งที่ผู้ปกครองถืออยู่ในมือ
     ชื่ออย่างเดียวไม่พอ คนชื่อพ้องกันมีจริง
+
+    คืนหมายเหตุไว้รายงานให้แอดมินรู้ว่าใช้หน้าไหนของไฟล์ที่อัปมา
+    """
+    with pymupdf.open(pdf_path) as doc:
+        pages = [(i, read_lines(page_lines(page_text(doc[i])))) for i in range(doc.page_count)]
+        mine = [(i, info) for i, info in pages if info.cert_no == expect_cert_no]
+
+        if not mine:
+            raise _wrong_person_error(pages, expect_cert_no, expect_name)
+        if len(mine) > 1:
+            mine = _narrow_by_award(mine, expected_award) or mine
+        if len(mine) > 1:
+            # เลขเดียวกันหลายหน้าและแยกด้วยรางวัลไม่ได้ — เดาว่าหน้าไหนใช่ ไม่ได้
+            awards = ", ".join(info.award_on_page or "ไม่มีข้อความรางวัล" for _, info in mine)
+            raise ValueError(
+                f"ไฟล์นี้มีหน้าของเลข {expect_cert_no} อยู่ {len(mine)} หน้า ({awards}) "
+                "ระบบแยกไม่ออกว่าหน้าไหนคือใบที่ขาด "
+                "กรุณาแยกใบที่ขาดออกมาเป็นไฟล์ PDF หน้าเดียวแล้วอัปเข้ามาอีกครั้ง"
+            )
+
+        index, info = mine[0]
+        with pymupdf.open() as out:
+            out.insert_pdf(doc, from_page=index, to_page=index)
+            out.save(dest, garbage=3, deflate=True)
+        total = len(pages)
+
+    note: dict[str, Any] = {"sourcePages": total, "usedPage": index + 1}
+    if total > 1:
+        note["note"] = (
+            f"ไฟล์ที่อัปมามี {total} หน้า ระบบใช้เฉพาะหน้าที่ {index + 1} "
+            f"ซึ่งเป็นของเลข {expect_cert_no} — หน้าอื่นไม่ถูกนำเข้า"
+        )
+    log.info("เติมไฟล์ทีละใบ: เลข %s ใช้หน้าที่ %s จาก %s หน้า", expect_cert_no, index + 1, total)
+    return note
+
+
+def _narrow_by_award(
+    candidates: list[tuple[int, PageInfo]], expected_award: str
+) -> list[tuple[int, PageInfo]]:
+    """คัดจากรางวัลที่พิมพ์บนหน้า เมื่อเลขเดียวกันมีหลายหน้า (คนเดียวได้หลายใบ)
+
+    คืนลิสต์ว่างเมื่อชี้ชัดไม่ได้ ให้ผู้เรียกไปบอกแอดมินแยกไฟล์มา ดีกว่าเดา
+    """
+    if not expected_award:
+        return []
+    if expected_award == "PERFECT_SCORE":
+        # หน้า Perfect Score ของจริงไม่มีข้อความรางวัลพิมพ์อยู่เลย
+        matched = [c for c in candidates if not c[1].award_on_page]
+    else:
+        matched = [
+            c
+            for c in candidates
+            if c[1].award_on_page and normalize_award(c[1].award_on_page) == expected_award
+        ]
+    return matched if len(matched) == 1 else []
+
+
+def _wrong_person_error(
+    pages: list[tuple[int, PageInfo]], expect_cert_no: str, expect_name: str
+) -> ValueError:
+    """ข้อความเมื่อไฟล์ไม่มีหน้าของคนที่ควรจะเป็น
 
     กรณีที่เจอบ่อย: แอดมินแก้ไฟล์เองโดยเปลี่ยนแค่ชื่อ ลืมแก้เลข
     ข้อความจึงต้องบอกให้ชัดว่าต้องแก้อะไร ไม่ใช่แค่บอกว่า "ไม่ตรง"
     """
     expect_normalized = normalize_name(expect_name)
-    found: list[str] = []
-    name_matched: list[str] = []
-
-    with pymupdf.open(pdf_path) as doc:
-        for index in range(doc.page_count):
-            info = read_lines(page_lines(page_text(doc[index])))
-            if info.cert_no == expect_cert_no:
-                return
-            found.append(f"{info.cert_no or 'อ่านเลขไม่ได้'} ({info.name or 'อ่านชื่อไม่ได้'})")
-            if expect_normalized and normalize_name(info.name or "") == expect_normalized:
-                name_matched.append(info.cert_no or "อ่านเลขไม่ได้")
-
+    name_matched = [
+        info.cert_no or "อ่านเลขไม่ได้"
+        for _, info in pages
+        if expect_normalized and normalize_name(info.name or "") == expect_normalized
+    ]
     if name_matched:
-        raise ValueError(
+        return ValueError(
             f"ชื่อบนเกียรติบัตรตรงกับ {expect_name} แล้ว "
             f"แต่เลขบนหน้าเป็น {name_matched[0]} ซึ่งเป็นของคนอื่น "
             f"ต้องเป็น {expect_cert_no} — ถ้าแก้ไฟล์เอง อย่าลืมแก้บรรทัด Cert No ด้วย"
         )
 
-    raise ValueError(
+    listed = [
+        f"{info.cert_no or 'อ่านเลขไม่ได้'} ({info.name or 'อ่านชื่อไม่ได้'})"
+        for _, info in pages[:MAX_LISTED_PAGES]
+    ]
+    summary = ", ".join(listed) or "(ไม่มีหน้าเลย)"
+    if len(pages) > len(listed):
+        summary += f" และอีก {len(pages) - len(listed)} หน้า"
+    return ValueError(
         f"ไฟล์นี้ไม่มีหน้าของผู้เข้าสอบเลข {expect_cert_no} "
-        f"— ในไฟล์พบ: {', '.join(found) or '(ไม่มีหน้าเลย)'} "
+        f"— ในไฟล์พบ: {summary} "
         "กรุณาตรวจว่าหยิบไฟล์ถูกคนหรือไม่"
     )
 

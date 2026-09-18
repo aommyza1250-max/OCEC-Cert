@@ -20,6 +20,9 @@ export function MissingList({ batchId, items }: { batchId: string; items: Missin
       <p className="mb-4 text-sm text-gray-500">
         ขอไฟล์จากต้นทางแล้วโยนเข้ามาในบล็อกของคนนั้นได้เลย ระบบจะตั้งชื่อไฟล์
         สร้างรูปตัวอย่าง และจับคู่ให้เอง
+        <br />
+        ต้นทางส่งมาเป็นไฟล์รวมหลายหน้าก็โยนเข้ามาได้ ระบบจะคัดเฉพาะหน้าของคนนี้ออกมาใบเดียว
+        หน้าของคนอื่นในไฟล์จะไม่ถูกนำเข้า
       </p>
 
       <div className="space-y-3">
@@ -37,9 +40,11 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
   const [progress, setProgress] = useState<number | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   async function handleFile(file: File) {
     setError(null);
+    setNote(null);
     setProgress(0);
 
     try {
@@ -69,7 +74,11 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
       setWorking(false);
 
       if (result.error) setError(result.error);
-      else router.refresh();
+      else {
+        // บอกว่าใช้หน้าไหนของไฟล์ที่อัปมา เมื่อไฟล์นั้นมีหลายหน้า
+        setNote(result.note);
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ");
       setProgress(null);
@@ -128,12 +137,18 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
           ไม่รับไฟล์นี้ — {error ?? item.lastError}
         </p>
       )}
+
+      {note && (
+        <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{note}</p>
+      )}
     </article>
   );
 }
 
-/** รอจนกว่างานเบื้องหลังจะจบ แล้วคืนข้อความผิดพลาด (ถ้ามี) */
-async function waitForJob(jobId: string, timeoutMs = 180_000): Promise<{ error: string | null }> {
+type JobResult = { error: string | null; note: string | null };
+
+/** รอจนกว่างานเบื้องหลังจะจบ แล้วคืนข้อความผิดพลาด (ถ้ามี) พร้อมหมายเหตุของงาน */
+async function waitForJob(jobId: string, timeoutMs = 180_000): Promise<JobResult> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -142,12 +157,18 @@ async function waitForJob(jobId: string, timeoutMs = 180_000): Promise<{ error: 
     if (!res.ok) continue;
 
     const job = await res.json();
-    if (job.status === "DONE") return { error: null };
+    if (job.status === "DONE") return { error: null, note: readNote(job.progress) };
     if (job.status === "FAILED") {
-      return { error: job.error ?? "ประมวลผลไม่สำเร็จ" };
+      return { error: job.error ?? "ประมวลผลไม่สำเร็จ", note: null };
     }
   }
-  return { error: "ใช้เวลานานผิดปกติ ลองรีเฟรชหน้าเพื่อดูผลอีกครั้ง" };
+  return { error: "ใช้เวลานานผิดปกติ ลองรีเฟรชหน้าเพื่อดูผลอีกครั้ง", note: null };
+}
+
+/** หมายเหตุที่ worker ฝากไว้ว่าใช้หน้าไหนของไฟล์ที่อัปมา — มีเฉพาะเมื่อไฟล์นั้นหลายหน้า */
+function readNote(progress: unknown): string | null {
+  const note = (progress as { singlePdf?: { note?: unknown } })?.singlePdf?.note;
+  return typeof note === "string" ? note : null;
 }
 
 function putWithProgress(
