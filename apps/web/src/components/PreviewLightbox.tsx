@@ -53,7 +53,7 @@ export function PreviewLightbox({ src, alt }: { src: string; alt: string }) {
         />
         <span
           className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5
-                     bg-brand-dark/80 py-1.5 text-sm font-medium text-white"
+                     bg-brand-dark/80 py-1 text-xs font-medium text-white sm:py-1.5 sm:text-sm"
         >
           <ZoomIcon className="h-4 w-4" />
           แตะเพื่อดูภาพใหญ่

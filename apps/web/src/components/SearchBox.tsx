@@ -41,16 +41,15 @@ export function SearchBox({ defaultValue = "" }: { defaultValue?: string }) {
 
   return (
     <form action="/" method="get" onSubmit={submit} className="w-full">
-      <label htmlFor="q" className="block text-lg font-semibold text-ink">
+      <label htmlFor="q" className="block font-semibold text-ink sm:text-lg">
         พิมพ์ชื่อผู้เข้าสอบเป็นภาษาอังกฤษ
       </label>
-      <p id="q-help" className="mt-1 text-base text-ink-soft">
-        ชื่อบนเกียรติบัตรเป็นภาษาอังกฤษทั้งหมด ไม่ต้องใส่คำนำหน้า เช่น{" "}
-        <span className="font-medium text-ink">SOMCHAI JAIDEE</span> หรือพิมพ์แค่{" "}
+      <p id="q-help" className="mt-0.5 text-sm text-ink-soft sm:mt-1 sm:text-base">
+        เช่น <span className="font-medium text-ink">SOMCHAI JAIDEE</span> หรือพิมพ์แค่{" "}
         <span className="font-medium text-ink">SOMCHAI</span> ก็ได้
       </p>
 
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-2.5 flex flex-col gap-2.5 sm:mt-3 sm:flex-row sm:gap-3">
         <input
           id="q"
           type="search"
@@ -65,16 +64,16 @@ export function SearchBox({ defaultValue = "" }: { defaultValue?: string }) {
           aria-describedby="q-help"
           aria-invalid={hasThai || (showHint && tooShort) ? true : undefined}
           // ไม่ใส่ autoFocus บนมือถือ คีย์บอร์ดจะเด้งขึ้นมาบังหน้าจอทันที
-          className="min-h-14 w-full rounded-xl border-2 border-hairline bg-card px-4 text-lg
+          className="min-h-13 w-full rounded-xl border-2 border-hairline bg-card px-4 text-lg
                      shadow-sm transition placeholder:text-ink-soft
-                     focus:border-brand focus:shadow-md"
+                     focus:border-brand focus:shadow-md sm:min-h-14"
           placeholder="ชื่อ นามสกุล"
         />
         <button
           type="submit"
           disabled={pending}
-          className="flex min-h-14 shrink-0 cursor-pointer items-center justify-center gap-2
-                     rounded-xl bg-brand px-8 text-lg font-semibold text-white shadow-sm
+          className="flex min-h-13 shrink-0 cursor-pointer items-center justify-center gap-2
+                     rounded-xl bg-brand px-8 text-lg font-semibold text-white shadow-sm sm:min-h-14
                      transition duration-200 hover:bg-brand-dark active:scale-[0.99]
                      disabled:cursor-wait disabled:opacity-80"
         >
@@ -84,13 +83,13 @@ export function SearchBox({ defaultValue = "" }: { defaultValue?: string }) {
       </div>
 
       {hasThai ? (
-        <p className="mt-2 text-base font-medium text-flag-red">
-          ระบบค้นจากชื่อภาษาอังกฤษเท่านั้น กรุณาพิมพ์ชื่อเป็นภาษาอังกฤษ
+        <p className="mt-2 text-sm font-medium text-flag-red sm:text-base">
+          ค้นได้เฉพาะชื่อภาษาอังกฤษ กรุณาพิมพ์เป็นภาษาอังกฤษ
         </p>
       ) : (
         showHint &&
         tooShort && (
-          <p className="mt-2 text-base font-medium text-flag-red">
+          <p className="mt-2 text-sm font-medium text-flag-red sm:text-base">
             กรุณาพิมพ์อย่างน้อย {MIN_QUERY_LENGTH} ตัวอักษร
           </p>
         )

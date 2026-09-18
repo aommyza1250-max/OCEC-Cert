@@ -39,18 +39,17 @@ export default async function HomePage({
           กด Tab ครั้งเดียวก็ถึงช่องค้นหาแล้ว ลิงก์นั้นจึงมีแต่จะโผล่มากวนสายตา */}
       <SiteHeader />
 
-      <main id="main" className="mx-auto w-full max-w-5xl px-4 pb-16">
-        <section className="mx-auto max-w-2xl pt-8 sm:pt-12">
+      <main id="main" className="mx-auto w-full max-w-5xl px-3 pb-12 sm:px-4 sm:pb-16">
+        <section className="mx-auto max-w-2xl pt-6 sm:pt-12">
           {/* ไม่ต้องอธิบายเยอะ พาดหัวบอกตรง ๆ ว่าหน้านี้ทำอะไรได้ */}
-          <h1 className="text-center text-3xl font-bold leading-snug text-brand sm:text-4xl">
+          <h1 className="text-center text-2xl font-bold leading-snug text-brand sm:text-4xl">
             ค้นหาเกียรติบัตรของลูกคุณ
           </h1>
-          <p className="mx-auto mt-3 max-w-xl text-center text-lg text-ink-soft">
-            พิมพ์ชื่อภาษาอังกฤษแล้วกดค้นหา ระบบจะแสดงเกียรติบัตรทุกใบของคนนั้น ดาวน์โหลดได้ฟรี
-            ไม่ต้องสมัครสมาชิก
+          <p className="mx-auto mt-2 max-w-xl text-center text-ink-soft sm:mt-3 sm:text-lg">
+            ดาวน์โหลดฟรี ไม่ต้องสมัครสมาชิก
           </p>
 
-          <div className="mt-6 rounded-2xl border border-brand-line bg-card p-4 shadow-sm sm:p-6">
+          <div className="mt-4 rounded-2xl border border-brand-line bg-card p-3 shadow-sm sm:mt-6 sm:p-6">
             {/* key ผูกกับคำค้น เพื่อให้ช่องกรอกถูกสร้างใหม่เมื่อคำค้นใน URL เปลี่ยน
                 ไม่งั้นกดโลโก้กลับหน้าแรกแล้วข้อความเดิมจะยังค้างอยู่ในช่อง
                 (React เก็บ state ของ component ไว้ ถ้าไม่ได้ถอดออกจากหน้าจอ) */}
@@ -61,7 +60,7 @@ export default async function HomePage({
         {/* วิธีใช้แสดงเฉพาะตอนยังไม่ได้ค้น พอมีผลลัพธ์แล้วก็ไม่ต้องสอนอีก */}
         {query.length === 0 && <HowToUse />}
 
-        <section className="mt-10">
+        <section className="mt-8 sm:mt-10">
           {/* พิมพ์ไทยมาไม่ต้องขึ้นอะไรตรงนี้ — ช่องค้นหาบอกไปแล้วว่าต้องพิมพ์อังกฤษ
               ขึ้นซ้ำสองที่จะทำให้คนอ่านสองรอบแล้วยังไม่รู้ว่าต้องไปแก้ที่ไหน */}
           {isThai && query.length > 0 ? null : rateLimited ? (
@@ -75,10 +74,10 @@ export default async function HomePage({
           ) : results.length === 0 ? (
             <NoResults query={query} />
           ) : (
-            <div className="space-y-10">
+            <div className="space-y-6 sm:space-y-10">
               {/* บอกจำนวนที่พบผ่าน role=status เพื่อให้ screen reader อ่านเฉพาะบรรทัดนี้
                   ถ้าครอบ aria-live ไว้ทั้งก้อนผลลัพธ์ มันจะไล่อ่านทุกใบตั้งแต่ต้น */}
-              <p role="status" className="text-lg font-medium text-ink-soft">
+              <p role="status" className="font-medium text-ink-soft sm:text-lg">
                 พบ {results.length} ชื่อที่ตรงกับ &ldquo;{query}&rdquo;
               </p>
               {results.map((student) => (
@@ -125,8 +124,10 @@ function SiteHeader() {
             height={110}
             className="h-8 w-auto shrink-0 sm:h-9"
           />
-          <span className="h-8 w-px shrink-0 bg-hairline" aria-hidden="true" />
-          <span className="text-base font-bold leading-tight text-brand sm:text-lg">
+          {/* มือถือเหลือแค่โลโก้ ชื่อระบบซ้ำกับพาดหัวที่อยู่ถัดลงมาไม่กี่บรรทัด
+              จอแคบทุกบรรทัดมีค่า ตัดสิ่งที่พูดซ้ำออกก่อน */}
+          <span className="hidden h-8 w-px shrink-0 bg-hairline sm:block" aria-hidden="true" />
+          <span className="hidden font-bold leading-tight text-brand sm:block sm:text-lg">
             ระบบเกียรติบัตรออนไลน์
           </span>
         </Link>
@@ -137,31 +138,39 @@ function SiteHeader() {
 
 function HowToUse() {
   const steps = [
-    { n: 1, title: "พิมพ์ชื่อ", detail: "ชื่อ-นามสกุลภาษาอังกฤษ ตามที่พิมพ์บนเกียรติบัตร" },
-    { n: 2, title: "กดค้นหา", detail: "ระบบจะแสดงเกียรติบัตรทุกใบของคนนั้น" },
-    { n: 3, title: "กดบันทึกไฟล์", detail: "ได้ไฟล์ PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง" },
+    { n: 1, title: "พิมพ์ชื่อภาษาอังกฤษ", detail: "ตามที่พิมพ์บนเกียรติบัตร" },
+    { n: 2, title: "กดค้นหา", detail: "ขึ้นเกียรติบัตรทุกใบของคนนั้น" },
+    { n: 3, title: "กดบันทึกไฟล์", detail: "ได้ไฟล์ PDF สั่งพิมพ์ได้" },
   ];
 
   return (
-    <section className="mt-10" aria-labelledby="how-to-use">
-      <h2 id="how-to-use" className="text-center text-xl font-bold text-ink">
+    <section className="mt-8 sm:mt-10" aria-labelledby="how-to-use">
+      <h2 id="how-to-use" className="text-center font-bold text-ink sm:text-xl">
         ใช้งาน 3 ขั้นตอน
       </h2>
-      <ol className="mt-5 grid gap-4 sm:grid-cols-3">
+      {/* มือถือเรียงเป็นแถวเตี้ย ๆ เลข-หัวข้อ-คำอธิบายอยู่บรรทัดเดียวกัน
+          ถ้าใช้การ์ดสูงสามใบเหมือนจอใหญ่ จะดันช่องค้นหาและผลลัพธ์หลุดจอไปไกล */}
+      <ol className="mt-3 space-y-2 sm:mt-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:space-y-0">
         {steps.map((step) => (
           <li
             key={step.n}
-            className="rounded-2xl border border-hairline bg-card p-5 text-center shadow-sm"
+            className="flex items-center gap-3 rounded-xl border border-hairline bg-card
+                       px-3 py-2.5 shadow-sm sm:flex-col sm:gap-0 sm:rounded-2xl sm:p-5 sm:text-center"
           >
             <span
-              className="mx-auto flex h-12 w-12 items-center justify-center rounded-full
-                         bg-brand-soft text-xl font-bold text-brand"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full
+                         bg-brand-soft font-bold text-brand sm:h-12 sm:w-12 sm:text-xl"
               aria-hidden="true"
             >
               {step.n}
             </span>
-            <p className="mt-3 text-lg font-semibold text-ink">{step.title}</p>
-            <p className="mt-1 text-base text-ink-soft">{step.detail}</p>
+            <span className="min-w-0 sm:mt-3">
+              <span className="font-semibold text-ink sm:block sm:text-lg">{step.title}</span>
+              <span className="text-sm text-ink-soft sm:mt-1 sm:block sm:text-base">
+                <span className="sm:hidden"> · </span>
+                {step.detail}
+              </span>
+            </span>
           </li>
         ))}
       </ol>
@@ -187,21 +196,21 @@ function StudentBlock({ student }: { student: SearchResult }) {
     <article className="overflow-hidden rounded-2xl border border-hairline bg-card shadow-sm">
       {/* หัวการ์ดเป็นพื้นน้ำเงินอ่อน ทำให้เห็นชัดว่าของแต่ละคนเริ่มและจบตรงไหน
           ตอนค้นชื่อที่มีหลายคน ถ้าไม่มีเส้นแบ่งชัด ๆ จะอ่านปนกัน */}
-      <div className="border-b border-brand-line bg-brand-soft px-4 py-4 sm:px-6">
-        <div className="flex items-start gap-3">
-          <PersonIcon className="mt-1 h-6 w-6 shrink-0 text-brand" />
+      <div className="border-b border-brand-line bg-brand-soft px-3 py-3 sm:px-6 sm:py-4">
+        <div className="flex items-start gap-2.5 sm:gap-3">
+          <PersonIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand sm:mt-1 sm:h-6 sm:w-6" />
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold leading-snug text-ink">{displayName}</h2>
+            <h2 className="text-xl font-bold leading-snug text-ink sm:text-2xl">{displayName}</h2>
             {detail && (
-              <p className="mt-1 flex items-center gap-1.5 text-base font-medium text-ink">
-                <SchoolIcon className="h-5 w-5 shrink-0 text-ink-soft" />
+              <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-ink sm:mt-1 sm:text-base">
+                <SchoolIcon className="h-4 w-4 shrink-0 text-ink-soft sm:h-5 sm:w-5" />
                 {detail}
               </p>
             )}
             {/* แยกจำนวนตามรายการสอบ ไม่บอกแค่ยอดรวม
                 ผู้ปกครองรู้อยู่แล้วว่าลูกสอบอะไรไปบ้าง ตัวเลขนี้จึงใช้เช็กได้ทันทีว่าครบไหม
                 เรียงลำดับเดียวกับหัวข้อด้านล่าง เพื่อให้กวาดตาหาต่อได้เลย */}
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-base text-ink-soft">
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-soft sm:mt-1.5 sm:text-base">
               {counts.map((c, i) => (
                 <span key={c.code}>
                   {i > 0 && <span className="mr-2 text-hairline">·</span>}
@@ -217,11 +226,13 @@ function StudentBlock({ student }: { student: SearchResult }) {
           เพราะผู้ปกครองมักนึกถึง "HKIMO ของลูก" ก่อน แล้วจึงค่อยเลือกปี */}
       <div className="divide-y divide-hairline">
         {student.programs.map((program) => (
-          <section key={program.code} className="px-4 py-5 sm:px-6">
-            <h3 className="text-xl font-bold text-brand">
-              {program.name}
-              <span className="ml-2 align-middle text-base font-medium text-ink-soft">
-                {program.code}
+          <section key={program.code} className="px-3 py-4 sm:px-6 sm:py-5">
+            {/* รหัสขึ้นก่อนเพราะสั้นและเป็นสิ่งที่ผู้ปกครองเรียกกันจริง
+                ชื่อเต็มภาษาอังกฤษยาวมาก บนจอแคบจะกินสามบรรทัด จึงลดขนาดและวางไว้ใต้รหัส */}
+            <h3 className="text-lg font-bold text-brand sm:text-xl">
+              {program.code}
+              <span className="ml-2 align-middle text-xs font-medium text-ink-soft sm:text-base">
+                {program.name}
               </span>
             </h3>
 
@@ -229,13 +240,13 @@ function StudentBlock({ student }: { student: SearchResult }) {
                 คนหนึ่งมีไม่กี่ใบต่อรอบ ถ้าเพิ่มชั้นหัวข้อจะกลายเป็นหัวข้อที่มีของอยู่ใบเดียว
                 แต่ต้องเขียนรอบให้เห็นชัด เพราะใบรอบคัดเลือกกับรอบชิงชนะเลิศของปีเดียวกัน
                 หน้าตาเกือบเหมือนกัน ถ้าไม่บอกให้ชัด ผู้ปกครองจะกดผิดใบ */}
-            <div className="mt-4 space-y-6">
+            <div className="mt-3 space-y-5 sm:mt-4 sm:space-y-6">
               {program.sessions.map((session) => (
                 <div key={`${session.year}-${session.round}`}>
-                  <h4 className="mb-3 inline-block rounded-lg bg-gold-bg px-3 py-1 text-base font-bold text-gold-ink">
+                  <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
                     ปี {session.year} · {ROUND_LABELS[session.round] ?? session.round}
                   </h4>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                     {session.certificates.map((cert) => (
                       <CertificateCard
                         key={cert.id}
@@ -263,11 +274,13 @@ function NoResults({ query }: { query: string }) {
   const canTryFirstWord = firstWord.length >= MIN_QUERY_LENGTH && firstWord !== query;
 
   return (
-    <div className="rounded-2xl border border-hairline bg-card p-6 sm:p-8">
-      <h2 className="text-xl font-bold text-ink">ไม่พบเกียรติบัตรของ &ldquo;{query}&rdquo;</h2>
-      <p className="mt-2 text-lg text-ink-soft">ลองวิธีเหล่านี้ทีละข้อ</p>
+    <div className="rounded-2xl border border-hairline bg-card p-4 sm:p-8">
+      <h2 className="text-lg font-bold text-ink sm:text-xl">
+        ไม่พบเกียรติบัตรของ &ldquo;{query}&rdquo;
+      </h2>
+      <p className="mt-1 text-ink-soft sm:mt-2 sm:text-lg">ลองวิธีเหล่านี้ทีละข้อ</p>
 
-      <ol className="mt-4 space-y-3 text-lg">
+      <ol className="mt-3 space-y-2.5 sm:mt-4 sm:space-y-3 sm:text-lg">
         <li className="flex gap-3">
           <Step n={1} />
           <span>พิมพ์เฉพาะชื่อต้น ไม่ต้องใส่นามสกุล</span>
@@ -278,26 +291,26 @@ function NoResults({ query }: { query: string }) {
         </li>
         <li className="flex gap-3">
           <Step n={3} />
-          <span>ตรวจตัวสะกดให้ตรงกับที่พิมพ์บนเกียรติบัตร บางชื่อสะกดต่างจากที่เราคุ้น</span>
+          <span>ตรวจตัวสะกดให้ตรงกับบนเกียรติบัตร บางชื่อสะกดต่างจากที่เราคุ้น</span>
         </li>
       </ol>
 
       {canTryFirstWord && (
         <Link
           href={`/?q=${encodeURIComponent(firstWord)}`}
-          className="mt-5 inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-xl
-                     bg-brand px-6 text-lg font-semibold text-white
-                     transition duration-200 hover:bg-brand-dark"
+          className="mt-4 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2
+                     rounded-xl bg-brand px-6 font-semibold text-white transition duration-200
+                     hover:bg-brand-dark sm:mt-5 sm:w-auto sm:text-lg"
         >
           <SearchIcon />
           ค้นหาด้วยคำว่า &ldquo;{firstWord}&rdquo;
         </Link>
       )}
 
-      <p className="mt-6 flex items-start gap-2 border-t border-hairline pt-4 text-base text-ink-soft">
+      <p className="mt-5 flex items-start gap-2 border-t border-hairline pt-4 text-sm text-ink-soft sm:mt-6 sm:text-base">
         <InfoIcon className="mt-0.5 h-5 w-5 shrink-0" />
-        ถ้าลองครบแล้วยังไม่พบ อาจเป็นเพราะเจ้าหน้าที่ยังไม่ได้นำเกียรติบัตรรอบนั้นเข้าระบบ
-        กรุณาสอบถามที่ผู้ประสานงานสนามสอบของคุณ
+        ถ้ายังไม่พบ อาจเป็นเพราะยังไม่ได้นำเกียรติบัตรรอบนั้นเข้าระบบ
+        กรุณาสอบถามผู้ประสานงานสนามสอบ
       </p>
     </div>
   );
@@ -320,7 +333,7 @@ function Step({ n }: { n: number }) {
  *  ที่ยังเหลือเป็นหน้าที่ของผู้ปกครองคือเลือกว่าคนไหนคือลูกตัวเอง */
 function SameNameHint() {
   return (
-    <p className="flex items-start gap-2 rounded-xl bg-gold-bg px-4 py-3 text-base text-gold-ink">
+    <p className="flex items-start gap-2 rounded-xl bg-gold-bg px-3 py-2.5 text-sm text-gold-ink sm:px-4 sm:py-3 sm:text-base">
       <InfoIcon className="mt-0.5 h-5 w-5 shrink-0" />
       มีผู้เข้าสอบชื่อคล้ายกันหลายคน เลือกให้ตรงกับลูกคุณก่อนบันทึกไฟล์
     </p>
@@ -341,9 +354,9 @@ function Notice({
       ? "border-gold-line bg-gold-bg text-gold-ink"
       : "border-brand-line bg-brand-soft text-ink";
   return (
-    <div className={`rounded-2xl border px-5 py-6 text-center ${styles}`}>
-      <p className="text-xl font-bold">{title}</p>
-      <p className="mt-1 text-lg">{children}</p>
+    <div className={`rounded-2xl border px-4 py-5 text-center sm:px-5 sm:py-6 ${styles}`}>
+      <p className="font-bold sm:text-xl">{title}</p>
+      <p className="mt-1 text-sm sm:text-lg">{children}</p>
     </div>
   );
 }
@@ -351,11 +364,9 @@ function Notice({
 function SiteFooter() {
   return (
     <footer className="border-t border-hairline bg-card">
-      <div className="mx-auto max-w-5xl px-4 py-6 text-base text-ink-soft">
-        <p>ระบบเกียรติบัตรออนไลน์ · ไฟล์ที่ได้เป็น PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง</p>
-        <p className="mt-1">
-          หากข้อมูลบนเกียรติบัตรไม่ถูกต้อง กรุณาแจ้งผู้ประสานงานสนามสอบ ไม่ต้องแก้ไฟล์เอง
-        </p>
+      <div className="mx-auto max-w-5xl px-4 py-5 text-sm text-ink-soft sm:py-6 sm:text-base">
+        <p>ไฟล์ที่ได้เป็น PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง</p>
+        <p className="mt-1">ข้อมูลบนเกียรติบัตรไม่ถูกต้อง แจ้งผู้ประสานงานสนามสอบ ไม่ต้องแก้ไฟล์เอง</p>
       </div>
     </footer>
   );

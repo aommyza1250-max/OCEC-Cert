@@ -22,7 +22,7 @@ export function CertificateCard({
   const roundLabel = ROUND_LABELS[cert.round] ?? cert.round;
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-hairline bg-card p-3 shadow-sm">
+    <div className="flex flex-col gap-2.5 rounded-2xl border border-hairline bg-card p-2.5 shadow-sm sm:gap-3 sm:p-3">
       {cert.previewUrl ? (
         <PreviewLightbox
           src={cert.previewUrl}
@@ -36,19 +36,22 @@ export function CertificateCard({
 
       <div className="flex-1 px-1">
         <AwardBadge award={cert.award} />
-        {cert.level && <p className="mt-2 text-base text-ink-soft">{cert.level}</p>}
-        {cert.certNo && (
-          <p className="mt-0.5 text-sm text-ink-soft">เลขที่เกียรติบัตร {cert.certNo}</p>
-        )}
+        {/* ระดับชั้นกับเลขที่ใบอยู่บรรทัดเดียวกันบนมือถือ ลดจำนวนบรรทัดต่อการ์ด
+            เพราะหน้าผลลัพธ์อาจมีหลายใบเรียงกันยาว */}
+        <p className="mt-1.5 text-sm text-ink-soft sm:mt-2 sm:text-base">
+          {cert.level}
+          {cert.level && cert.certNo && <span className="px-1.5">·</span>}
+          {cert.certNo && <span className="whitespace-nowrap">เลขที่ {cert.certNo}</span>}
+        </p>
       </div>
 
       {/* ปุ่มเดียวที่ต้องกด ทำให้ใหญ่และเต็มความกว้างการ์ด
           ลิงก์ตรงไป R2 ผ่าน redirect — ไฟล์ไม่วิ่งผ่านเซิร์ฟเวอร์เว็บ */}
       <a
         href={`/api/certificates/${cert.id}/download`}
-        className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl
-                   bg-brand px-4 text-center text-lg font-semibold text-white
-                   transition duration-200 hover:bg-brand-dark active:scale-[0.99]"
+        className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl
+                   bg-brand px-4 text-center font-semibold text-white transition duration-200
+                   hover:bg-brand-dark active:scale-[0.99] sm:min-h-12 sm:text-lg"
       >
         <DownloadIcon />
         บันทึกไฟล์

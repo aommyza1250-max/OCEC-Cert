@@ -18,8 +18,8 @@ export function AwardBadge({ award, className = "" }: { award: string; className
   const tone = TONES[award] ?? "bg-silver-bg text-silver-ink border-silver-line";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1
-                  text-base font-semibold ${tone} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5
+                  text-sm font-semibold sm:px-3 sm:py-1 sm:text-base ${tone} ${className}`}
     >
       <MedalIcon className="h-4 w-4 shrink-0" />
       {AWARD_LABELS[award] ?? award}
