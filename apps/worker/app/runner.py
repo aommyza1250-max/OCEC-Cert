@@ -103,7 +103,9 @@ def _run_one() -> bool:
         if job_type == "SPLIT":
             set_batch_status(batch_id, "SPLITTING")
             stats = run_split(batch_id, on_progress, job.get("payload") or {})
-            merge_batch_stats(batch_id, stats)
+            # singlePdf เป็นหมายเหตุของงานชิ้นนี้ (ใช้หน้าไหนของไฟล์ที่อัปมา)
+            # ไม่ใช่ยอดของรอบนำเข้า ถ้าเอาไปรวมจะค้างอยู่ในสถิติรอบไปตลอด
+            merge_batch_stats(batch_id, {k: v for k, v in stats.items() if k != "singlePdf"})
             set_batch_status(batch_id, "PUBLISHED" if was_published else "SPLIT_DONE")
             # เติมไฟล์ที่ตกหล่นเข้ารอบที่เคยจับคู่ไปแล้ว ให้จับคู่ต่อให้เลย
             # แอดมินจะได้ไม่ต้องอัป Excel ชุดเดิมซ้ำเพียงเพื่อกดจับคู่ใหม่

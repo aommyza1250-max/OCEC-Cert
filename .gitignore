@@ -8,6 +8,8 @@ venv/
 
 # build output
 .next/
+# โฟลเดอร์ build ชั่วคราวตอนทดสอบขณะ dev server รันอยู่ (NEXT_DIST_DIR)
+.next-verify/
 out/
 dist/
 build/
