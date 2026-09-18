@@ -24,15 +24,21 @@
       ```bash
       curl -s -o /dev/null -w "previews: %{http_code}\n" https://files.example.com/previews/<ไฟล์จริง>.webp
       ```
-- [ ] **ตรวจว่าปลอม IP ข้ามการจำกัดไม่ได้**
+- [ ] **ตรวจว่าปลอม IP ข้ามการจำกัดไม่ได้** (เคยพลาดมาแล้วสองรอบ ห้ามข้ามข้อนี้)
+      ใช้หน้า login เป็นตัววัดเพราะลิมิตต่ำ (10/นาที) เห็นผลเร็ว
       ```bash
-      # ยิง 400 ครั้งด้วย header ปลอม (ลิมิตค้นหา 300/นาที) ต้องมี 429 โผล่มา
-      for i in $(seq 1 400); do
-        curl -s -o /dev/null -w "%{http_code}\n" \
-          -H "x-forwarded-for: 203.0.113.99" "https://<โดเมน>/?q=SOMCHAI"
-      done | sort | uniq -c
+      # ต้องได้ 401 สิบครั้งแล้วตามด้วย 429 — ทดสอบทั้งสองชุด
+      for h in "x-forwarded-for" "x-real-ip"; do
+        echo -n "$h: "
+        for i in $(seq 1 15); do
+          curl -s -o /dev/null -w "%{http_code} " -H "$h: 198.51.100.$i" \
+            -X POST -H "content-type: application/json" -d '{"password":"wrong"}' \
+            "https://<โดเมน>/api/admin/login"
+        done; echo; sleep 61
+      done
       ```
-      ถ้าได้ 200 ครบทั้ง 400 แปลว่าอ่าน IP ผิดฝั่ง ใครก็ดูดรายชื่อได้
+      ได้ 401 ครบ 15 ครั้ง = ยังปลอมได้อยู่ ใครก็ดูดรายชื่อและเดารหัสผ่านได้ไม่จำกัด
+      รายละเอียดและวิธีหาว่าต้องอ่าน header ตัวไหน อยู่ใน `docs/rate-limit-ip.md`
 - [ ] ไม่มีไฟล์ `.env` หรือไฟล์เกียรติบัตรจริงหลุดเข้า git
       ```bash
       git status --short --untracked-files=all | grep -E "\.env$|\.pdf$|\.xlsx$" || echo "สะอาด"
