@@ -17,7 +17,7 @@ export function MissingList({ batchId, items }: { batchId: string; items: Missin
   return (
     <section className="mt-10">
       <h2 className="mb-1 font-semibold">รายการที่ต้องตามเก็บ ({items.length} คน)</h2>
-      <p className="mb-4 text-sm text-gray-500">
+      <p className="mb-4 text-sm text-ink-soft">
         ขอไฟล์จากต้นทางแล้วโยนเข้ามาในบล็อกของคนนั้นได้เลย ระบบจะตั้งชื่อไฟล์
         สร้างรูปตัวอย่าง และจับคู่ให้เอง
         <br />
@@ -90,13 +90,13 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
   const busy = uploading || working;
 
   return (
-    <article className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+    <article className="rounded-xl border border-warn-line bg-warn-bg p-4">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="font-semibold">{item.name}</h3>
-        <span className="text-sm text-gray-500">เลข {item.certNo}</span>
+        <span className="text-sm text-ink-soft">เลข {item.certNo}</span>
       </div>
-      <p className="mt-1 text-sm text-amber-800">{item.reason}</p>
-      <p className="mt-1 text-sm text-gray-600">
+      <p className="mt-1 text-sm text-warn-ink">{item.reason}</p>
+      <p className="mt-1 text-sm text-ink-soft">
         ไฟล์ที่ขาด: <b>{AWARD_LABELS[item.expectedAward] ?? item.expectedAward}</b>
       </p>
 
@@ -116,8 +116,8 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="mt-3 w-full rounded-lg border-2 border-dashed border-amber-300 px-4 py-4 text-sm
-                   text-amber-800 transition hover:border-amber-500 disabled:opacity-50"
+        className="mt-3 w-full rounded-lg border-2 border-dashed border-warn-line px-4 py-4 text-sm
+                   text-warn-ink transition hover:border-warn-ink disabled:opacity-50"
       >
         {uploading
           ? `กำลังอัปโหลด... ${progress}%`
@@ -127,19 +127,19 @@ function MissingCard({ batchId, item }: { batchId: string; item: MissingItem }) 
       </button>
 
       {uploading && (
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-100">
-          <div className="h-full bg-amber-500 transition-all" style={{ width: `${progress}%` }} />
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-warn-bg">
+          <div className="h-full bg-warn-ink transition-all" style={{ width: `${progress}%` }} />
         </div>
       )}
 
       {(error ?? item.lastError) && (
-        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mt-2 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink">
           ไม่รับไฟล์นี้ — {error ?? item.lastError}
         </p>
       )}
 
       {note && (
-        <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{note}</p>
+        <p className="mt-2 rounded-lg bg-ok-bg px-3 py-2 text-sm text-ok-ink">{note}</p>
       )}
     </article>
   );

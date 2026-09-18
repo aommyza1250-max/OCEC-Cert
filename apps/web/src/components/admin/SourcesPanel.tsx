@@ -40,7 +40,7 @@ export function SourcesPanel({
 
   if (clearedAt) {
     return (
-      <p className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+      <p className="rounded-2xl border border-hairline bg-card px-4 py-3 text-sm text-ink-soft">
         ไฟล์ต้นฉบับถูกเคลียร์แล้วเมื่อ{" "}
         {new Date(clearedAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}{" "}
         — เก็บไฟล์รายชื่อ (Excel) ไว้ ส่วนเกียรติบัตรและรูปตัวอย่างอยู่ครบเหมือนเดิม
@@ -49,36 +49,35 @@ export function SourcesPanel({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
-      <p className="font-medium text-gray-700">ไฟล์ต้นฉบับ (ZIP) ยังอยู่</p>
+    <div className="rounded-2xl border border-hairline bg-card px-4 py-3 text-sm">
+      <p className="font-medium text-ink">ไฟล์ต้นฉบับ (ZIP) ยังอยู่</p>
       {blockers === null ? (
-        <p className="mt-1 text-gray-500">
+        <p className="mt-1 text-ink-soft">
           ระบบจะเคลียร์ให้เองหลังเผยแพร่ ถ้าจับคู่ครบทุกคนและไม่มีอะไรค้าง
         </p>
       ) : blockers.length > 0 ? (
         <>
-          <p className="mt-1 text-gray-500">ยังเคลียร์ไม่ได้เพราะ</p>
-          <ul className="mt-1 list-inside list-disc text-gray-600">
+          <p className="mt-1 text-ink-soft">ยังเคลียร์ไม่ได้เพราะ</p>
+          <ul className="mt-1 list-inside list-disc text-ink-soft">
             {blockers.map((b) => (
               <li key={b}>{b}</li>
             ))}
           </ul>
         </>
       ) : (
-        <p className="mt-1 text-gray-500">เงื่อนไขครบแล้ว กำลังรอรอบทำงานถัดไป</p>
+        <p className="mt-1 text-ink-soft">เงื่อนไขครบแล้ว กำลังรอรอบทำงานถัดไป</p>
       )}
 
       <button
         type="button"
         onClick={clearNow}
         disabled={working}
-        className="mt-2 cursor-pointer rounded-lg border border-gray-300 px-3 py-1.5 text-sm
-                   transition hover:bg-gray-50 disabled:opacity-50"
+        className="mt-2 min-h-10 cursor-pointer rounded-xl border px-3 text-sm transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 border-hairline hover:bg-paper"
       >
         {working ? "กำลังสั่ง..." : "ตรวจและเคลียร์เดี๋ยวนี้"}
       </button>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger-ink">{error}</p>}
     </div>
   );
 }

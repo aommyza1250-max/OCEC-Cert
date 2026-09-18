@@ -18,8 +18,7 @@ export function LogoutButton() {
     <button
       onClick={logout}
       disabled={busy}
-      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600
-                 transition hover:bg-gray-50 disabled:opacity-40"
+      className="min-h-10 cursor-pointer rounded-xl border px-3 text-sm transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 border-hairline text-ink-soft hover:bg-paper"
     >
       {busy ? "กำลังออก..." : "ออกจากระบบ"}
     </button>
