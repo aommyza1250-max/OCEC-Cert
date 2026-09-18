@@ -19,7 +19,11 @@ type Props = {
     error: string | null;
     /** true = ไฟล์ที่อัปเข้ามาไม่ถูก ไม่ใช่ระบบพัง */
     userError: boolean;
+    /** ความคืบหน้าที่ worker เขียนไว้ เช่น { stage: "split", done: 120, total: 242 } */
+    progress: Record<string, unknown> | null;
   } | null;
+  /** จำนวนงานที่ยังไม่จบของรอบนี้ — มากกว่า 0 แปลว่ายังประมวลผลอยู่ */
+  pendingJobs: number;
   publishState: PublishState;
 };
 
@@ -36,16 +40,33 @@ export type PublishState = {
   readyToPublish: number;
 };
 
-const RUNNING = new Set(["SPLITTING", "MATCHING"]);
+const RUNNING = new Set(["SPLITTING", "MATCHING", "DELETING"]);
+
+/** ชื่อขั้นตอนที่แอดมินเข้าใจ — แยกให้ชัดว่ากำลังทำอะไรอยู่ ไม่ใช่ "กำลังประมวลผล" ลอย ๆ */
+const STAGE_LABEL: Record<string, string> = {
+  SPLIT: "กำลังตัดแยกหน้าและคัดกรอง",
+  MATCH: "กำลังจับคู่กับรายชื่อ",
+  CLEANUP_SOURCES: "กำลังเคลียร์ไฟล์ต้นฉบับ",
+  DELETE_BATCH: "กำลังลบรอบการนำเข้า",
+  EXPIRE: "กำลังกวาดเกียรติบัตรที่ครบอายุ",
+};
 
 export function BatchWorkflow(props: Props) {
   const router = useRouter();
-  const running = RUNNING.has(props.status);
+
+  // ดูจากคิวงานเป็นหลัก ไม่ใช่สถานะของรอบนำเข้า
+  // เพราะช่วงที่ตัดหน้าเสร็จแล้วแต่งานจับคู่ยังรอคิวอยู่ สถานะรอบจะเป็น "ตัดเสร็จ"
+  // ทั้งที่งานยังไม่จบ แล้วหน้าจะหยุดรีเฟรชค้างอยู่อย่างนั้น
+  const running = props.pendingJobs > 0 || RUNNING.has(props.status);
 
   // ระหว่าง worker ทำงานให้รีเฟรชหน้าเองทุก 3 วินาที แอดมินจะได้ไม่ต้องกด F5
+  // รีเฟรชเฉพาะตอนที่แท็บเปิดอยู่จริง — ยิงรัวขณะสลับไปแอปอื่นบนเน็ตมือถือ
+  // มีแต่จะทำให้คำขอล้มเหลวเป็นชุด
   useEffect(() => {
     if (!running) return;
-    const timer = setInterval(() => router.refresh(), 3000);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 3000);
     return () => clearInterval(timer);
   }, [running, router]);
 
@@ -87,11 +108,7 @@ export function BatchWorkflow(props: Props) {
         )}
       </StepCard>
 
-      {running && (
-        <p className="rounded-xl border border-brand-line bg-brand-soft px-5 py-4 text-sm text-brand">
-          กำลังประมวลผล... หน้านี้จะอัปเดตเองทุก 3 วินาที
-        </p>
-      )}
+      {running && <ProgressBanner job={props.latestJob} />}
 
       {/* ความผิดพลาดของไฟล์ที่อัปเข้ามาแสดงในช่องอัปโหลดของคนนั้นอยู่แล้ว
           ขึ้นซ้ำตรงนี้อีกมีแต่จะรก ที่นี่จึงเหลือไว้เฉพาะตอนระบบพังจริง */}
@@ -174,6 +191,41 @@ function ZipActions({ batchId }: { batchId: string }) {
       )}
     </div>
   );
+}
+
+/** บอกว่ากำลังอยู่ขั้นไหนและไปถึงไหนแล้ว
+ *
+ *  ของเดิมขึ้นแค่ "กำลังประมวลผล..." ซึ่งแอดมินแยกไม่ออกว่าอยู่ขั้นตัดหน้าหรือขั้นจับคู่
+ *  และไม่รู้ว่าจะอีกนานแค่ไหน พอรอนานก็ไม่แน่ใจว่าค้างหรือยังเดินอยู่
+ */
+function ProgressBanner({ job }: { job: Props["latestJob"] }) {
+  const stage = job ? (STAGE_LABEL[job.type] ?? "กำลังประมวลผล") : "กำลังประมวลผล";
+  const done = numberOf(job?.progress?.done);
+  const total = numberOf(job?.progress?.total);
+  const percent = done !== null && total ? Math.min(100, Math.round((done / total) * 100)) : null;
+
+  return (
+    <div className="rounded-2xl border border-brand-line bg-brand-soft px-5 py-4">
+      <p className="text-sm font-medium text-brand">
+        {stage}
+        {done !== null && total ? ` ${done} / ${total} หน้า` : "..."}
+      </p>
+
+      {percent !== null && (
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-card">
+          <div className="h-full bg-brand transition-all" style={{ width: `${percent}%` }} />
+        </div>
+      )}
+
+      <p className="mt-2 text-sm text-ink-soft">
+        ทำงานอยู่ที่เซิร์ฟเวอร์ ปิดหน้านี้หรือเน็ตหลุดก็ไม่กระทบ กลับมาเปิดใหม่ได้ตลอด
+      </p>
+    </div>
+  );
+}
+
+function numberOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function StepCard({
