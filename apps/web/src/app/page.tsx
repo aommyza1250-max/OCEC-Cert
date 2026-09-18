@@ -43,10 +43,10 @@ export default async function HomePage({
         <section className="mx-auto max-w-2xl pt-6 sm:pt-12">
           {/* ไม่ต้องอธิบายเยอะ พาดหัวบอกตรง ๆ ว่าหน้านี้ทำอะไรได้ */}
           <h1 className="text-center text-2xl font-bold leading-snug text-brand sm:text-4xl">
-            ค้นหาเกียรติบัตรของลูกคุณ
+            ระบบค้นหาเกียรติบัตร
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-center text-ink-soft sm:mt-3 sm:text-lg">
-            ดาวน์โหลดฟรี ไม่ต้องสมัครสมาชิก
+            ค้นหาและดาวน์โหลดเกียรติบัตรได้ด้วยชื่อและนามสกุล
           </p>
 
           <div className="mt-4 rounded-2xl border border-brand-line bg-card p-3 shadow-sm sm:mt-6 sm:p-6">
