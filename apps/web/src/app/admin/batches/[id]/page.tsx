@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BatchWorkflow, type PublishState } from "@/components/admin/BatchWorkflow";
+import { DangerZone } from "@/components/admin/DangerZone";
+import { SourcesPanel } from "@/components/admin/SourcesPanel";
 import { DuplicateReview, type DuplicateGroup } from "@/components/admin/DuplicateReview";
 import { MissingList } from "@/components/admin/MissingList";
 import { MatchTable } from "@/components/admin/MatchTable";
 import { isAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { batchConfirmPhrase } from "@/lib/batch-delete";
 import { loadMissingItems } from "@/lib/missing";
 import { decidePublish, needsPolicyDecision, PERFECT_SCORE } from "@/lib/publish";
 import { publicUrl } from "@/lib/r2";
@@ -42,6 +45,16 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     where: { batchId: id },
     _count: true,
   });
+
+  const deleteInfo = await loadDeleteInfo(id, batch.examId);
+  // เหตุผลที่ยังเคลียร์ไฟล์ต้นฉบับไม่ได้ อ่านจากผลตรวจครั้งล่าสุดของ worker
+  // ไม่คำนวณซ้ำฝั่งนี้ เพราะถ้าสองฝั่งคิดไม่ตรงกัน แอดมินจะเห็นเหตุผลที่ไม่ตรงกับความจริง
+  const lastCleanup = await prisma.job.findFirst({
+    where: { batchId: id, type: "CLEANUP_SOURCES", status: "DONE" },
+    orderBy: { createdAt: "desc" },
+    select: { progress: true },
+  });
+  const blockers = readBlockers(lastCleanup?.progress);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
@@ -117,8 +130,57 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           }))}
         />
       </section>
+
+      <section className="mt-10">
+        <h2 className="mb-2 font-semibold">ไฟล์ต้นฉบับ</h2>
+        <SourcesPanel
+          batchId={id}
+          clearedAt={batch.sourcesClearedAt?.toISOString() ?? null}
+          blockers={blockers}
+        />
+      </section>
+
+      <DangerZone
+        batchId={id}
+        confirmPhrase={batchConfirmPhrase(batch.exam.program.code, batch.exam.round, batch.exam.year)}
+        published={batch.status === "PUBLISHED"}
+        counts={deleteInfo.counts}
+        siblingBatches={deleteInfo.siblingBatches}
+      />
     </main>
   );
+}
+
+/** ตัวเลขที่ต้องบอกแอดมินก่อนกดลบ — ต้องรู้ว่าจะหายไปแค่ไหนก่อนตัดสินใจ */
+async function loadDeleteInfo(batchId: string, examId: string) {
+  const [certificates, pages, siblingBatches, students] = await Promise.all([
+    prisma.certificate.count({ where: { batchId } }),
+    prisma.stagingPage.count({ where: { batchId } }),
+    prisma.batch.count({ where: { examId, id: { not: batchId } } }),
+    // ผู้เข้าสอบที่จะไม่เหลืออะไรเลยหลังลบรอบนี้
+    // (ยังมีใบจากรอบอื่น หรือมีหน้าในรอบอื่นชี้มาหา = ไม่ถูกลบ)
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(DISTINCT c.student_id) AS count
+      FROM certificates c
+      WHERE c.batch_id = ${batchId}::uuid
+        AND NOT EXISTS (
+          SELECT 1 FROM certificates o
+          WHERE o.student_id = c.student_id AND o.batch_id <> ${batchId}::uuid)
+        AND NOT EXISTS (
+          SELECT 1 FROM staging_pages sp
+          WHERE sp.matched_student_id = c.student_id AND sp.batch_id <> ${batchId}::uuid)`,
+  ]);
+
+  return {
+    counts: { certificates, pages, students: Number(students[0]?.count ?? 0) },
+    siblingBatches,
+  };
+}
+
+function readBlockers(progress: unknown): string[] | null {
+  const list = (progress as { blockers?: unknown } | null | undefined)?.blockers;
+  if (!Array.isArray(list)) return null;
+  return list.filter((item): item is string => typeof item === "string");
 }
 
 /**

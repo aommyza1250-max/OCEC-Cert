@@ -21,6 +21,26 @@ datasource db {
 /// รอบการสอบ — กำหนดว่าต้องกรองสัญชาติหรือไม่
 /// HEAT  (รอบคัดเลือก) ผู้เข้าสอบเป็นคนไทยทั้งหมด ตัดแยกทุกหน้า
 /// FINAL (รอบชิงชนะเลิศ) ไฟล์รวมทุกประเทศ ต้องกรองเฉพาะ "from THAILAND"
+/// บันทึกว่าเคยมีรอบนำเข้านี้อยู่และถูกลบไปเมื่อไหร่
+/// จำเป็นเพราะแถว batches หายไปพร้อมการลบ ถ้าไม่บันทึกจะไม่เหลือร่องรอยว่าเคยมีอะไร
+model DeletedBatch {
+  id          String    @id @default(uuid()) @db.Uuid
+  programCode String    @map("program_code")
+  round       ExamRound
+  year        Int
+
+  certificateCount Int  @map("certificate_count")
+  studentCount     Int  @map("student_count")
+  fileCount        Int  @map("file_count")
+  bytesFreed       BigInt @map("bytes_freed")
+
+  note      String?
+  deletedAt DateTime @default(now()) @map("deleted_at")
+
+  @@index([deletedAt])
+  @@map("deleted_batches")
+}
+
 enum ExamRound {
   HEAT
   FINAL
@@ -34,6 +54,7 @@ enum BatchStatus {
   READY        // จับคู่เสร็จ รอแอดมินตรวจ/publish
   PUBLISHED    // ผู้ใช้ทั่วไปค้นเจอแล้ว
   FAILED       // job พัง ดูรายละเอียดที่ Job.error
+  DELETING     // กำลังลบทั้งรอบ — กันไม่ให้มีใครไปกดอย่างอื่นกับรอบที่กำลังหายไป
 }
 
 enum MatchStatus {
@@ -57,6 +78,10 @@ enum MultiAwardPolicy {
 enum JobType {
   SPLIT
   MATCH
+  /// ลบทั้งรอบนำเข้า ทั้งไฟล์บน R2 และแถวในฐานข้อมูล
+  DELETE_BATCH
+  /// ลบไฟล์ต้นฉบับ (ZIP และ PDF ที่อัปทีละใบ) หลังจับคู่ครบและเผยแพร่แล้ว
+  CLEANUP_SOURCES
 }
 
 enum JobStatus {
@@ -148,6 +173,11 @@ model Batch {
 
   /// ฮ่องกงส่งฉบับจริงแบบไหนในรอบนี้ — มีผลกับคนที่ถือทั้งใบเหรียญและใบ Perfect Score
   multiAwardPolicy MultiAwardPolicy @default(UNDECIDED) @map("multi_award_policy")
+
+  /// เคลียร์ไฟล์ต้นฉบับ (ZIP) ทิ้งไปแล้วเมื่อไหร่
+  /// ZIP กินที่มากที่สุด (360 MB ต่อรอบ) และไม่มีอะไรในระบบเรียกใช้หลังจับคู่เสร็จ
+  /// เก็บเวลาไว้เพื่อให้แอดมินรู้ว่าไฟล์หายไปเพราะระบบเคลียร์ ไม่ใช่หายไปเอง
+  sourcesClearedAt DateTime? @map("sources_cleared_at")
 
   // สรุปตัวเลข เช่น { pagesTotal, pagesSplit, foreignSkipped, matched, unmatched }
   stats Json @default("{}")

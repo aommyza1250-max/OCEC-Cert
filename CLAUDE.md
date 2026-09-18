@@ -63,6 +63,8 @@ cd apps/web && pnpm db:seed                        # ใส่ข้อมูล
 docker compose exec worker python -m pytest -q     # เทสฝั่ง Python
 docker compose exec worker python scripts/e2e_demo.py       # ทดสอบทั้งสายงานด้วยไฟล์สังเคราะห์
 docker compose exec worker python scripts/check_real_files.py  # ตรวจตัวอ่านกับไฟล์จริงใน apps/worker/tmp/
+docker compose exec worker python scripts/verify_cleanup_and_delete.py  # ตรวจการเคลียร์ ZIP และการลบรอบนำเข้า
+docker compose exec worker python scripts/rerender_previews.py --all --dry-run  # สร้างรูปตัวอย่างใหม่ตามค่า DPI ปัจจุบัน
 docker compose logs -f worker                      # ดู log worker
 ```
 

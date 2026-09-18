@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { applyPublish, loadPeople, needsPolicyDecision } from "@/lib/publish";
 import { prisma } from "@/lib/db";
+import { wakeWorker } from "@/lib/worker";
 
 const schema = z.object({ published: z.boolean() });
 
@@ -44,5 +45,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const result = await applyPublish(id, parsed.data.published);
+
+  // เผยแพร่แล้วคือเงื่อนไขข้อสุดท้ายของการเคลียร์ไฟล์ต้นฉบับ ตั้งงานให้ worker ไปตรวจต่อ
+  // ตัวงานตรวจเงื่อนไขทั้ง 4 ข้อเองอีกที ถ้ายังไม่ครบก็แค่ไม่ลบ ไม่ถือว่าล้มเหลว
+  if (parsed.data.published) await queueCleanupSources(id);
+
   return NextResponse.json({ ok: true, ...result });
+}
+
+async function queueCleanupSources(batchId: string) {
+  const batch = await prisma.batch.findUnique({ where: { id: batchId } });
+  if (!batch || batch.sourcesClearedAt) return;
+
+  const pending = await prisma.job.count({
+    where: { batchId, type: "CLEANUP_SOURCES", status: { in: ["QUEUED", "RUNNING"] } },
+  });
+  if (pending) return;
+
+  await prisma.job.create({ data: { batchId, type: "CLEANUP_SOURCES" } });
+  await wakeWorker();
 }

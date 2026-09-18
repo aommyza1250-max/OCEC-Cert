@@ -66,3 +66,12 @@ describe("needsPolicyDecision", () => {
     expect(needsPolicyDecision([person("a", "PERFECT_SCORE")])).toBe(false);
   });
 });
+
+describe("batchConfirmPhrase", () => {
+  it("สร้างข้อความยืนยันแบบเดียวกับที่แสดงบนหน้าจอ", async () => {
+    const { batchConfirmPhrase } = await import("./batch-delete");
+    expect(batchConfirmPhrase("HKIMO", "FINAL", 2026)).toBe("HKIMO FINAL 2026");
+    // รหัสรายการสอบที่พิมพ์เล็กมาก็ต้องได้ข้อความเดียวกัน ไม่งั้นแอดมินพิมพ์ตามจอแล้วโดนปฏิเสธ
+    expect(batchConfirmPhrase("timo", "HEAT", 2025)).toBe("TIMO HEAT 2025");
+  });
+});

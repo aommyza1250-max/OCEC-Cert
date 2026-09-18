@@ -49,8 +49,16 @@ class Settings:
     # ใส่ regex ที่มี capture group เดียวเพื่อข้ามตรรกะ anchor ทั้งหมด (เผื่อแบบฟอร์มต่างออกไปมาก)
     name_pattern: str = ""
 
-    preview_dpi: int = 110
-    preview_quality: int = 80
+    # 72 DPI = 841x595 px เท่าขนาดกระดาษ A4 นอนพอดี ไฟล์ราว 85 KB/ใบ
+    # มือถือจอกว้าง 390px แสดงที่ 2 เท่า กดดูเต็มจอยังอ่านชื่อและเลขได้ครบ
+    # ใหญ่กว่านี้ไม่ได้ช่วยให้อ่านง่ายขึ้น แต่ทำให้หน้าผลค้นหาหนักขึ้นเป็นเท่าตัว
+    # (110 DPI ของเดิมได้ไฟล์ 242 KB/ใบ คนที่มี 4 ใบต้องโหลดเกือบ 1 MB)
+    # รอกี่วันหลังเผยแพร่ ก่อนลบไฟล์ต้นฉบับ (ZIP) ทิ้ง — 0 = ลบทันทีที่ครบเงื่อนไข
+    # ต้นฉบับยังอยู่ในเครื่องแอดมินที่อัปขึ้นมา R2 ไม่ใช่สำเนาเดียว
+    source_keep_days: int = 0
+
+    preview_dpi: int = 72
+    preview_quality: int = 75
 
     poll_interval_sec: float = 2.0
     max_attempts: int = 3
@@ -83,8 +91,9 @@ def settings() -> Settings:
             "NAME_VALIDATION_PATTERN", r"[A-Z][A-Z .\'\-]+"
         ),
         name_pattern=os.environ.get("NAME_PATTERN", ""),
-        preview_dpi=int(os.environ.get("PREVIEW_DPI", "110")),
-        preview_quality=int(os.environ.get("PREVIEW_QUALITY", "80")),
+        source_keep_days=int(os.environ.get("SOURCE_ZIP_KEEP_DAYS", "0")),
+        preview_dpi=int(os.environ.get("PREVIEW_DPI", "72")),
+        preview_quality=int(os.environ.get("PREVIEW_QUALITY", "75")),
         poll_interval_sec=float(os.environ.get("POLL_INTERVAL_SEC", "2.0")),
         max_attempts=int(os.environ.get("MAX_ATTEMPTS", "3")),
     )

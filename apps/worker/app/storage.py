@@ -47,6 +47,50 @@ def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     )
 
 
+def list_keys(prefix: str) -> list[dict]:
+    """คืนรายการไฟล์ทั้งหมดใต้ prefix พร้อมขนาด
+
+    วนดึงทีละหน้า (1000 ไฟล์) จนครบ เพราะรอบนำเข้าหนึ่งมีไฟล์หลายร้อยชิ้น
+    """
+    client = _client()
+    bucket = settings().r2_bucket
+    out: list[dict] = []
+    token: str | None = None
+
+    while True:
+        kwargs: dict = {"Bucket": bucket, "Prefix": prefix, "MaxKeys": 1000}
+        if token:
+            kwargs["ContinuationToken"] = token
+        page = client.list_objects_v2(**kwargs)
+        out.extend({"key": o["Key"], "size": o["Size"]} for o in page.get("Contents", []))
+        if not page.get("IsTruncated"):
+            return out
+        token = page["NextContinuationToken"]
+
+
+def delete_keys(keys: list[str]) -> int:
+    """ลบไฟล์เป็นชุด ทีละ 1000 คีย์ต่อคำสั่ง (ขีดจำกัดของ S3 API)
+
+    ไฟล์ที่ไม่มีอยู่แล้วถือว่าสำเร็จ — ตัวลบต้องรันซ้ำได้โดยไม่พัง
+    """
+    if not keys:
+        return 0
+
+    client = _client()
+    bucket = settings().r2_bucket
+    deleted = 0
+    for start in range(0, len(keys), 1000):
+        chunk = keys[start : start + 1000]
+        result = client.delete_objects(
+            Bucket=bucket, Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True}
+        )
+        errors = result.get("Errors") or []
+        if errors:
+            raise RuntimeError(f"ลบไฟล์ไม่สำเร็จ {len(errors)} ชิ้น เช่น {errors[0]}")
+        deleted += len(chunk)
+    return deleted
+
+
 def certificate_pdf_key(batch_id: str, stem: str) -> str:
     return f"certificates/{batch_id}/{stem}.pdf"
 
