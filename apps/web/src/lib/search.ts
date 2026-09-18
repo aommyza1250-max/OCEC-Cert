@@ -1,7 +1,7 @@
 /** ตรรกะการค้นหาของหน้าสาธารณะ */
 import { MIN_QUERY_LENGTH } from "./constants";
 import { prisma } from "./db";
-import { normalizeName } from "./normalize";
+import { awardRank, normalizeName, roundRank } from "./normalize";
 import { publicUrl } from "./r2";
 
 /** ต่ำกว่า MIN_QUERY_LENGTH ไม่ยอมค้นให้ — กันคนพิมพ์ตัวอักษรเดียวแล้วไล่ดูดรายชื่อทั้งฐาน
@@ -21,19 +21,35 @@ export type CertificateItem = {
   previewUrl: string | null;
 };
 
+/** เกียรติบัตรของ "รายการสอบ + รอบ + ปี" หนึ่งชุด
+ *
+ *  แยกถึงระดับรอบ เพราะคนเดียวอาจได้ทั้งรอบคัดเลือกและรอบชิงชนะเลิศในปีเดียวกัน
+ *  ถ้าเอามารวมกองเดียว การ์ดสองใบจะหน้าตาเกือบเหมือนกันจนผู้ปกครองกดผิดใบ */
+export type ExamSession = {
+  year: number;
+  round: string;
+  certificates: CertificateItem[];
+};
+
 export type ProgramGroup = {
   code: string;
   name: string;
-  /** ปีล่าสุดอยู่บนสุด */
-  years: { year: number; certificates: CertificateItem[] }[];
+  /** ปีล่าสุดของรายการสอบนี้ ใช้เรียงว่ารายการไหนควรอยู่บน */
+  latestYear: number;
+  /** ปีใหม่อยู่บน และในปีเดียวกันรอบชิงชนะเลิศมาก่อนรอบคัดเลือก */
+  sessions: ExamSession[];
 };
 
 export type SearchResult = {
   studentId: string;
   nameTh: string | null;
   nameEn: string | null;
-  /** แสดงคู่กับชื่อเสมอ เพราะคนชื่อพ้องกันมีจริง ผู้ปกครองต้องดูออกว่าใบไหนของลูกตัวเอง */
+  /** โรงเรียน — มีเฉพาะเมื่อแอดมินกรอกเอง หรือชีทรายชื่อมีคอลัมน์โรงเรียนมาให้
+   *  เกียรติบัตรไม่มีข้อความโรงเรียนพิมพ์อยู่ จึงดึงจากไฟล์ไม่ได้ */
   school: string | null;
+  /** ระดับชั้นของใบล่าสุด — ตัวช่วยยืนยันตัวคนที่มีข้อมูลจริงเสมอ
+   *  ใช้แทนโรงเรียนในหัวการ์ด เพราะชีทรายชื่อมีคอลัมน์ GRADE ทุกแถว */
+  latestLevel: string | null;
   /** จัดกลุ่มตามรายการสอบก่อน แล้วค่อยแยกปีข้างใน */
   programs: ProgramGroup[];
 };
@@ -46,7 +62,9 @@ export async function searchStudents(rawQuery: string): Promise<SearchResult[]> 
     where: {
       // ต้องมีเกียรติบัตรที่ publish แล้วอย่างน้อย 1 ใบ ไม่งั้นไม่ต้องโผล่มา
       certificates: { some: { published: { not: null } } },
-      OR: [{ nameEnNormalized: { contains: q } }, { nameThNormalized: { contains: q } }],
+      // ค้นจากชื่อภาษาอังกฤษอย่างเดียว เพราะทั้งชีทรายชื่อและตัวเกียรติบัตรเป็นอังกฤษล้วน
+      // ชื่อไทยในฐานมีเฉพาะที่แอดมินกรอกเอง ค้นจากมันจะเจอบ้างไม่เจอบ้างจนคาดเดาไม่ได้
+      nameEnNormalized: { contains: q },
     },
     take: MAX_STUDENTS,
     include: {
@@ -70,63 +88,82 @@ type CertificateRow = {
   exam: { year: number; round: string; program: { code: string; name: string } };
 };
 
-function toSearchResult(student: {
+export function toSearchResult(student: {
   id: string;
   nameTh: string | null;
   nameEn: string | null;
   school: string | null;
   certificates: CertificateRow[];
 }): SearchResult {
-  // code -> ปีการศึกษา -> เกียรติบัตร
-  const byProgram = new Map<string, { name: string; years: Map<number, CertificateItem[]> }>();
+  // code -> "ปี|รอบ" -> เกียรติบัตร
+  const byProgram = new Map<string, { name: string; sessions: Map<string, ExamSession> }>();
 
   for (const cert of student.certificates) {
     const { code, name } = cert.exam.program;
-    const program = byProgram.get(code) ?? { name, years: new Map() };
+    const program = byProgram.get(code) ?? { name, sessions: new Map() };
     byProgram.set(code, program);
 
-    const year = cert.exam.year;
-    const bucket = program.years.get(year) ?? [];
-    bucket.push({
+    const { year, round } = cert.exam;
+    const key = `${year}|${round}`;
+    const session = program.sessions.get(key) ?? { year, round, certificates: [] };
+    session.certificates.push({
       id: cert.id,
       year,
-      round: cert.exam.round,
+      round,
       award: cert.award,
       level: cert.level,
       certNo: cert.certNo,
       previewUrl: cert.previewKey ? publicUrl(cert.previewKey) : null,
     });
-    program.years.set(year, bucket);
+    program.sessions.set(key, session);
   }
+
+  const programs = [...byProgram.entries()]
+    .map(([code, program]) => {
+      const sessions = [...program.sessions.values()].sort(bySession);
+      // ในกลุ่มเดียวกันเรียงตามรางวัล ไม่ปล่อยตามลำดับที่ฐานข้อมูลคืนมา
+      for (const session of sessions) {
+        session.certificates.sort((a, b) => awardRank(a.award) - awardRank(b.award));
+      }
+      return {
+        code,
+        name: program.name,
+        latestYear: Math.max(...sessions.map((s) => s.year)),
+        sessions,
+      };
+    })
+    // รายการสอบที่มีผลล่าสุดอยู่บนสุด — ผู้ปกครองเข้ามาเพราะเพิ่งรู้ว่าผลรอบใหม่ออก
+    // ไม่ใช่เพราะอยากไล่ดูของเก่า ถ้าเรียงตามตัวอักษรของรหัส ของใหม่จะไปจมอยู่ล่าง
+    // ปีเท่ากันค่อยเรียงตามรหัส เพื่อให้ลำดับนิ่งทุกครั้งที่โหลด
+    .sort((a, b) => b.latestYear - a.latestYear || a.code.localeCompare(b.code));
 
   return {
     studentId: student.id,
     nameTh: student.nameTh,
     nameEn: student.nameEn,
     school: student.school,
-    programs: [...byProgram.entries()]
-      .map(([code, program]) => ({
-        code,
-        name: program.name,
-        years: [...program.years.entries()]
-          .map(([year, certificates]) => ({ year, certificates }))
-          .sort((a, b) => b.year - a.year),
-      }))
-      .sort((a, b) => a.code.localeCompare(b.code)),
+    // ใบล่าสุดคือใบแรกสุดตามลำดับที่จัดไว้แล้ว
+    latestLevel: programs[0]?.sessions[0]?.certificates[0]?.level ?? null,
+    programs,
   };
+}
+
+/** ปีใหม่อยู่บน ปีเดียวกันเรียงตามลำดับรอบ — ต้องนิ่ง ไม่ปล่อยให้ขึ้นกับลำดับที่ฐานข้อมูลคืนมา */
+function bySession(a: ExamSession, b: ExamSession): number {
+  return b.year - a.year || roundRank(a.round) - roundRank(b.round);
 }
 
 /** ชื่อที่ตรงเป๊ะต้องมาก่อนชื่อที่แค่มีคำค้นอยู่ข้างใน */
 function byRelevance(q: string) {
   const score = (r: SearchResult) => {
-    const names = [normalizeName(r.nameTh), normalizeName(r.nameEn)].filter(Boolean);
-    if (names.some((n) => n === q)) return 0;
-    if (names.some((n) => n.startsWith(q))) return 1;
+    const name = normalizeName(r.nameEn);
+    if (name === q) return 0;
+    if (name.startsWith(q)) return 1;
     return 2;
   };
   return (a: SearchResult, b: SearchResult) => {
     const diff = score(a) - score(b);
     if (diff !== 0) return diff;
-    return (a.nameTh ?? a.nameEn ?? "").localeCompare(b.nameTh ?? b.nameEn ?? "", "th");
+    return (a.nameEn ?? "").localeCompare(b.nameEn ?? "");
   };
 }

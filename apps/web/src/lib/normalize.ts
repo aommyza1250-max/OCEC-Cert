@@ -139,6 +139,34 @@ export const AWARD_LABELS: Record<string, string> = {
   PERFECT_SCORE: "คะแนนเต็ม",
 };
 
+/** ชื่อรอบที่แสดงให้คนอ่าน — ผู้ปกครองไม่รู้ว่า HEAT/FINAL คืออะไร */
+export const ROUND_LABELS: Record<string, string> = {
+  HEAT: "รอบคัดเลือก",
+  FINAL: "รอบชิงชนะเลิศ",
+};
+
+/** ลำดับการแสดงรอบ: เลขน้อยอยู่ก่อน
+ *  รอบชิงชนะเลิศมาก่อนรอบคัดเลือก เพราะเป็นใบที่ผู้ปกครองตั้งใจมาหามากกว่า */
+const ROUND_ORDER: Record<string, number> = { FINAL: 0, HEAT: 1 };
+
+export function roundRank(round: string): number {
+  return ROUND_ORDER[round] ?? 9;
+}
+
+/** ลำดับการแสดงรางวัลในกลุ่มเดียวกัน: ใบเหรียญก่อน แล้วค่อยใบพิเศษ
+ *  ของจริงคนหนึ่งได้หลายใบในรอบเดียวเมื่อได้เหรียญทองแล้วทำคะแนนเต็ม */
+const AWARD_ORDER: Record<string, number> = {
+  GOLD: 0,
+  SILVER: 1,
+  BRONZE: 2,
+  MERIT: 3,
+  PERFECT_SCORE: 4,
+};
+
+export function awardRank(award: string): number {
+  return AWARD_ORDER[award] ?? 9;
+}
+
 /** คำนำหน้าชื่อโรงเรียนที่ไม่ได้ช่วยแยกความต่าง — เขียนบ้างไม่เขียนบ้างในไฟล์เดียวกัน
  *  ภาษาไทยตัดแบบ "ขึ้นต้นด้วย" ได้เลยเพราะเขียนติดกัน */
 const THAI_SCHOOL_PREFIXES = ["โรงเรียน", "รร"] as const;
