@@ -46,9 +46,17 @@ def test_ข้ามขยะจาก_macOS_และไฟล์ที่ไ�
 
 
 def test_โฟลเดอร์ที่ไม่รู้จักต้องหยุดงาน_ไม่ใช่เดา():
-    data = make_award_zip({}, extra_files={"Participation/a.pdf": PDF})
-    with pytest.raises(ZipLayoutError, match="Participation"):
+    data = make_award_zip({}, extra_files={"Platinum/a.pdf": PDF})
+    with pytest.raises(ZipLayoutError, match="Platinum"):
         read_award_bundles(data)
+
+
+def test_รางวัลเข้าร่วมของรอบคัดเลือกต้องรับได้():
+    # ของจริงรอบคัดเลือกมีโฟลเดอร์ Participation และมีจำนวนมากที่สุดในรอบนั้น
+    # (HKIMO Heat 2026 มี 277 ใบ) ก่อนหน้านี้ระบบไม่รู้จักแล้วหยุดงานทั้งรอบ
+    data = make_award_zip({}, extra_files={"Participation/a.pdf": PDF})
+    bundles = read_award_bundles(data)
+    assert [b.award for b in bundles] == ["PARTICIPATION"]
 
 
 def test_PDF_วางนอกโฟลเดอร์ต้องหยุดงาน():

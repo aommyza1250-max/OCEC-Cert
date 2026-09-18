@@ -82,6 +82,8 @@ enum JobType {
   DELETE_BATCH
   /// ลบไฟล์ต้นฉบับ (ZIP และ PDF ที่อัปทีละใบ) หลังจับคู่ครบและเผยแพร่แล้ว
   CLEANUP_SOURCES
+  /// กวาดเกียรติบัตรที่ครบอายุการเก็บแล้ว — เป็นงานของทั้งระบบ ไม่ผูกกับรอบนำเข้าใด
+  EXPIRE
 }
 
 enum JobStatus {
@@ -281,6 +283,13 @@ model Certificate {
   // ผู้ใช้ทั่วไปเห็นเฉพาะ published = true
   published DateTime? @map("published_at")
 
+  /// ครบกำหนดเก็บเมื่อไหร่ — ตั้งตอนเผยแพร่ครั้งแรก = published_at + อายุการเก็บ
+  /// เก็บเป็นวันที่จริง ไม่คำนวณสดจาก published_at เพราะถ้าเปลี่ยนนโยบายภายหลัง
+  /// ของเก่าต้องไม่ถูกยืดอายุตามไปโดยไม่ตั้งใจ และแอดมินต้องเห็นได้ว่าใบไหนหายวันไหน
+  expiresAt DateTime? @map("expires_at")
+  /// ลบไฟล์บน R2 ไปแล้วเมื่อไหร่ — แถวยังอยู่เพื่อให้รู้ว่าเคยออกใบอะไรให้ใคร
+  filesDeletedAt DateTime? @map("files_deleted_at")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   // คนเดียวกันมีได้หลายใบในรอบเดียวกัน ถ้าเป็นคนละรางวัล
@@ -289,6 +298,8 @@ model Certificate {
   @@unique([examId, studentId, award])
   @@index([studentId])
   @@index([batchId])
+  /// ตัวกวาดอายุถามด้วยเงื่อนไขนี้ทุกวัน
+  @@index([expiresAt, filesDeletedAt])
   @@map("certificates")
 }
 
@@ -296,8 +307,9 @@ model Certificate {
 model Job {
   id      String  @id @default(uuid()) @db.Uuid
   type    JobType
-  batchId String  @map("batch_id") @db.Uuid
-  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// ว่างได้เฉพาะงานที่ไม่ผูกกับรอบนำเข้าใด (เช่น EXPIRE ที่กวาดทั้งระบบ)
+  batchId String? @map("batch_id") @db.Uuid
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   status   JobStatus @default(QUEUED)
   payload  Json      @default("{}")

@@ -60,8 +60,8 @@ export async function searchStudents(rawQuery: string): Promise<SearchResult[]> 
 
   const students = await prisma.student.findMany({
     where: {
-      // ต้องมีเกียรติบัตรที่ publish แล้วอย่างน้อย 1 ใบ ไม่งั้นไม่ต้องโผล่มา
-      certificates: { some: { published: { not: null } } },
+      // ต้องมีเกียรติบัตรที่ publish แล้วและไฟล์ยังอยู่อย่างน้อย 1 ใบ ไม่งั้นไม่ต้องโผล่มา
+      certificates: { some: { published: { not: null }, filesDeletedAt: null } },
       // ค้นจากชื่อภาษาอังกฤษอย่างเดียว เพราะทั้งชีทรายชื่อและตัวเกียรติบัตรเป็นอังกฤษล้วน
       // ชื่อไทยในฐานมีเฉพาะที่แอดมินกรอกเอง ค้นจากมันจะเจอบ้างไม่เจอบ้างจนคาดเดาไม่ได้
       nameEnNormalized: { contains: q },
@@ -69,7 +69,8 @@ export async function searchStudents(rawQuery: string): Promise<SearchResult[]> 
     take: MAX_STUDENTS,
     include: {
       certificates: {
-        where: { published: { not: null } },
+        // ใบที่ครบอายุการเก็บแล้วไฟล์ถูกลบไปแล้ว จึงไม่มีอะไรให้ดาวน์โหลด
+        where: { published: { not: null }, filesDeletedAt: null },
         include: { exam: { include: { program: true } } },
         orderBy: { exam: { year: "desc" } },
       },

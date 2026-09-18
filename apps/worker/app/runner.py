@@ -20,6 +20,7 @@ from .queue import (
 )
 from .tasks.cleanup_sources import run_cleanup_sources
 from .tasks.delete_batch import run_delete_batch
+from .tasks.expire import run_expire
 from .tasks.match_excel import run_match
 from .tasks.split import run_split
 
@@ -47,6 +48,7 @@ def _loop() -> None:
     interval = settings().poll_interval_sec
     while not _stop.is_set():
         try:
+            _queue_daily_expire()
             worked = _run_one()
         except Exception:  # ลูปต้องไม่ตายเพราะงานชิ้นเดียว
             log.exception("job runner เจอข้อผิดพลาดที่ไม่คาดคิด")
@@ -56,6 +58,34 @@ def _loop() -> None:
             # มีงานต่อคิวก็วนทำต่อทันที ไม่มีค่อยรอ
             wake.wait(timeout=interval)
             wake.clear()
+
+
+def _queue_daily_expire() -> None:
+    """ตั้งงานกวาดอายุวันละครั้ง
+
+    ไม่ใช้ cron หรือ service แยก เพราะลูปนี้เดินอยู่ตลอดอยู่แล้วและงานมีวันละครั้ง
+    ดูจากงาน EXPIRE ล่าสุดว่าเกิน 24 ชั่วโมงหรือยัง ถ้าเครื่องดับไปหลายวัน
+    รอบแรกที่กลับมาก็จะตั้งงานให้เอง ไม่มีวันไหนหลุด
+    """
+    from .db import connection, new_id
+
+    try:
+        with connection() as conn:
+            recent = conn.execute(
+                """
+                SELECT 1 FROM jobs
+                WHERE type = 'EXPIRE'
+                  AND (status IN ('QUEUED', 'RUNNING') OR created_at > NOW() - INTERVAL '24 hours')
+                LIMIT 1
+                """
+            ).fetchone()
+            if recent:
+                return
+            conn.execute("INSERT INTO jobs (id, type) VALUES (%s, 'EXPIRE')", (new_id(),))
+        log.info("ตั้งงานกวาดเกียรติบัตรที่ครบอายุประจำวัน")
+    except Exception:
+        # ตั้งงานไม่ได้ก็ไม่ควรทำให้ลูปทั้งตัวหยุด เดี๋ยวรอบหน้าลองใหม่
+        log.exception("ตั้งงานกวาดอายุประจำวันไม่สำเร็จ")
 
 
 def _batch_status(batch_id: str) -> str:
@@ -97,19 +127,31 @@ def _queue_cleanup_sources(batch_id: str) -> None:
 
 
 def _queue_match_if_roster_ready(batch_id: str) -> None:
+    """ตั้งงานจับคู่ต่อให้เอง ถ้ารอบนั้นมีไฟล์รายชื่ออยู่แล้ว
+
+    ถูกเรียกทุกครั้งที่ตัดหน้าเสร็จ จึงต้องกันการตั้งคิวซ้ำด้วย
+    ไม่งั้นอัปไฟล์รัว ๆ จะได้งานจับคู่ซ้อนกันหลายใบโดยไม่จำเป็น
+    """
     from .db import connection, new_id
 
     with connection() as conn:
         row = conn.execute(
-            "SELECT source_excel_key FROM batches WHERE id = %s", (batch_id,)
+            """
+            SELECT b.source_excel_key,
+                   (SELECT COUNT(*) FROM jobs j
+                    WHERE j.batch_id = b.id AND j.type = 'MATCH'
+                      AND j.status IN ('QUEUED', 'RUNNING')) AS pending
+            FROM batches b WHERE b.id = %s
+            """,
+            (batch_id,),
         ).fetchone()
-        if not row or not row["source_excel_key"]:
+        if not row or not row["source_excel_key"] or row["pending"]:
             return
         conn.execute(
             "INSERT INTO jobs (id, type, batch_id) VALUES (%s, 'MATCH', %s)",
             (new_id(), batch_id),
         )
-    log.info("ตั้งงานจับคู่ต่อให้ batch %s อัตโนมัติ หลังเติมไฟล์", batch_id)
+    log.info("ตั้งงานจับคู่ต่อให้ batch %s อัตโนมัติ (มีไฟล์รายชื่อรออยู่แล้ว)", batch_id)
     wake.set()
 
 
@@ -123,7 +165,7 @@ def _run_one() -> bool:
 
     # รอบที่เผยแพร่ไปแล้วต้องยังเผยแพร่อยู่หลังเติมไฟล์หรือจับคู่ใหม่
     # ไม่งั้นผู้ปกครองจะค้นไม่เจอทั้งรอบทันทีที่แอดมินเติมไฟล์ตกหล่นเข้าไป
-    previous_status = _batch_status(batch_id)
+    previous_status = _batch_status(batch_id) if batch_id else "DRAFT"
     was_published = previous_status == "PUBLISHED"
 
     def on_progress(progress: dict[str, Any]) -> None:
@@ -137,9 +179,10 @@ def _run_one() -> bool:
             # ไม่ใช่ยอดของรอบนำเข้า ถ้าเอาไปรวมจะค้างอยู่ในสถิติรอบไปตลอด
             merge_batch_stats(batch_id, {k: v for k, v in stats.items() if k != "singlePdf"})
             set_batch_status(batch_id, "PUBLISHED" if was_published else "SPLIT_DONE")
-            # เติมไฟล์ที่ตกหล่นเข้ารอบที่เคยจับคู่ไปแล้ว ให้จับคู่ต่อให้เลย
-            # แอดมินจะได้ไม่ต้องอัป Excel ชุดเดิมซ้ำเพียงเพื่อกดจับคู่ใหม่
-            if stats.get("mode") == "append" and stats.get("pagesSplit"):
+            # ตัดหน้าเสร็จแล้วถ้ามีไฟล์รายชื่ออยู่แล้ว ให้จับคู่ต่อเองเลย ครอบคลุมสองกรณี:
+            #   - แอดมินวาง ZIP กับ Excel พร้อมกันตั้งแต่ต้น (ไม่ต้องกลับมาทำอีกจังหวะ)
+            #   - เติมไฟล์ที่ตกหล่นเข้ารอบที่เคยจับคู่ไปแล้ว (ไม่ต้องอัป Excel ชุดเดิมซ้ำ)
+            if stats.get("pagesSplit"):
                 _queue_match_if_roster_ready(batch_id)
         elif job_type == "MATCH":
             set_batch_status(batch_id, "MATCHING")
@@ -149,6 +192,12 @@ def _run_one() -> bool:
             # จับคู่ใหม่ในรอบที่เผยแพร่ไปแล้ว อาจทำให้เงื่อนไขเคลียร์ไฟล์ต้นฉบับครบพอดี
             if was_published:
                 _queue_cleanup_sources(batch_id)
+        elif job_type == "EXPIRE":
+            # งานของทั้งระบบ ไม่ผูกกับรอบนำเข้าใด batch_id จึงเป็น None
+            stats = run_expire(batch_id, on_progress, job.get("payload") or {})
+            finish_job(job_id, {"stage": "done", **stats})
+            log.info("งาน %s (กวาดอายุ) เสร็จแล้ว", job_id)
+            return True
         elif job_type == "CLEANUP_SOURCES":
             stats = run_cleanup_sources(batch_id, on_progress, job.get("payload") or {})
         elif job_type == "DELETE_BATCH":

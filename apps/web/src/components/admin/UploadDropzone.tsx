@@ -89,8 +89,8 @@ export function UploadDropzone({
         className={`w-full rounded-lg border-2 border-dashed px-4 py-6 text-sm transition
                     disabled:opacity-50 ${
                       danger
-                        ? "border-red-300 text-red-700 hover:border-red-500"
-                        : "border-gray-300 text-gray-600 hover:border-[var(--color-brand)]"
+                        ? "border-danger-line text-danger-ink hover:border-danger-ink"
+                        : "border-hairline text-ink-soft hover:border-brand"
                     }`}
       >
         {uploading
@@ -99,15 +99,15 @@ export function UploadDropzone({
       </button>
 
       {uploading && (
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-hairline">
           <div
-            className="h-full bg-[var(--color-brand)] transition-all"
+            className="h-full bg-brand transition-all"
             style={{ width: `${progress}%` }}
           />
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger-ink">{error}</p>}
     </div>
   );
 }

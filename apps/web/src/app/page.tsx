@@ -6,10 +6,13 @@ import { SearchBox } from "@/components/SearchBox";
 import { MIN_QUERY_LENGTH } from "@/lib/constants";
 import { ROUND_LABELS } from "@/lib/normalize";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { RETENTION_MONTHS } from "@/lib/publish";
 import { searchStudents, type SearchResult } from "@/lib/search";
 
 // ผลค้นหาเปลี่ยนตามฐานข้อมูล ห้าม cache
 export const dynamic = "force-dynamic";
+
+const RETENTION_YEARS = Math.round(RETENTION_MONTHS / 12);
 
 export default async function HomePage({
   searchParams,
@@ -262,6 +265,13 @@ function StudentBlock({ student }: { student: SearchResult }) {
           </section>
         ))}
       </div>
+
+      {/* แจ้งนโยบายครั้งเดียวต่อคน ไม่ใช่ทุกรายการสอบ คนที่มีหลายรายการจะได้ไม่เห็นซ้ำ ๆ
+          ต้องบอกตั้งแต่วันแรกที่เปิดใช้ ไม่ใช่ไปบอกตอนใกล้ครบกำหนดแล้วลบ */}
+      <p className="border-t border-hairline px-3 py-2.5 text-xs text-ink-soft sm:px-6">
+        ระบบเก็บเกียรติบัตรไว้ {RETENTION_YEARS} ปีนับจากวันเผยแพร่ หลังจากนั้นจะถูกลบออกจากระบบ
+        แนะนำให้บันทึกไฟล์เก็บไว้เอง
+      </p>
     </article>
   );
 }

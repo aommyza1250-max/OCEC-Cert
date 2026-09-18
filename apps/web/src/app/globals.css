@@ -27,6 +27,21 @@
   --color-card: #ffffff;
   --color-hairline: #e2e8f0;
 
+  /* สีบอกสถานะของหน้าหลังบ้าน — แยกจากสีรางวัลชัดเจน
+     รางวัลคือ "ข้อมูล" ส่วนพวกนี้คือ "สถานะของงาน" ถ้าใช้ชุดเดียวกันจะอ่านสับสน
+     ทุกคู่ตัวอักษร/พื้นผ่าน WCAG AA */
+  --color-ok-bg: #dcfce7;
+  --color-ok-ink: #15803d;      /* 4.8:1 บนพื้น ok-bg */
+  --color-ok-line: #bbf7d0;
+
+  --color-warn-bg: #fef3c7;
+  --color-warn-ink: #92400e;    /* 6.9:1 */
+  --color-warn-line: #fde68a;
+
+  --color-danger-bg: #fee2e2;
+  --color-danger-ink: #b91c1c;  /* 6.1:1 */
+  --color-danger-line: #fecaca;
+
   /* สีของแต่ละรางวัล — ผู้ปกครองกวาดตาหาเหรียญก่อนอ่านตัวหนังสือ
      แต่ทุกป้ายมีทั้งข้อความและไอคอนกำกับ ไม่ได้สื่อความหมายด้วยสีอย่างเดียว */
   --color-gold-bg: #fef3c7;

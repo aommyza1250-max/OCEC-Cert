@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { AdminShell } from "@/components/admin/AdminShell";
 import { BatchWorkflow, type PublishState } from "@/components/admin/BatchWorkflow";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { DangerZone } from "@/components/admin/DangerZone";
+import { RetentionPanel } from "@/components/admin/RetentionPanel";
 import { SourcesPanel } from "@/components/admin/SourcesPanel";
 import { DuplicateReview, type DuplicateGroup } from "@/components/admin/DuplicateReview";
 import { MissingList } from "@/components/admin/MissingList";
@@ -47,6 +50,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   });
 
   const deleteInfo = await loadDeleteInfo(id, batch.examId);
+  const retention = await loadRetention(id);
   // เหตุผลที่ยังเคลียร์ไฟล์ต้นฉบับไม่ได้ อ่านจากผลตรวจครั้งล่าสุดของ worker
   // ไม่คำนวณซ้ำฝั่งนี้ เพราะถ้าสองฝั่งคิดไม่ตรงกัน แอดมินจะเห็นเหตุผลที่ไม่ตรงกับความจริง
   const lastCleanup = await prisma.job.findFirst({
@@ -56,32 +60,28 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   });
   const blockers = readBlockers(lastCleanup?.progress);
 
-  return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8">
-      <Link href="/admin" className="text-sm text-gray-500 underline">
-        ← กลับหน้ารวม
-      </Link>
+  const roundLabel = batch.exam.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ";
 
-      <header className="mb-8 mt-3">
-        <h1 className="text-2xl font-bold text-[var(--color-brand)]">
-          <code className="mr-2 rounded bg-[var(--color-brand-soft)] px-2 py-1 text-xl">
-            {batch.exam.program.code}
-          </code>
-          {batch.exam.program.name}
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          รอบ {batch.exam.round === "HEAT" ? "Heat (คัดเลือก)" : "Final (ชิงชนะเลิศ)"} · ปี{" "}
-          {batch.exam.year} · สร้างเมื่อ {batch.createdAt.toLocaleDateString("th-TH")}
+  return (
+    <AdminShell
+      title={`${batch.exam.program.code} ${roundLabel} ${batch.exam.year}`}
+      back={{ href: "/admin", label: "กลับหน้ารวม" }}
+    >
+      <div className="-mt-4 mb-6 space-y-1 text-sm text-ink-soft">
+        <p className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={batch.status} />
+          <span>{batch.exam.program.name}</span>
+          <span>· สร้างเมื่อ {batch.createdAt.toLocaleDateString("th-TH")}</span>
         </p>
-        <p className="mt-1 text-sm text-gray-400">
+        <p>
           ไฟล์ที่ตัดได้จะชื่อ{" "}
-          <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+          <code className="rounded bg-paper px-1.5 py-0.5 text-xs">
             {"{FNAME}_{LNAME}_"}
             {batch.exam.program.code}_{batch.exam.round}_{"{AWARD}_"}
             {batch.exam.year}.pdf
           </code>
         </p>
-      </header>
+      </div>
 
       <BatchWorkflow
         batchId={batch.id}
@@ -112,7 +112,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
       <section className="mt-10">
         <h2 className="mb-1 font-semibold">หน้าที่ยังจับคู่ไม่ได้ ({pending.length})</h2>
-        <p className="mb-4 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-ink-soft">
           ระบบไม่เดาให้เมื่อไม่มั่นใจ กรอกชื่อให้ตรงกับที่ปรากฏบนเกียรติบัตรเพื่อจับคู่ด้วยมือ
         </p>
         <MatchTable
@@ -132,6 +132,16 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
       </section>
 
       <section className="mt-10">
+        <h2 className="mb-2 font-semibold">อายุการเก็บ</h2>
+        <RetentionPanel
+          batchId={id}
+          expiresAt={retention.expiresAt?.toISOString() ?? null}
+          certificates={batch._count.certificates}
+          deletedFiles={retention.deletedFiles}
+        />
+      </section>
+
+      <section className="mt-10">
         <h2 className="mb-2 font-semibold">ไฟล์ต้นฉบับ</h2>
         <SourcesPanel
           batchId={id}
@@ -147,7 +157,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
         counts={deleteInfo.counts}
         siblingBatches={deleteInfo.siblingBatches}
       />
-    </main>
+    </AdminShell>
   );
 }
 
@@ -175,6 +185,19 @@ async function loadDeleteInfo(batchId: string, examId: string) {
     counts: { certificates, pages, students: Number(students[0]?.count ?? 0) },
     siblingBatches,
   };
+}
+
+/** วันหมดอายุที่เร็วที่สุดของรอบ และจำนวนใบที่ไฟล์ถูกลบไปแล้ว */
+async function loadRetention(batchId: string) {
+  const [soonest, deletedFiles] = await Promise.all([
+    prisma.certificate.findFirst({
+      where: { batchId, expiresAt: { not: null }, filesDeletedAt: null },
+      orderBy: { expiresAt: "asc" },
+      select: { expiresAt: true },
+    }),
+    prisma.certificate.count({ where: { batchId, filesDeletedAt: { not: null } } }),
+  ]);
+  return { expiresAt: soonest?.expiresAt ?? null, deletedFiles };
 }
 
 function readBlockers(progress: unknown): string[] | null {

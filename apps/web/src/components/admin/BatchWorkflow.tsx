@@ -51,6 +51,13 @@ export function BatchWorkflow(props: Props) {
 
   return (
     <div className="space-y-6">
+      {!props.hasZip && !props.hasExcel && (
+        <p className="rounded-xl border border-brand-line bg-brand-soft px-5 py-3 text-sm text-brand">
+          วางได้ทั้งสองไฟล์รวดเดียวเลย ไม่ต้องรอให้ตัดหน้าเสร็จก่อนค่อยใส่รายชื่อ
+          ระบบจะตัดหน้าแล้วจับคู่ต่อให้เอง
+        </p>
+      )}
+
       <StepCard
         step={1}
         title="อัปโหลดไฟล์ ZIP เกียรติบัตร"
@@ -66,7 +73,6 @@ export function BatchWorkflow(props: Props) {
         step={2}
         title="อัปโหลดไฟล์รายชื่อ Excel"
         done={props.hasExcel}
-        disabled={!props.hasZip || props.status === "SPLITTING"}
         description="ระบบจับคู่ด้วยเลขผู้เข้าสอบ (CANDIDATE NO) เป็นหลัก แล้วเทียบชื่อยืนยันอีกชั้น"
       >
         <UploadDropzone
@@ -74,10 +80,15 @@ export function BatchWorkflow(props: Props) {
           kind="excel"
           accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
         />
+        {props.hasExcel && !props.hasZip && (
+          <p className="mt-2 text-sm text-ink-soft">
+            เก็บรายชื่อไว้แล้ว รอไฟล์ ZIP — พอตัดหน้าเสร็จระบบจะจับคู่ให้เองทันที
+          </p>
+        )}
       </StepCard>
 
       {running && (
-        <p className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-800">
+        <p className="rounded-xl border border-brand-line bg-brand-soft px-5 py-4 text-sm text-brand">
           กำลังประมวลผล... หน้านี้จะอัปเดตเองทุก 3 วินาที
         </p>
       )}
@@ -85,10 +96,10 @@ export function BatchWorkflow(props: Props) {
       {/* ความผิดพลาดของไฟล์ที่อัปเข้ามาแสดงในช่องอัปโหลดของคนนั้นอยู่แล้ว
           ขึ้นซ้ำตรงนี้อีกมีแต่จะรก ที่นี่จึงเหลือไว้เฉพาะตอนระบบพังจริง */}
       {props.latestJob?.status === "FAILED" && !props.latestJob.userError && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-          <p className="font-medium text-red-800">ประมวลผลล้มเหลว</p>
-          <p className="mt-1 text-sm text-red-700">{props.latestJob.error}</p>
-          <p className="mt-2 text-sm text-red-600">
+        <div className="rounded-xl border border-danger-line bg-danger-bg px-5 py-4">
+          <p className="font-medium text-danger-ink">ประมวลผลล้มเหลว</p>
+          <p className="mt-1 text-sm text-danger-ink">{props.latestJob.error}</p>
+          <p className="mt-2 text-sm text-danger-ink">
             ถ้าแก้เองไม่ได้ ให้ดู docs/runbook.md หรือส่งข้อความนี้ให้ผู้ดูแลระบบ
           </p>
         </div>
@@ -129,15 +140,15 @@ function ZipActions({ batchId }: { batchId: string }) {
         mode="append"
         label="เลือกไฟล์ ZIP ที่มีเกียรติบัตรตกหล่น"
       />
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-ink-soft">
         หน้าที่นำเข้าไปแล้วจะไม่ถูกแตะ ระบบเติมเฉพาะใบที่ยังไม่มี
         (ดูจากเลขผู้เข้าสอบคู่กับรางวัล) จะอัป ZIP ชุดเต็มทั้งก้อนก็ได้ ไม่ต้องแยกไฟล์
         {" "}และถ้านำเข้ารายชื่อไว้แล้ว ระบบจะจับคู่ต่อให้อัตโนมัติ
       </p>
 
       {showDanger ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="mb-3 text-sm text-red-800">
+        <div className="rounded-lg border border-danger-line bg-danger-bg p-3">
+          <p className="mb-3 text-sm text-danger-ink">
             <b>ตัดใหม่ทั้งรอบ</b> จะลบหน้าที่นำเข้าไปแล้วทั้งหมดของรอบนี้ทิ้ง
             รวมถึงเกียรติบัตรที่ออกไปแล้วและที่จับคู่ด้วยมือไว้
             ใช้เฉพาะตอนไฟล์ชุดเดิมผิดทั้งชุดเท่านั้น
@@ -156,7 +167,7 @@ function ZipActions({ batchId }: { batchId: string }) {
         <button
           type="button"
           onClick={() => setShowDanger(true)}
-          className="text-sm text-gray-400 underline hover:text-red-600"
+          className="text-sm text-ink-soft underline hover:text-danger-ink"
         >
           ไฟล์ชุดเดิมผิดทั้งชุด ต้องการตัดใหม่ทั้งรอบ
         </button>
@@ -182,21 +193,21 @@ function StepCard({
 }) {
   return (
     <section
-      className={`rounded-xl border bg-white p-5 ${
-        disabled ? "border-gray-200 opacity-50" : "border-gray-200"
+      className={`rounded-xl border bg-card p-5 ${
+        disabled ? "border-hairline opacity-50" : "border-hairline"
       }`}
     >
       <div className="mb-3 flex items-start gap-3">
         <span
           className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-            done ? "bg-green-600 text-white" : "bg-gray-200 text-gray-600"
+            done ? "bg-ok-ink text-white" : "bg-hairline text-ink-soft"
           }`}
         >
           {done ? "✓" : step}
         </span>
         <div>
           <h2 className="font-semibold">{title}</h2>
-          <p className="text-sm text-gray-500">{description}</p>
+          <p className="text-sm text-ink-soft">{description}</p>
         </div>
       </div>
       {!disabled && children}
@@ -234,22 +245,22 @@ function StatsPanel({
   if (items.every((i) => i.value === "—")) return null;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
+    <section className="rounded-2xl border border-hairline bg-card p-5">
       <h2 className="mb-4 font-semibold">สรุปผลการประมวลผล</h2>
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {items.map((item) => (
           <div key={item.label}>
-            <dt className="text-sm text-gray-500">{item.label}</dt>
+            <dt className="text-sm text-ink-soft">{item.label}</dt>
             <dd className="text-xl font-semibold tabular-nums">{item.value}</dd>
           </div>
         ))}
       </dl>
       {Array.isArray(stats.unmatchedRows) && stats.unmatchedRows.length > 0 && (
         <details className="mt-4">
-          <summary className="cursor-pointer text-sm text-amber-700">
+          <summary className="cursor-pointer text-sm text-warn-ink">
             รายชื่อใน Excel ที่ไม่มีหน้าเกียรติบัตร ({stats.unmatchedRows.length})
           </summary>
-          <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-sm text-gray-600">
+          <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-sm text-ink-soft">
             {(stats.unmatchedRows as { row: number; certNo: string; name: string }[]).map((r) => (
               <li key={r.row}>
                 แถวที่ {r.row} · เลข {r.certNo || "—"} · {r.name}
@@ -302,10 +313,10 @@ function PublishPanel({
   const blocked = state.needsDecision && state.policy === "UNDECIDED";
 
   return (
-    <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+    <section className="space-y-4 rounded-2xl border border-hairline bg-card p-5">
       <div>
         <h2 className="font-semibold">เผยแพร่ให้ค้นหาได้</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-ink-soft">
           เผยแพร่ทีละคน คนที่ข้อมูลครบออกไปก่อน ส่วนคนที่ยังไม่ครบค้างไว้จนกว่าจะได้ไฟล์
         </p>
       </div>
@@ -319,19 +330,19 @@ function PublishPanel({
       )}
 
       {state.held.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <p className="font-medium text-amber-900">
+        <div className="rounded-lg border border-warn-line bg-warn-bg p-4">
+          <p className="font-medium text-warn-ink">
             ค้างไว้เพราะข้อมูลไม่ครบ {state.held.length} คน
           </p>
-          <ul className="mt-2 space-y-1 text-sm text-amber-800">
+          <ul className="mt-2 space-y-1 text-sm text-warn-ink">
             {state.held.map((h) => (
               <li key={h.name + h.certNo}>
                 {h.name}
-                {h.certNo && <span className="text-amber-700"> (เลข {h.certNo})</span>} — {h.reason}
+                {h.certNo && <span className="text-warn-ink"> (เลข {h.certNo})</span>} — {h.reason}
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-sm text-amber-700">
+          <p className="mt-2 text-sm text-warn-ink">
             โยนไฟล์เข้าไปในบล็อกของคนนั้นได้ที่หัวข้อ &ldquo;รายการที่ต้องตามเก็บ&rdquo; ด้านล่าง
             เสร็จแล้วกดเผยแพร่อีกครั้ง คนที่พร้อมแล้วจะตามออกไปเอง
           </p>
@@ -339,7 +350,7 @@ function PublishPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <p className="flex-1 text-sm text-gray-600">
+        <p className="flex-1 text-sm text-ink-soft">
           {published
             ? `เผยแพร่อยู่ ${state.publishedCount} ใบ จากทั้งหมด ${certificateCount} ใบ`
             : `ยังไม่เผยแพร่ — เกียรติบัตร ${certificateCount} ใบยังไม่ปรากฏในหน้าค้นหา`}
@@ -349,7 +360,8 @@ function PublishPanel({
           <button
             onClick={() => call("publish", { published: true })}
             disabled={busy}
-            className="rounded-lg bg-green-700 px-5 py-2.5 font-semibold text-white disabled:opacity-40"
+            className="min-h-11 cursor-pointer rounded-xl bg-ok-ink px-5 font-semibold text-white
+                       transition duration-200 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? "กำลังบันทึก..." : `เผยแพร่เพิ่ม ${state.readyToPublish} ใบ`}
           </button>
@@ -359,7 +371,7 @@ function PublishPanel({
           onClick={() => call("publish", { published: !published })}
           disabled={busy || (!published && blocked)}
           className={`rounded-lg px-5 py-2.5 font-semibold text-white disabled:opacity-40 ${
-            published ? "bg-gray-600" : "bg-green-700"
+            published ? "bg-ink-soft" : "bg-ok-ink"
           }`}
         >
           {busy ? "กำลังบันทึก..." : published ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
@@ -367,16 +379,16 @@ function PublishPanel({
       </div>
 
       {!published && blocked && (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-warn-ink">
           รอบนี้มีผู้เข้าสอบที่ถือทั้งใบเหรียญและใบ Perfect Score กรุณาเลือกด้านบนก่อน
         </p>
       )}
       {!published && unresolved > 0 && (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-warn-ink">
           ยังมี {unresolved} หน้าที่จับคู่ไม่ได้ เผยแพร่ได้แต่หน้าเหล่านั้นจะยังค้นไม่เจอ
         </p>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger-ink">{error}</p>}
     </section>
   );
 }
@@ -407,15 +419,15 @@ function PolicyChooser({
   ] as const;
 
   return (
-    <div className="rounded-lg border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] p-4">
-      <p className="font-medium text-[var(--color-brand)]">
+    <div className="rounded-lg border border-brand/30 bg-brand-soft p-4">
+      <p className="font-medium text-brand">
         ฮ่องกงส่งเกียรติบัตรฉบับจริงแบบไหนสำหรับรอบนี้
       </p>
-      <p className="mt-1 text-sm text-gray-600">
+      <p className="mt-1 text-sm text-ink-soft">
         มีผู้เข้าสอบ {state.multiAward.length} คนที่ถือทั้งใบเหรียญและใบ Perfect Score
       </p>
 
-      <ul className="mt-2 text-sm text-gray-600">
+      <ul className="mt-2 text-sm text-ink-soft">
         {state.multiAward.map((p) => (
           <li key={p.name}>
             {p.name} — {p.awards.join(" + ")}
@@ -427,8 +439,8 @@ function PolicyChooser({
         {options.map((o) => (
           <label
             key={o.value}
-            className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-white px-3 py-2 ${
-              state.policy === o.value ? "border-[var(--color-brand)]" : "border-gray-200"
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 ${
+              state.policy === o.value ? "border-brand" : "border-hairline"
             }`}
           >
             <input
@@ -440,7 +452,7 @@ function PolicyChooser({
             />
             <span>
               <b>{o.label}</b>
-              <span className="block text-sm text-gray-500">{o.hint}</span>
+              <span className="block text-sm text-ink-soft">{o.hint}</span>
             </span>
           </label>
         ))}

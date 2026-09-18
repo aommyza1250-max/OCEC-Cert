@@ -89,14 +89,25 @@ def _strip_one_prefix(text: str) -> str:
 # Excel เขียน "GOLD AWARD" / "PERFECT SCORER" ส่วนโฟลเดอร์เขียนแค่ "Gold"
 AWARD_NOISE = frozenset({"AWARD", "AWARDS", "SCORER", "SCORERS", "MEDAL", "PRIZE"})
 
-# ค่ามาตรฐาน 5 ค่าที่ระบบใช้ทั้งในชื่อไฟล์และฐานข้อมูล
+# ค่ามาตรฐาน 6 ค่าที่ระบบใช้ทั้งในชื่อไฟล์และฐานข้อมูล
+#
+# PARTICIPATION (รางวัลเข้าร่วม) มีเฉพาะรอบคัดเลือก และมีจำนวนเยอะที่สุดในรอบนั้น
+# ของจริงที่เจอ: HKIMO Heat 2026 มี 277 ใบ, BBB มี 115 ใบ
+#
+# 1st/2nd/3rd Prize เป็นคำที่รายการ BBB (粵港澳大灣區數學競賽) ใช้เรียกเหรียญ
+# ชื่อโฟลเดอร์ยังเป็น Gold/Silver/Bronze เหมือนเดิม ที่ต้องรู้จักคำพวกนี้ด้วย
+# เพราะข้อความบนหน้าใช้เทียบยืนยันกับชื่อโฟลเดอร์
 AWARD_CANONICAL = {
     "GOLD": "GOLD",
+    "1ST": "GOLD",
     "SILVER": "SILVER",
+    "2ND": "SILVER",
     "BRONZE": "BRONZE",
+    "3RD": "BRONZE",
     "MERIT": "MERIT",
     "PERFECT": "PERFECT_SCORE",
     "PERFECT_SCORE": "PERFECT_SCORE",
+    "PARTICIPATION": "PARTICIPATION",
 }
 
 # ชื่อรางวัลภาษาไทย — เรียงจากเจาะจงไปกว้าง ("ทองแดง" ต้องมาก่อน "ทอง")
@@ -106,11 +117,12 @@ AWARD_THAI = (
     ("เงิน", "SILVER"),
     ("ชมเชย", "MERIT"),
     ("คะแนนเต็ม", "PERFECT_SCORE"),
+    ("เข้าร่วม", "PARTICIPATION"),
 )
 
 
 def normalize_award(raw: str) -> str:
-    """แปลงชื่อรางวัลให้เป็นค่ามาตรฐาน 1 ใน 5 ค่า
+    """แปลงชื่อรางวัลให้เป็นค่ามาตรฐาน 1 ใน 6 ค่า
 
     รางวัลมาจาก 3 แหล่งที่สะกดไม่เหมือนกันเลย:
       ชื่อโฟลเดอร์ใน ZIP   "Gold", "Perfect_Score"
@@ -127,6 +139,9 @@ def normalize_award(raw: str) -> str:
     for thai, canonical in AWARD_THAI:
         if thai in text:
             return canonical
+
+    # "3rdPrize" เขียนติดกันไม่มีเว้นวรรค ต้องแยกเลขลำดับออกจากคำก่อน
+    text = re.sub(r"\b(\d+(?:ST|ND|RD|TH))(?=[A-Z])", r"\1 ", text)
 
     tokens = [t for t in text.split(" ") if t and t not in AWARD_NOISE]
     return AWARD_CANONICAL.get("_".join(tokens), "")

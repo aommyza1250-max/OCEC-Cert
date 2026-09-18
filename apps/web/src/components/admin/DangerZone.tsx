@@ -53,28 +53,28 @@ export function DangerZone({
   }
 
   return (
-    <section className="mt-10 rounded-xl border-2 border-red-200 bg-red-50/40 p-4">
-      <h2 className="font-semibold text-red-800">โซนอันตราย</h2>
+    <section className="mt-10 rounded-xl border-2 border-danger-line bg-danger-bg p-4">
+      <h2 className="font-semibold text-danger-ink">โซนอันตราย</h2>
 
       {!open ? (
         <>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-ink-soft">
             ลบรอบการนำเข้านี้ทั้งรอบ ทั้งไฟล์เกียรติบัตร รูปตัวอย่าง และข้อมูลที่จับคู่ไว้
           </p>
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="mt-3 cursor-pointer rounded-lg border border-red-300 px-4 py-2 text-sm
-                       font-medium text-red-700 transition hover:bg-red-100"
+            className="mt-3 cursor-pointer rounded-lg border border-danger-line px-4 py-2 text-sm
+                       font-medium text-danger-ink transition hover:bg-danger-bg"
           >
             ลบรอบการนำเข้านี้
           </button>
         </>
       ) : (
         <div className="mt-3 space-y-3 text-sm">
-          <div className="rounded-lg bg-white px-4 py-3">
-            <p className="font-medium text-gray-700">สิ่งที่จะหายไป</p>
-            <ul className="mt-1 list-inside list-disc text-gray-600">
+          <div className="rounded-lg bg-card px-4 py-3">
+            <p className="font-medium text-ink">สิ่งที่จะหายไป</p>
+            <ul className="mt-1 list-inside list-disc text-ink-soft">
               <li>เกียรติบัตร {counts.certificates} ใบ พร้อมไฟล์ PDF และรูปตัวอย่างบนคลาวด์</li>
               <li>หน้าที่ตัดไว้ {counts.pages} หน้า และไฟล์ต้นฉบับทั้งหมดของรอบนี้</li>
               <li>
@@ -83,7 +83,7 @@ export function DangerZone({
               </li>
             </ul>
             {siblingBatches > 0 && (
-              <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-amber-800">
+              <p className="mt-2 rounded bg-warn-bg px-3 py-2 text-warn-ink">
                 รอบการสอบนี้ยังมีรอบนำเข้าอื่นอีก {siblingBatches} รอบ
                 ลบอันนี้แล้วเกียรติบัตรจากอีกรอบยังอยู่ ผู้ปกครองจะยังค้นเจอของรอบนั้น
               </p>
@@ -91,7 +91,7 @@ export function DangerZone({
           </div>
 
           {published && (
-            <label className="flex items-start gap-2 text-gray-700">
+            <label className="flex items-start gap-2 text-ink">
               <input
                 type="checkbox"
                 checked={understood}
@@ -105,7 +105,7 @@ export function DangerZone({
           )}
 
           <div>
-            <label htmlFor="confirm" className="block text-gray-700">
+            <label htmlFor="confirm" className="block text-ink">
               พิมพ์ <b className="select-all font-mono">{confirmPhrase}</b> เพื่อยืนยัน
             </label>
             <input
@@ -113,7 +113,7 @@ export function DangerZone({
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               autoComplete="off"
-              className="mt-1 w-full max-w-sm rounded-lg border border-gray-300 px-3 py-2 font-mono"
+              className="mt-1 w-full max-w-sm rounded-lg border border-hairline px-3 py-2 font-mono"
             />
           </div>
 
@@ -122,8 +122,7 @@ export function DangerZone({
               type="button"
               onClick={remove}
               disabled={!ready || working}
-              className="cursor-pointer rounded-lg bg-red-600 px-4 py-2 font-medium text-white
-                         transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="min-h-11 cursor-pointer rounded-xl px-4 text-sm font-semibold text-white transition duration-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 bg-danger-ink hover:brightness-95"
             >
               {working ? "กำลังลบ..." : "ลบถาวร"}
             </button>
@@ -135,14 +134,13 @@ export function DangerZone({
                 setUnderstood(false);
               }}
               disabled={working}
-              className="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2
-                         transition hover:bg-gray-50 disabled:opacity-50"
+              className="min-h-10 cursor-pointer rounded-xl border px-3 text-sm transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 border-hairline bg-card hover:bg-paper"
             >
               ยกเลิก
             </button>
           </div>
 
-          {error && <p className="rounded-lg bg-red-100 px-3 py-2 text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-danger-bg px-3 py-2 text-danger-ink">{error}</p>}
         </div>
       )}
     </section>
