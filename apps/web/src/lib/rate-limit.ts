@@ -31,9 +31,31 @@ const SEARCH_LIMIT = readLimit("SEARCH_RATE_LIMIT_PER_MIN", 300);
 /** เข้าสู่ระบบ: เข้มไว้ เพราะมีรหัสผ่านเดียวและต้องกันการเดารหัส */
 const LOGIN_LIMIT = readLimit("LOGIN_RATE_LIMIT_PER_MIN", 10);
 
-function readLimit(name: string, fallback: number): number {
-  const raw = Number(process.env[name]);
-  return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+export function readLimit(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  // ไม่ได้ตั้ง หรือตั้งเป็นค่าว่าง = ใช้ค่าปริยาย
+  // ต้องแยกสองกรณีนี้ออกจาก "0" ให้ชัด เพราะช่องค่าว่างใน Railway กดพลาดง่ายมาก
+  // และถ้านับเป็น 0 เท่ากับปิดการจำกัดทิ้งไปเงียบ ๆ โดยไม่มีอะไรฟ้อง
+  if (!raw) return fallback;
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+/** ค่าลิมิตที่ใช้อยู่จริง — ให้หน้าแอดมินเรียกดูได้ จะได้ไม่ต้องเดาว่าตั้งค่าอะไรไว้บนเซิร์ฟเวอร์ */
+export function rateLimitSettings() {
+  return { search: SEARCH_LIMIT, login: LOGIN_LIMIT };
+}
+
+// ปิดการจำกัดคือเรื่องใหญ่ ต้องเห็นใน log ตั้งแต่ตอน service เริ่มทำงาน
+// ไม่ใช่มารู้ตอนยิงทดสอบแล้วงงว่าทำไมกันไม่ได้ (เคยเกิดมาแล้ว)
+for (const [name, limit] of [
+  ["SEARCH_RATE_LIMIT_PER_MIN", SEARCH_LIMIT],
+  ["LOGIN_RATE_LIMIT_PER_MIN", LOGIN_LIMIT],
+] as const) {
+  if (limit === 0) {
+    console.warn(`[rate-limit] ${name}=0 — ปิดการจำกัดจำนวนครั้งอยู่ ห้ามใช้ค่านี้ตอนเปิดใช้งานจริง`);
+  }
 }
 
 export type RateLimitPurpose = "search" | "login";

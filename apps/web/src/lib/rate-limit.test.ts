@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp } from "./rate-limit";
+import { clientIp, readLimit } from "./rate-limit";
 
 const headers = (values: Record<string, string>) => new Headers(values);
 
@@ -49,5 +49,42 @@ describe("clientIp", () => {
 
   it("ไม่มี header เลย", () => {
     expect(clientIp(headers({}))).toBe("unknown");
+  });
+});
+
+describe("readLimit", () => {
+  const withEnv = (value: string | undefined, run: () => void) => {
+    const previous = process.env.TEST_LIMIT;
+    if (value === undefined) delete process.env.TEST_LIMIT;
+    else process.env.TEST_LIMIT = value;
+    try {
+      run();
+    } finally {
+      if (previous === undefined) delete process.env.TEST_LIMIT;
+      else process.env.TEST_LIMIT = previous;
+    }
+  };
+
+  it("ไม่ได้ตั้งค่าไว้ ใช้ค่าปริยาย", () => {
+    withEnv(undefined, () => expect(readLimit("TEST_LIMIT", 300)).toBe(300));
+  });
+
+  it("ตั้งเป็นค่าว่าง ต้องใช้ค่าปริยาย ไม่ใช่ปิดการจำกัด", () => {
+    // ช่องค่าว่างบนหน้า Railway กดพลาดง่าย ถ้านับเป็น 0 เท่ากับปิดทิ้งเงียบ ๆ
+    withEnv("", () => expect(readLimit("TEST_LIMIT", 300)).toBe(300));
+    withEnv("   ", () => expect(readLimit("TEST_LIMIT", 300)).toBe(300));
+  });
+
+  it("ตั้งเป็น 0 คือตั้งใจปิดการจำกัด", () => {
+    withEnv("0", () => expect(readLimit("TEST_LIMIT", 300)).toBe(0));
+  });
+
+  it("ตั้งค่าเป็นตัวเลขปกติ", () => {
+    withEnv("50", () => expect(readLimit("TEST_LIMIT", 300)).toBe(50));
+  });
+
+  it("ตั้งค่าที่ไม่ใช่ตัวเลข ใช้ค่าปริยาย", () => {
+    withEnv("มั่ว", () => expect(readLimit("TEST_LIMIT", 300)).toBe(300));
+    withEnv("-5", () => expect(readLimit("TEST_LIMIT", 300)).toBe(300));
   });
 });

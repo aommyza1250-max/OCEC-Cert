@@ -11,6 +11,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
+import { rateLimitSettings } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,8 @@ export async function GET() {
 
   return NextResponse.json({
     processId: PROCESS_ID,
+    // ค่าลิมิตที่ service นี้ใช้อยู่จริง — 0 แปลว่าปิดการจำกัดอยู่
+    limits: rateLimitSettings(),
     seen,
     allHeaderNames: [...h.keys()].sort(),
   });
