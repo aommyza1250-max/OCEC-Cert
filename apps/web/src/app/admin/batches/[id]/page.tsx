@@ -49,6 +49,14 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     _count: true,
   });
 
+  // งานที่ยังไม่จบ — ใช้ตัดสินว่ายังประมวลผลอยู่ไหม
+  // ดูจากคิวงานตรง ๆ ไม่ใช่ดูจากสถานะของรอบนำเข้า เพราะช่วงที่ตัดหน้าเสร็จแล้ว
+  // และงานจับคู่ยังรอคิวอยู่ สถานะรอบจะเป็น "ตัดเสร็จ" ทั้งที่งานยังไม่จบ
+  const pendingJobs = await prisma.job.count({
+    where: { batchId: id, status: { in: ["QUEUED", "RUNNING"] } },
+  });
+  const processing = pendingJobs > 0;
+
   const deleteInfo = await loadDeleteInfo(id, batch.examId);
   const retention = await loadRetention(id);
   // เหตุผลที่ยังเคลียร์ไฟล์ต้นฉบับไม่ได้ อ่านจากผลตรวจครั้งล่าสุดของ worker
@@ -101,11 +109,23 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                 // เอาเฉพาะบรรทัดแรก ส่วนที่เหลือเป็น traceback สำหรับคนแก้โค้ด ไม่ใช่สำหรับแอดมิน
                 error: batch.jobs[0].error?.split("\n")[0] ?? null,
                 userError: batch.jobs[0].userError,
+                progress: batch.jobs[0].progress as Record<string, unknown>,
               }
             : null
         }
+        pendingJobs={pendingJobs}
       />
 
+      {/* ระหว่างประมวลผลยังไม่ต้องให้ตัดสินอะไร รอสรุปทีเดียวตอนจบ
+          ของที่ค้างอยู่ตอนนี้เปลี่ยนได้อีกเมื่องานเดินต่อ ถ้าให้ตัดสินไปก่อน
+          แอดมินจะทำงานซ้ำและอาจตัดสินจากข้อมูลที่ยังไม่ครบ */}
+      {processing ? (
+        <p className="mt-10 rounded-2xl border border-brand-line bg-brand-soft px-5 py-4 text-sm text-brand">
+          กำลังประมวลผลอยู่ — รายการที่ต้องตัดสิน (ชื่อซ้ำ / จับคู่ไม่ได้ / ต้องตามเก็บ)
+          จะแสดงทีเดียวเมื่อจับคู่เสร็จทั้งหมด
+        </p>
+      ) : (
+        <>
       <MissingList batchId={id} items={missingItems} />
 
       <DuplicateReview groups={duplicateGroups} />
@@ -130,6 +150,8 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           }))}
         />
       </section>
+        </>
+      )}
 
       <section className="mt-10">
         <h2 className="mb-2 font-semibold">อายุการเก็บ</h2>
