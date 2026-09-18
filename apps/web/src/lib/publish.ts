@@ -108,6 +108,15 @@ export async function loadPeople(batchId: string): Promise<PersonCertificates[]>
  * เผยแพร่ซ้ำได้เรื่อย ๆ — เรียกอีกครั้งหลังเติมไฟล์ที่ตกหล่น
  * คนที่ข้อมูลครบแล้วจะถูกเผยแพร่เพิ่มให้ ส่วนคนที่ยังไม่ครบก็ยังค้างอยู่เหมือนเดิม
  */
+/** อายุการเก็บเกียรติบัตรนับจากวันเผยแพร่ */
+export const RETENTION_MONTHS = Number(process.env.RETENTION_MONTHS) || 24;
+
+function addMonths(from: Date, months: number): Date {
+  const out = new Date(from);
+  out.setMonth(out.getMonth() + months);
+  return out;
+}
+
 export async function applyPublish(batchId: string, publish: boolean) {
   const people = await loadPeople(batchId);
 
@@ -127,6 +136,12 @@ export async function applyPublish(batchId: string, publish: boolean) {
     prisma.certificate.updateMany({
       where: { id: { in: decision.publish } },
       data: { published: now },
+    }),
+    // ตั้งวันหมดอายุตอนเผยแพร่ครั้งแรกเท่านั้น (expiresAt ยังว่าง)
+    // เผยแพร่ซ้ำหลังแก้ไขไม่รีเซ็ตนาฬิกา ไม่งั้นการแก้อะไรเล็กน้อยจะยืดอายุออกไปอีก 2 ปีเงียบ ๆ
+    prisma.certificate.updateMany({
+      where: { id: { in: decision.publish }, expiresAt: null },
+      data: { expiresAt: addMonths(now, RETENTION_MONTHS) },
     }),
     prisma.certificate.updateMany({
       where: { id: { in: [...decision.held, ...decision.hiddenByPolicy] } },

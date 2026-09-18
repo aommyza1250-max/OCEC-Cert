@@ -39,12 +39,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const batch = await prisma.batch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "ไม่พบรอบการนำเข้านี้" }, { status: 404 });
 
-  if (kind === "excel" && !batch.sourceZipKey) {
-    return NextResponse.json(
-      { error: "ต้องอัปโหลดไฟล์ ZIP เกียรติบัตรและรอตัดแยกให้เสร็จก่อน จึงจะนำเข้ารายชื่อได้" },
-      { status: 409 },
-    );
-  }
 
   // ยอมรับเฉพาะ key ที่อยู่ใต้โฟลเดอร์ของรอบนำเข้านี้ กันไม่ให้ชี้ไปไฟล์ของรอบอื่น
   const prefix = `sources/${id}/`;
@@ -59,14 +53,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ไม่พบไฟล์ที่อัปโหลด" }, { status: 400 });
   }
 
+  // อัป Excel มาก่อนตัดหน้าได้ — เก็บไฟล์ไว้เฉย ๆ แล้วให้ worker จับคู่ต่อเองหลังตัดเสร็จ
+  // แอดมินจะได้วางไฟล์ทั้งสองรวดเดียวจบ ไม่ต้องกลับมาทำอีกจังหวะ
+  const rosterOnly = kind === "excel" && !batch.sourceZipKey;
+
   const job = await prisma.$transaction(async (tx) => {
     await tx.batch.update({
       where: { id },
       data:
         kind === "zip"
           ? { sourceZipKey: uploadedKey, status: "SPLITTING" }
-          : { sourceExcelKey: uploadedKey, status: "MATCHING" },
+          : { sourceExcelKey: uploadedKey, ...(rosterOnly ? {} : { status: "MATCHING" }) },
     });
+    if (rosterOnly) return null;
     return tx.job.create({
       data: {
         batchId: id,
@@ -77,7 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
 
   // ปลุก worker ให้เริ่มทันที ถ้าปลุกไม่ติดก็ไม่เป็นไร รอบ poll ถัดไปก็หยิบเอง
-  const woke = await wakeWorker();
+  const woke = job ? await wakeWorker() : false;
 
-  return NextResponse.json({ jobId: job.id, workerNotified: woke });
+  return NextResponse.json({ jobId: job?.id ?? null, workerNotified: woke, queued: Boolean(job) });
 }
