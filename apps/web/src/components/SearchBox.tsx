@@ -1,42 +1,99 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { MIN_QUERY_LENGTH } from "@/lib/constants";
+import { SearchIcon, Spinner } from "./icons";
 
+/** ช่องค้นหาหลักของหน้าสาธารณะ
+ *
+ *  ออกแบบให้ผู้ปกครองที่ไม่คุ้นเว็บใช้ได้ทันทีโดยไม่ต้องเดา:
+ *    - มีป้ายชื่อช่องเขียนอยู่จริง ไม่ใช่ข้อความจาง ๆ ในช่อง (พอพิมพ์แล้วข้อความจางจะหาย
+ *      คนที่พิมพ์ช้าจะลืมว่าช่องนี้ให้กรอกอะไร)
+ *    - ช่องกรอกและปุ่มสูง 56px กดพลาดยาก และตัวหนังสือใหญ่กว่าปกติ
+ *    - ปุ่มมีคำว่า "ค้นหา" ไม่ใช่แว่นขยายเปล่า ๆ
+ *    - กดแล้วขึ้น "กำลังค้นหา..." ทันที ไม่ปล่อยให้ยืนงงว่ากดติดหรือยัง
+ *
+ *  ยังเป็น <form method="get"> จริง ๆ อยู่ กด Enter ได้ และถ้า JS ไม่ทำงานก็ยังค้นได้
+ */
 export function SearchBox({ defaultValue = "" }: { defaultValue?: string }) {
+  const router = useRouter();
   const [value, setValue] = useState(defaultValue);
-  const tooShort = value.trim().length > 0 && value.trim().length < MIN_QUERY_LENGTH;
+  const [pending, startTransition] = useTransition();
+  const [showHint, setShowHint] = useState(false);
+
+  const trimmed = value.trim();
+  const tooShort = trimmed.length > 0 && trimmed.length < MIN_QUERY_LENGTH;
+  // ค้นจากชื่ออังกฤษอย่างเดียว พิมพ์ไทยมาก็ไม่มีทางเจอ — บอกทันทีที่พิมพ์
+  // ไม่ต้องรอให้กดค้นหาแล้วไปเจอหน้า "ไม่พบ" ซึ่งไม่ได้บอกว่าผิดเพราะภาษา
+  const hasThai = /[\u0E00-\u0E7F]/.test(value);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    if (tooShort || trimmed.length === 0) {
+      // บอกตรงใต้ช่องกรอก ไม่เด้ง alert และไม่ไปขึ้นรวมที่หัวหน้า
+      event.preventDefault();
+      setShowHint(true);
+      return;
+    }
+    event.preventDefault();
+    startTransition(() => router.push(`/?q=${encodeURIComponent(trimmed)}`));
+  }
 
   return (
-    <form action="/" method="get" className="w-full">
-      <div className="flex flex-col gap-2 sm:flex-row">
+    <form action="/" method="get" onSubmit={submit} className="w-full">
+      <label htmlFor="q" className="block text-lg font-semibold text-ink">
+        พิมพ์ชื่อผู้เข้าสอบเป็นภาษาอังกฤษ
+      </label>
+      <p id="q-help" className="mt-1 text-base text-ink-soft">
+        ชื่อบนเกียรติบัตรเป็นภาษาอังกฤษทั้งหมด ไม่ต้องใส่คำนำหน้า เช่น{" "}
+        <span className="font-medium text-ink">SOMCHAI JAIDEE</span> หรือพิมพ์แค่{" "}
+        <span className="font-medium text-ink">SOMCHAI</span> ก็ได้
+      </p>
+
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row">
         <input
+          id="q"
           type="search"
           name="q"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="พิมพ์ชื่อ-นามสกุล เช่น สมชาย ใจดี หรือ Somchai Jaidee"
+          onChange={(e) => {
+            setValue(e.target.value);
+            setShowHint(false);
+          }}
+          enterKeyHint="search"
           autoComplete="off"
+          aria-describedby="q-help"
+          aria-invalid={hasThai || (showHint && tooShort) ? true : undefined}
           // ไม่ใส่ autoFocus บนมือถือ คีย์บอร์ดจะเด้งขึ้นมาบังหน้าจอทันที
-          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base
-                     shadow-sm outline-none transition
-                     focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand)]/20"
-          aria-label="ชื่อ-นามสกุลที่ต้องการค้นหา"
+          className="min-h-14 w-full rounded-xl border-2 border-hairline bg-card px-4 text-lg
+                     shadow-sm transition placeholder:text-ink-soft
+                     focus:border-brand focus:shadow-md"
+          placeholder="ชื่อ นามสกุล"
         />
         <button
           type="submit"
-          disabled={tooShort}
-          className="shrink-0 rounded-xl bg-[var(--color-brand)] px-6 py-3 text-base font-semibold
-                     text-white shadow-sm transition hover:brightness-110
-                     disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={pending}
+          className="flex min-h-14 shrink-0 cursor-pointer items-center justify-center gap-2
+                     rounded-xl bg-brand px-8 text-lg font-semibold text-white shadow-sm
+                     transition duration-200 hover:bg-brand-dark active:scale-[0.99]
+                     disabled:cursor-wait disabled:opacity-80"
         >
-          ค้นหา
+          {pending ? <Spinner /> : <SearchIcon />}
+          {pending ? "กำลังค้นหา..." : "ค้นหา"}
         </button>
       </div>
-      {tooShort && (
-        <p className="mt-2 text-sm text-amber-700">
-          กรุณาพิมพ์อย่างน้อย {MIN_QUERY_LENGTH} ตัวอักษร
+
+      {hasThai ? (
+        <p className="mt-2 text-base font-medium text-flag-red">
+          ระบบค้นจากชื่อภาษาอังกฤษเท่านั้น กรุณาพิมพ์ชื่อเป็นภาษาอังกฤษ
         </p>
+      ) : (
+        showHint &&
+        tooShort && (
+          <p className="mt-2 text-base font-medium text-flag-red">
+            กรุณาพิมพ์อย่างน้อย {MIN_QUERY_LENGTH} ตัวอักษร
+          </p>
+        )
       )}
     </form>
   );
