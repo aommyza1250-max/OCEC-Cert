@@ -308,9 +308,9 @@
       "normalized": "PERFECT_SCORE"
     },
     {
-      "why": "รางวัลที่ระบบไม่รู้จัก ต้องคืนค่าว่าง ไม่ใช่เดา",
+      "why": "ชื่อโฟลเดอร์ของรางวัลเข้าร่วม — มีเฉพาะรอบคัดเลือก",
       "input": "Participation",
-      "normalized": ""
+      "normalized": "PARTICIPATION"
     },
     {
       "why": "โฟลเดอร์ขยะจาก macOS",
@@ -320,6 +320,51 @@
     {
       "why": "ว่าง",
       "input": "",
+      "normalized": ""
+    },
+    {
+      "why": "ชื่อโฟลเดอร์ตัวเล็ก",
+      "input": "participation",
+      "normalized": "PARTICIPATION"
+    },
+    {
+      "why": "ข้อความบนหน้าเกียรติบัตร",
+      "input": "Participation Award",
+      "normalized": "PARTICIPATION"
+    },
+    {
+      "why": "คอลัมน์ AWARD ใน Excel",
+      "input": "PARTICIPATION AWARD",
+      "normalized": "PARTICIPATION"
+    },
+    {
+      "why": "รางวัลเข้าร่วมภาษาไทย",
+      "input": "เข้าร่วม",
+      "normalized": "PARTICIPATION"
+    },
+    {
+      "why": "BBB เรียกเหรียญทองว่า 1st Prize",
+      "input": "1st Prize",
+      "normalized": "GOLD"
+    },
+    {
+      "why": "BBB เรียกเหรียญเงินว่า 2nd Prize",
+      "input": "2nd Prize",
+      "normalized": "SILVER"
+    },
+    {
+      "why": "BBB เขียนติดกันไม่มีเว้นวรรค",
+      "input": "3rdPrize",
+      "normalized": "BRONZE"
+    },
+    {
+      "why": "BBB มีคำว่า Award ต่อท้ายด้วย",
+      "input": "3rdPrize Award",
+      "normalized": "BRONZE"
+    },
+    {
+      "why": "รางวัลที่ระบบไม่รู้จัก ต้องคืนค่าว่าง ไม่ใช่เดา",
+      "input": "Platinum",
       "normalized": ""
     }
   ]

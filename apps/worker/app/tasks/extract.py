@@ -74,8 +74,12 @@ def read_lines(lines: list[str]) -> PageInfo:
     round_on_page: str | None = None
     year: int | None = None
 
+    bare_prefix = country_prefix.strip()
+
     for index, line in enumerate(lines):
-        if line.startswith(country_prefix):
+        # ของจริงมีหน้าที่บรรทัดนี้ว่างเปล่า เหลือแค่คำว่า "from" ลอย ๆ (ต้นทางไม่ได้ใส่โรงเรียนมา)
+        # ยังต้องใช้เป็นจุดยึดหาชื่อได้ ไม่งั้นคนคนนั้นจะหลุดจากระบบทั้งที่ชื่อพิมพ์อยู่บนหน้า
+        if line.startswith(country_prefix) or line == bare_prefix:
             country = line[len(country_prefix):].strip(" .,") or None
             # ชื่ออยู่บรรทัดก่อนหน้าสัญชาติ
             if name is None and index > 0:
@@ -112,6 +116,11 @@ def read_lines(lines: list[str]) -> PageInfo:
     )
 
 
+# อักขระล่องหนที่ติดมากับชื่อในไฟล์จริง — มองไม่เห็นด้วยตา แต่ทำให้ตรวจรูปแบบไม่ผ่าน
+# เจอจริงในไฟล์ HKIMO รอบคัดเลือก 6 หน้า และ BBB 4 หน้า
+INVISIBLE = str.maketrans("", "", "\u200b\u200c\u200d\ufeff\u00ad")
+
+
 def validate_name(name: str | None) -> str | None:
     """ชื่อบนเกียรติบัตรเป็นอังกฤษพิมพ์ใหญ่ล้วนเสมอ
 
@@ -120,6 +129,7 @@ def validate_name(name: str | None) -> str | None:
     """
     if not name:
         return None
+    name = name.translate(INVISIBLE).strip()
     return name if re.fullmatch(settings().name_validation_pattern, name) else None
 
 

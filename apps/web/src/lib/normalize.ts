@@ -89,11 +89,15 @@ const AWARD_NOISE = new Set(["AWARD", "AWARDS", "SCORER", "SCORERS", "MEDAL", "P
 /** ค่ามาตรฐาน 5 ค่าที่ระบบใช้ทั้งในชื่อไฟล์และฐานข้อมูล */
 const AWARD_CANONICAL: Record<string, string> = {
   GOLD: "GOLD",
+  "1ST": "GOLD",
   SILVER: "SILVER",
+  "2ND": "SILVER",
   BRONZE: "BRONZE",
+  "3RD": "BRONZE",
   MERIT: "MERIT",
   PERFECT: "PERFECT_SCORE",
   PERFECT_SCORE: "PERFECT_SCORE",
+  PARTICIPATION: "PARTICIPATION",
 };
 
 /** ชื่อรางวัลภาษาไทย — เรียงจากเจาะจงไปกว้าง ("ทองแดง" ต้องมาก่อน "ทอง") */
@@ -103,6 +107,7 @@ const AWARD_THAI: [string, string][] = [
   ["เงิน", "SILVER"],
   ["ชมเชย", "MERIT"],
   ["คะแนนเต็ม", "PERFECT_SCORE"],
+  ["เข้าร่วม", "PARTICIPATION"],
 ];
 
 /**
@@ -123,7 +128,9 @@ export function normalizeAward(raw: string | null | undefined): string {
     if (text.includes(thai)) return canonical;
   }
 
+  // "3rdPrize" เขียนติดกันไม่มีเว้นวรรค ต้องแยกเลขลำดับออกจากคำก่อน
   const key = text
+    .replace(/\b(\d+(?:ST|ND|RD|TH))(?=[A-Z])/g, "$1 ")
     .split(" ")
     .filter((t) => t && !AWARD_NOISE.has(t))
     .join("_");
