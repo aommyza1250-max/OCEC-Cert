@@ -67,6 +67,33 @@ def finish_job(job_id: str, progress: dict[str, Any] | None = None) -> None:
         )
 
 
+def requeue_stale_jobs() -> int:
+    """เอางานที่ค้างสถานะ "กำลังทำ" กลับเข้าคิว — เรียกตอน worker เริ่มทำงาน
+
+    ถ้า worker ถูกฆ่ากลางคัน (deploy ใหม่, เครื่องรีสตาร์ท, แรมหมด) งานที่ทำค้างไว้
+    จะติดสถานะ RUNNING ไปตลอดกาล เพราะตัวหยิบงานมองเฉพาะงานที่เป็น QUEUED
+    ผลคือรอบนำเข้าค้างอยู่ที่ "กำลังตัดแยกหน้า" ไม่ไปไหน และไม่มีอะไรฟ้องว่าเกิดอะไรขึ้น
+
+    ตอนที่ worker เพิ่งเริ่มทำงาน จะไม่มีงานไหนกำลังรันอยู่จริง (รันแค่ instance เดียว)
+    งานที่ยังเป็น RUNNING อยู่จึงเป็นซากจากรอบก่อนแน่นอน เอากลับเข้าคิวได้เลย
+
+    ปลอดภัยกับงานทุกชนิด เพราะออกแบบให้รันซ้ำได้อยู่แล้ว:
+    ตัดหน้าใหม่ล้างของเดิมก่อน จับคู่ใหม่ล้างผลอัตโนมัติก่อน ลบไฟล์ข้ามของที่หายไปแล้ว
+    """
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            UPDATE jobs SET status = 'QUEUED', locked_at = NULL
+            WHERE status = 'RUNNING'
+            RETURNING id, type
+            """
+        ).fetchall()
+
+    for row in rows:
+        log.warning("งาน %s (%s) ค้างจากรอบก่อน เอากลับเข้าคิวให้ทำใหม่", row["id"], row["type"])
+    return len(rows)
+
+
 def fail_job(job_id: str, error: str, attempts: int, permanent: bool = False) -> None:
     """งานที่ยังไม่ครบโควต้าความพยายาม ให้กลับไปเข้าคิวใหม่
 

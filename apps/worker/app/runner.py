@@ -15,6 +15,7 @@ from .queue import (
     fail_job,
     finish_job,
     merge_batch_stats,
+    requeue_stale_jobs,
     set_batch_status,
     set_progress,
 )
@@ -33,6 +34,16 @@ _stop = threading.Event()
 
 def start() -> threading.Thread:
     _stop.clear()
+
+    # งานที่ค้างจากรอบก่อน (worker ถูกฆ่ากลางคันตอน deploy) ต้องเอากลับเข้าคิว
+    # ไม่งั้นรอบนำเข้าจะค้างอยู่ที่ "กำลังตัดแยกหน้า" ตลอดไปโดยไม่มีอะไรฟ้อง
+    try:
+        recovered = requeue_stale_jobs()
+        if recovered:
+            log.warning("เอางานที่ค้างกลับเข้าคิว %s งาน", recovered)
+    except Exception:
+        log.exception("กู้งานที่ค้างไม่สำเร็จ — ลูปยังทำงานต่อได้ตามปกติ")
+
     thread = threading.Thread(target=_loop, name="job-runner", daemon=True)
     thread.start()
     log.info("job runner เริ่มทำงานแล้ว")
