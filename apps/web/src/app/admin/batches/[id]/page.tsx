@@ -49,13 +49,24 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     _count: true,
   });
 
-  // งานที่ยังไม่จบ — ใช้ตัดสินว่ายังประมวลผลอยู่ไหม
-  // ดูจากคิวงานตรง ๆ ไม่ใช่ดูจากสถานะของรอบนำเข้า เพราะช่วงที่ตัดหน้าเสร็จแล้ว
-  // และงานจับคู่ยังรอคิวอยู่ สถานะรอบจะเป็น "ตัดเสร็จ" ทั้งที่งานยังไม่จบ
-  const pendingJobs = await prisma.job.count({
-    where: { batchId: id, status: { in: ["QUEUED", "RUNNING"] } },
-  });
-  const processing = pendingJobs > 0;
+  // แยกสองเรื่องออกจากกันให้ชัด
+  //   importing = กำลังตัดหน้า/จับคู่ ซึ่งผลลัพธ์ยังเปลี่ยนได้ จึงยังไม่ควรให้ตัดสินอะไร
+  //   pendingJobs = มีงานอะไรก็ได้ค้างอยู่ ใช้แค่ตัดสินว่าต้องรีเฟรชหน้าเองไหม
+  // ถ้าใช้ตัวเดียวกัน การกดเผยแพร่ (ซึ่งตั้งงานเคลียร์ไฟล์ต้นฉบับต่อ) จะทำให้
+  // รายการที่ต้องตัดสินหายไปเฉย ๆ ทั้งที่จับคู่เสร็จไปนานแล้ว
+  const [importingJobs, pendingJobs, runningJob, nextQueuedJob] = await Promise.all([
+    prisma.job.count({
+      where: { batchId: id, type: { in: ["SPLIT", "MATCH"] }, status: { in: ["QUEUED", "RUNNING"] } },
+    }),
+    prisma.job.count({ where: { batchId: id, status: { in: ["QUEUED", "RUNNING"] } } }),
+    // งานที่กำลังรันจริง — ไม่ใช่งานที่ถูกสร้างล่าสุด
+    // อัป Excel ระหว่างที่ยังตัดหน้าไม่เสร็จ จะได้งานจับคู่เป็นงานล่าสุดทันที
+    // ถ้าเอาอันนั้นมาแสดง แถบสถานะจะบอกว่า "กำลังจับคู่" ทั้งที่ยังตัดหน้าอยู่
+    prisma.job.findFirst({ where: { batchId: id, status: "RUNNING" }, orderBy: { createdAt: "asc" } }),
+    prisma.job.findFirst({ where: { batchId: id, status: "QUEUED" }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const processing = importingJobs > 0;
+  const activeJob = runningJob ?? nextQueuedJob;
 
   const deleteInfo = await loadDeleteInfo(id, batch.examId);
   const retention = await loadRetention(id);
@@ -114,6 +125,15 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
             : null
         }
         pendingJobs={pendingJobs}
+        activeJob={
+          activeJob
+            ? {
+                type: activeJob.type,
+                status: activeJob.status,
+                progress: activeJob.progress as Record<string, unknown>,
+              }
+            : null
+        }
       />
 
       {/* ระหว่างประมวลผลยังไม่ต้องให้ตัดสินอะไร รอสรุปทีเดียวตอนจบ

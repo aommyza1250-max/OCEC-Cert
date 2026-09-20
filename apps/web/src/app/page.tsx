@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 import { CertificateCard } from "@/components/CertificateCard";
-import { InfoIcon, PersonIcon, SchoolIcon, SearchIcon } from "@/components/icons";
+import { ChatIcon, InfoIcon, PersonIcon, SchoolIcon, SearchIcon } from "@/components/icons";
 import { SearchBox } from "@/components/SearchBox";
 import { MIN_QUERY_LENGTH } from "@/lib/constants";
 import { ROUND_LABELS } from "@/lib/normalize";
@@ -13,6 +13,11 @@ import { searchStudents, type SearchResult } from "@/lib/search";
 export const dynamic = "force-dynamic";
 
 const RETENTION_YEARS = Math.round(RETENTION_MONTHS / 12);
+
+/** ช่องทางติดต่อแอดมิน — เก็บไว้ที่เดียว ใช้ทั้งท้ายหน้าและตอนค้นไม่พบ
+ *  ถ้าวันหนึ่งเปลี่ยนลิงก์ จะได้ไม่ลืมแก้ที่ใดที่หนึ่งแล้วผู้ปกครองกดไปเจอหน้าตาย */
+const LINE_URL = "https://lin.ee/3hzFg1z";
+const LINE_NAME = "OCEC_Thailand";
 
 export default async function HomePage({
   searchParams,
@@ -317,11 +322,16 @@ function NoResults({ query }: { query: string }) {
         </Link>
       )}
 
-      <p className="mt-5 flex items-start gap-2 border-t border-hairline pt-4 text-sm text-ink-soft sm:mt-6 sm:text-base">
-        <InfoIcon className="mt-0.5 h-5 w-5 shrink-0" />
-        ถ้ายังไม่พบ อาจเป็นเพราะยังไม่ได้นำเกียรติบัตรรอบนั้นเข้าระบบ
-        กรุณาสอบถามผู้ประสานงานสนามสอบ
-      </p>
+      {/* คนที่ค้นไม่เจอคือคนที่ต้องการติดต่อแอดมินมากที่สุด
+          เอาช่องทางมาไว้ตรงนี้เลย ไม่ใช่ให้เลื่อนลงไปหาเองที่ท้ายหน้า */}
+      <div className="mt-5 border-t border-hairline pt-4 sm:mt-6">
+        <p className="flex items-start gap-2 text-sm text-ink-soft sm:text-base">
+          <InfoIcon className="mt-0.5 h-5 w-5 shrink-0" />
+          ถ้ายังไม่พบ อาจเป็นเพราะยังไม่ได้นำเกียรติบัตรรอบนั้นเข้าระบบ
+        </p>
+        <p className="mt-3 font-semibold text-ink">สอบถาม / ติดต่อแอดมิน</p>
+        <LineContactButton className="mt-1.5" />
+      </div>
     </div>
   );
 }
@@ -371,12 +381,38 @@ function Notice({
   );
 }
 
+/** ปุ่มติดต่อทาง LINE — ทำเป็นปุ่มกดได้จริง ไม่ใช่ URL ดิบ ๆ ในย่อหน้า
+ *  ผู้ปกครองส่วนใหญ่เปิดจากมือถือ เห็นลิงก์ยาว ๆ แล้วไม่รู้ว่ากดได้
+ *
+ *  สูง 40px เท่าปุ่มรองของระบบ ไม่ใช่ 44px เท่าปุ่มหลัก เพราะเป็นทางเลือกสำรอง
+ *  ไม่ใช่สิ่งที่คนส่วนใหญ่มาทำ และไม่ควรแย่งสายตาไปจากปุ่มค้นหา/บันทึกไฟล์ */
+function LineContactButton({ className = "" }: { className?: string }) {
+  return (
+    <a
+      href={LINE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg
+                  border border-brand-line bg-brand-soft px-3 text-sm font-semibold text-brand
+                  transition duration-200 hover:bg-brand-line/40 ${className}`}
+    >
+      <ChatIcon className="h-4 w-4" />
+      {LINE_NAME}
+    </a>
+  );
+}
+
 function SiteFooter() {
   return (
     <footer className="border-t border-hairline bg-card">
-      <div className="mx-auto max-w-5xl px-4 py-5 text-sm text-ink-soft sm:py-6 sm:text-base">
-        <p>ไฟล์ที่ได้เป็น PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง</p>
-        <p className="mt-1">ข้อมูลบนเกียรติบัตรไม่ถูกต้อง แจ้งผู้ประสานงานสนามสอบ ไม่ต้องแก้ไฟล์เอง</p>
+      <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
+        <div className="text-sm text-ink-soft">
+          <p>ไฟล์ที่ได้เป็น PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง</p>
+          <p className="mt-1">
+            หากมีข้อสงสัยหรือติดปัญหา กรุณาติดต่อผ่านทาง Line Official Account
+          </p>
+          <LineContactButton className="mt-1" />
+        </div>
       </div>
     </footer>
   );
