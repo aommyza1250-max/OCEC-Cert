@@ -29,6 +29,14 @@ export function SourcesPanel({
     setWorking(true);
     try {
       const res = await fetch(`/api/admin/batches/${batchId}/cleanup-sources`, { method: "POST" });
+
+      // 409 = เคลียร์ไปแล้วจริง ๆ แปลว่าหน้าที่เปิดอยู่เก่ากว่าฐานข้อมูล
+      // (งานเคลียร์ทำเสร็จหลังจากหน้านี้ถูกเรนเดอร์) ไม่ใช่ความผิดพลาดที่ต้องขึ้นสีแดง
+      // แค่ดึงข้อมูลใหม่ แล้วแผงจะเปลี่ยนเป็น "เคลียร์แล้วเมื่อ..." เอง
+      if (res.status === 409) {
+        router.refresh();
+        return;
+      }
       if (!res.ok) throw new Error((await res.json()).error ?? "สั่งเคลียร์ไม่สำเร็จ");
       // ไม่ต้องรอผล งานนี้ใช้เวลาไม่นานและหน้าจะอัปเดตตอนรีเฟรช
       setTimeout(() => router.refresh(), 2500);
@@ -54,6 +62,7 @@ export function SourcesPanel({
       {blockers === null ? (
         <p className="mt-1 text-ink-soft">
           ระบบจะเคลียร์ให้เองหลังเผยแพร่ ถ้าจับคู่ครบทุกคนและไม่มีอะไรค้าง
+          ถ้าเพิ่งกดเผยแพร่ไป ลองรีเฟรชหน้าอีกครั้ง
         </p>
       ) : blockers.length > 0 ? (
         <>
