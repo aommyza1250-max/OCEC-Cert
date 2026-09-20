@@ -116,27 +116,27 @@ def main() -> int:
         exam_round="FINAL",
         bundles={
             "Gold": [
-                {"name": "JAYTIPAT CHATRATANAMALAI", "country": "THAILAND", "level": "PRIMARY 3",
+                {"name": "SOMCHAI JAIDEE", "country": "THAILAND", "level": "PRIMARY 3",
                  "cert_no": "72001", "award": "Gold"},
-                {"name": "NAPHAT CHALOKEPUNRAT", "country": "THAILAND", "level": "PRIMARY 3",
+                {"name": "ANAN SUKSAWAT", "country": "THAILAND", "level": "PRIMARY 3",
                  "cert_no": "72002", "award": "Gold"},
             ],
             # หน้า Perfect Score ของจริงไม่มีบรรทัดรางวัล และใช้เลขเดียวกับใบ Gold ของคนเดียวกัน
             "Perfect_Score": [
-                {"name": "JAYTIPAT CHATRATANAMALAI", "country": "THAILAND", "level": "PRIMARY 3",
+                {"name": "SOMCHAI JAIDEE", "country": "THAILAND", "level": "PRIMARY 3",
                  "cert_no": "72001"},
             ],
         },
         roster=[
             # Excel บันทึกรางวัลสูงสุดแค่แถวเดียวต่อคน
-            {"cert_no": 72001, "level": "PRIMARY 3", "name_en": "JAYTIPAT CHATRATANAMALAI",
+            {"cert_no": 72001, "level": "PRIMARY 3", "name_en": "SOMCHAI JAIDEE",
              "award": "PERFECT SCORER"},
-            {"cert_no": 72002, "level": "PRIMARY 3", "name_en": "NAPHAT CHALOKEPUNRAT",
+            {"cert_no": 72002, "level": "PRIMARY 3", "name_en": "ANAN SUKSAWAT",
              "award": "GOLD AWARD"},
         ],
         expect_split=3,
         expect_skipped=0,
-        # 3 ใบ: Gold 2 ใบ + Perfect Score 1 ใบ โดย JAYTIPAT ได้ 2 ใบจากแถว Excel แถวเดียว
+        # 3 ใบ: Gold 2 ใบ + Perfect Score 1 ใบ โดย SOMCHAI ได้ 2 ใบจากแถว Excel แถวเดียว
         expect_certificates=3,
         expect_students=2,
     )

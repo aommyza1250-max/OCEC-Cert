@@ -37,7 +37,7 @@ class Settings:
     name_anchor: str = "This is awarded to"
     # ข้อความนำหน้าระดับชั้น
     level_line_prefix: str = "for outstanding achievement in"
-    # เลขบนหน้ากระดาษ ของจริงเขียน "Cert No: 203297"
+    # เลขบนหน้ากระดาษ ของจริงเขียน "Cert No: 900101"
     cert_no_pattern: str = r"(?:Cert\s+)?No:\s*(\d+)"
     # บรรทัดรางวัล ของจริงเขียน "Gold Award" — หน้า Perfect Score ไม่มีบรรทัดนี้
     award_line_pattern: str = r"^(.+?)\s+Award$"

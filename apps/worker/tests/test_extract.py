@@ -23,10 +23,10 @@ def doc():
     pdf = make_bundle_pdf(
         [
             {
-                "name": "JAYTIPAT CHATRATANAMALAI",
+                "name": "SOMCHAI JAIDEE",
                 "country": "THAILAND",
                 "level": "PRIMARY 3",
-                "cert_no": "203297",
+                "cert_no": "900101",
                 "award": "Gold",
             },
             {
@@ -38,10 +38,10 @@ def doc():
             },
             # หน้า Perfect Score ของจริงไม่มีบรรทัดรางวัลเลย
             {
-                "name": "PUTTHITHADA ARNON",
+                "name": "MALEE RUNGROJ",
                 "country": "THAILAND",
                 "level": "SECONDARY 1",
-                "cert_no": "203336",
+                "cert_no": "900103",
             },
         ]
     )
@@ -51,14 +51,14 @@ def doc():
 
 def test_อ่านชื่อได้แม้มีลายเซ็นและชื่องานปนอยู่ก่อน(doc):
     # ชื่องานถูกแตกเป็นบรรทัดละตัวอักษร และลายเซ็นกรรมการมาก่อนเนื้อหา
-    assert read_page(doc[0]).name == "JAYTIPAT CHATRATANAMALAI"
+    assert read_page(doc[0]).name == "SOMCHAI JAIDEE"
     assert read_page(doc[1]).name == "TARO YAMADA"
-    assert read_page(doc[2]).name == "PUTTHITHADA ARNON"
+    assert read_page(doc[2]).name == "MALEE RUNGROJ"
 
 
 def test_อ่านเลขผู้เข้าสอบจาก_Cert_No(doc):
-    assert read_page(doc[0]).cert_no == "203297"
-    assert read_page(doc[2]).cert_no == "203336"
+    assert read_page(doc[0]).cert_no == "900101"
+    assert read_page(doc[2]).cert_no == "900103"
 
 
 def test_อ่านระดับชั้นโดยตัดจุลภาคท้ายออก(doc):
@@ -106,7 +106,7 @@ def test_ตัดชื่อทิ้งเมื่อหยิบผิด�
     # ชื่อบนเกียรติบัตรเป็นพิมพ์ใหญ่ล้วนเสมอ อะไรที่ไม่เข้ารูปแบบต้องคืน None
     assert validate_name("Hong Kong International Mathematical Olympiad") is None
     assert validate_name("สมชาย ใจดี") is None
-    assert validate_name("JAYTIPAT CHATRATANAMALAI") == "JAYTIPAT CHATRATANAMALAI"
+    assert validate_name("SOMCHAI JAIDEE") == "SOMCHAI JAIDEE"
     assert validate_name("O'BRIEN PATRICK") == "O'BRIEN PATRICK"
     assert validate_name("") is None
 

@@ -65,16 +65,16 @@ def test_ไม่มีคอลัมน์ชื่อต้องฟ้อ�
 def test_อ่านหัวตารางแบบไฟล์จริง_HKIMO():
     # CANDIDATE NO / GRADE / CANDIDATE NAME / AWARD คือหัวตารางที่ใช้จริง
     data = make_roster_xlsx(
-        [{"cert_no": 203297, "level": "PRIMARY 3", "name_en": "JAYTIPAT CHATRATANAMALAI",
+        [{"cert_no": 900101, "level": "PRIMARY 3", "name_en": "SOMCHAI JAIDEE",
           "award": "PERFECT SCORER"}]
     )
     row = parse_roster(data)[0]
-    assert row.cert_no == "203297"
+    assert row.cert_no == "900101"
     assert row.level == "PRIMARY 3"
-    assert row.name_en == "JAYTIPAT CHATRATANAMALAI"
+    assert row.name_en == "SOMCHAI JAIDEE"
     assert row.award == "PERFECT SCORER"
 
 
 def test_เลขที่อ่านมาเป็นทศนิยมต้องตัดให้เหลือตัวเลข():
-    data = make_roster_xlsx([{"cert_no": "203297.0", "name_en": "SOMCHAI JAIDEE"}])
-    assert parse_roster(data)[0].cert_no == "203297"
+    data = make_roster_xlsx([{"cert_no": "900101.0", "name_en": "SOMCHAI JAIDEE"}])
+    assert parse_roster(data)[0].cert_no == "900101"

@@ -30,16 +30,16 @@ const PROGRAMS = [
 ];
 
 const STUDENTS = [
-  { nameEn: "JAYTIPAT CHATRATANAMALAI", nameTh: "เจตพัฒน์ ฉัตรรัตนมาลัย", school: "โรงเรียนสวนกุหลาบวิทยาลัย" },
-  { nameEn: "NAPHAT CHALOKEPUNRAT", nameTh: "ณภัทร ชโลเกศปุณยรัตน์", school: "โรงเรียนเตรียมอุดมศึกษา" },
-  { nameEn: "PUTTHITHADA ARNON", nameTh: "พุทธิธาดา อานนท์", school: "โรงเรียนสตรีวิทยา" },
-  { nameEn: "SOMCHAI JAIDEE", nameTh: "สมชาย ใจดี", school: "โรงเรียนสวนกุหลาบวิทยาลัย" },
-  { nameEn: "PIYADA SRISUK", nameTh: "ปิยะดา ศรีสุข", school: "โรงเรียนราชวินิต" },
-  { nameEn: "NATTAPONG WONGTHONG", nameTh: "ณัฐพงษ์ วงศ์ทอง", school: "โรงเรียนเทพศิรินทร์" },
-  { nameEn: "KAMONCHANOK SANGCHAN", nameTh: "กมลชนก แสงจันทร์", school: "โรงเรียนอัสสัมชัญ" },
-  { nameEn: "THANAKRIT POONSAP", nameTh: "ธนกฤต พูลทรัพย์", school: "โรงเรียนราชวินิต" },
+  { nameEn: "SOMCHAI JAIDEE", nameTh: "สมชาย ใจดี", school: "โรงเรียนสมมติวิทยา" },
+  { nameEn: "ANAN SUKSAWAT", nameTh: "อนันต์ สุขสวัสดิ์", school: "โรงเรียนตัวอย่างศึกษา" },
+  { nameEn: "MALEE RUNGROJ", nameTh: "มาลี รุ่งโรจน์", school: "โรงเรียนทดสอบวิทยาคม" },
+  { nameEn: "SOMCHAI JAIDEE", nameTh: "สมชาย ใจดี", school: "โรงเรียนสมมติวิทยา" },
+  { nameEn: "PIYADA SRISUK", nameTh: "ปิยะดา ศรีสุข", school: "โรงเรียนตัวอย่างวิทยา" },
+  { nameEn: "NATTAPONG WONGTHONG", nameTh: "ณัฐพงษ์ วงศ์ทอง", school: "โรงเรียนสาธิตสมมติ" },
+  { nameEn: "KAMONCHANOK SANGCHAN", nameTh: "กมลชนก แสงจันทร์", school: "โรงเรียนสมมติศึกษา" },
+  { nameEn: "THANAKRIT POONSAP", nameTh: "ธนกฤต พูลทรัพย์", school: "โรงเรียนตัวอย่างวิทยา" },
   // ชื่อซ้ำกันแต่คนละโรงเรียน — ไว้ทดสอบว่าหน้าค้นหาแสดงโรงเรียนให้แยกออก
-  { nameEn: "SOMCHAI JAIDEE", nameTh: "สมชาย ใจดี", school: "โรงเรียนเทพศิรินทร์" },
+  { nameEn: "SOMCHAI JAIDEE", nameTh: "สมชาย ใจดี", school: "โรงเรียนสาธิตสมมติ" },
 ];
 
 const AWARDS = ["GOLD", "SILVER", "BRONZE", "MERIT"];
@@ -115,7 +115,7 @@ async function main() {
   console.log(
     `เสร็จแล้ว: ${PROGRAMS.length} รายการสอบ, ${exams.length} รอบ, ${STUDENTS.length} ผู้เข้าสอบ, ${certCount} เกียรติบัตร`,
   );
-  console.log('ลองค้นคำว่า "JAYTIPAT" หรือ "สมชาย" ที่ http://localhost:3000');
+  console.log('ลองค้นคำว่า "SOMCHAI" หรือ "สมชาย" ที่ http://localhost:3000');
 }
 
 /** สร้างเกียรติบัตร 1 ใบ พร้อมไฟล์ตัวอย่างบน MinIO */

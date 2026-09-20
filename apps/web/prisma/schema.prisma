@@ -210,7 +210,7 @@ model StagingPage {
   extractedNameNormalized String? @map("extracted_name_normalized")
   extractedNameSortKey    String? @map("extracted_name_sort_key")
 
-  /// เลขบนหน้าเกียรติบัตร (Cert No: 203297) — ตรงกับ CANDIDATE NO ใน Excel
+  /// เลขบนหน้าเกียรติบัตร (Cert No: 900101) — ตรงกับ CANDIDATE NO ใน Excel
   /// เป็นคีย์จับคู่หลัก เพราะแม่นกว่าชื่อเมื่อมีคนชื่อพ้องกัน
   certNo String? @map("cert_no")
   /// ระดับชั้นที่อ่านได้จาก "for outstanding achievement in ..." เช่น PRIMARY 3

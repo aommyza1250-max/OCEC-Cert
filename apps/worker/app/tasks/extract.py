@@ -5,11 +5,11 @@
 
     Gold Award                                          <-- รางวัล (หน้า Perfect Score ไม่มีบรรทัดนี้)
     This is awarded to
-    JAYTIPAT CHATRATANAMALAI                            <-- ชื่อ
+    SOMCHAI JAIDEE                            <-- ชื่อ
     from THAILAND                                       <-- สัญชาติ
     for outstanding achievement in PRIMARY 3,           <-- ระดับชั้น
     ... Mathematical Olympiad Final Round 2026,         <-- รอบ + ปี ค.ศ.
-    Cert No: 203297                                     <-- เลขผู้เข้าสอบ (= CANDIDATE NO ใน Excel)
+    Cert No: 900101                                     <-- เลขผู้เข้าสอบ (= CANDIDATE NO ใน Excel)
 
 ชื่อหาได้ 2 ทาง (เผื่อแบบฟอร์มต่างรุ่นกัน):
   1. บรรทัด "ก่อน" บรรทัดที่ขึ้นต้นด้วย "from "

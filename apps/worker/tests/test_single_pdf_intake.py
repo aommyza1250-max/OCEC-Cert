@@ -33,59 +33,59 @@ def page_count(path: str) -> int:
         return doc.page_count
 
 
-PUTTHITHADA = {
-    "name": "PUTTHITHADA ARNON",
+MALEE = {
+    "name": "MALEE RUNGROJ",
     "country": "THAILAND",
     "level": "PRIMARY 3",
-    "cert_no": "203336",
+    "cert_no": "900103",
     "award": "Gold",
 }
 SOMEONE_ELSE = {
-    "name": "JAYTIPAT CHATRATANAMALAI",
+    "name": "SOMCHAI JAIDEE",
     "country": "THAILAND",
     "level": "PRIMARY 3",
-    "cert_no": "203297",
+    "cert_no": "900101",
     "award": "Gold",
 }
 
 
 def test_ไฟล์ของคนที่ถูกต้องผ่านได้():
     with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [PUTTHITHADA])
-        pick(path, d, "203336")  # ไม่โยน error = ผ่าน
+        path = write_pdf(os.path.join(d, "x.pdf"), [MALEE])
+        pick(path, d, "900103")  # ไม่โยน error = ผ่าน
 
 
 def test_หยิบไฟล์ผิดคนต้องไม่รับ_และบอกว่าเป็นของใคร():
     with tempfile.TemporaryDirectory() as d:
         path = write_pdf(os.path.join(d, "x.pdf"), [SOMEONE_ELSE])
         with pytest.raises(ValueError) as err:
-            pick(path, d, "203336")
+            pick(path, d, "900103")
         message = str(err.value)
-        assert "203336" in message
-        assert "203297" in message
-        assert "JAYTIPAT CHATRATANAMALAI" in message
+        assert "900103" in message
+        assert "900101" in message
+        assert "SOMCHAI JAIDEE" in message
 
 
 def test_แก้ชื่อมาแต่ลืมแก้เลข_ต้องบอกให้ชัดว่าต้องแก้อะไร():
     # เคสจริงที่เจอ: แอดมินแก้ไฟล์เอง เปลี่ยนแค่ชื่อ ลืมแก้บรรทัด Cert No
     # ถ้าบอกแค่ "ไม่ตรง" แอดมินจะไม่รู้ว่าต้องไปแก้อะไรต่อ
-    wrong_number = dict(SOMEONE_ELSE, name="PUTTHITHADA ARNON")
+    wrong_number = dict(SOMEONE_ELSE, name="MALEE RUNGROJ")
     with tempfile.TemporaryDirectory() as d:
         path = write_pdf(os.path.join(d, "x.pdf"), [wrong_number])
         with pytest.raises(ValueError) as err:
-            pick(path, d, "203336", "PUTTHITHADA ARNON")
+            pick(path, d, "900103", "MALEE RUNGROJ")
         message = str(err.value)
         assert "ชื่อบนเกียรติบัตรตรงกับ" in message
-        assert "203297" in message      # เลขที่อยู่บนหน้าจริง
-        assert "203336" in message      # เลขที่ควรจะเป็น
+        assert "900101" in message      # เลขที่อยู่บนหน้าจริง
+        assert "900103" in message      # เลขที่ควรจะเป็น
         assert "Cert No" in message     # บอกว่าต้องไปแก้บรรทัดไหน
 
 
 def test_ชื่อก็ไม่ตรงเลขก็ไม่ตรง_บอกว่าเป็นไฟล์ของใคร():
     with tempfile.TemporaryDirectory() as d:
         path = write_pdf(os.path.join(d, "x.pdf"), [SOMEONE_ELSE])
-        with pytest.raises(ValueError, match="JAYTIPAT CHATRATANAMALAI"):
-            pick(path, d, "203336", "PUTTHITHADA ARNON")
+        with pytest.raises(ValueError, match="SOMCHAI JAIDEE"):
+            pick(path, d, "900103", "MALEE RUNGROJ")
 
 
 def test_ไฟล์รวมเล่ม_ต้องคัดเฉพาะหน้าของคนนั้นออกมาหน้าเดียว():
@@ -93,8 +93,8 @@ def test_ไฟล์รวมเล่ม_ต้องคัดเฉพาะ�
     # ถ้าปล่อยทั้งเล่มเข้าไป ระบบจะไล่อ่านใหม่ทุกหน้าเหมือนนำเข้าทั้งรอบ
     others = [dict(SOMEONE_ELSE, cert_no=str(210000 + i)) for i in range(20)]
     with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [*others, PUTTHITHADA])
-        note = pick(path, d, "203336")
+        path = write_pdf(os.path.join(d, "x.pdf"), [*others, MALEE])
+        note = pick(path, d, "900103")
 
         assert page_count(os.path.join(d, "picked.pdf")) == 1
         assert note["sourcePages"] == 21
@@ -104,8 +104,8 @@ def test_ไฟล์รวมเล่ม_ต้องคัดเฉพาะ�
 
 def test_ไฟล์หน้าเดียว_ไม่ต้องมีหมายเหตุอะไร():
     with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [PUTTHITHADA])
-        note = pick(path, d, "203336")
+        path = write_pdf(os.path.join(d, "x.pdf"), [MALEE])
+        note = pick(path, d, "900103")
         assert note["sourcePages"] == 1
         assert "note" not in note
 
@@ -113,19 +113,19 @@ def test_ไฟล์หน้าเดียว_ไม่ต้องมีห�
 def test_คนเดียวมีหลายใบในเล่ม_เลือกใบที่ขาดจากรางวัล():
     # ในเล่มมีทั้งใบ Gold และใบ Perfect Score ของคนเดียวกัน
     # ใบที่ขาดคือ Gold -> ต้องหยิบหน้าที่พิมพ์ว่า Gold Award
-    perfect = dict(PUTTHITHADA)
+    perfect = dict(MALEE)
     perfect.pop("award")  # หน้า Perfect Score ไม่มีข้อความรางวัล
     with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [perfect, PUTTHITHADA])
-        assert pick(path, d, "203336", "", "GOLD")["usedPage"] == 2
-        assert pick(path, d, "203336", "", "PERFECT_SCORE")["usedPage"] == 1
+        path = write_pdf(os.path.join(d, "x.pdf"), [perfect, MALEE])
+        assert pick(path, d, "900103", "", "GOLD")["usedPage"] == 2
+        assert pick(path, d, "900103", "", "PERFECT_SCORE")["usedPage"] == 1
 
 
 def test_คนเดียวหลายหน้าแยกไม่ออก_ต้องไม่เดา_และบอกให้แยกไฟล์มา():
     with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [PUTTHITHADA, PUTTHITHADA])
+        path = write_pdf(os.path.join(d, "x.pdf"), [MALEE, MALEE])
         with pytest.raises(ValueError) as err:
-            pick(path, d, "203336", "", "GOLD")
+            pick(path, d, "900103", "", "GOLD")
         message = str(err.value)
         assert "2 หน้า" in message
         assert "หน้าเดียว" in message
@@ -136,7 +136,7 @@ def test_ไฟล์ผิดคนที่มีหลายร้อยห�
     with tempfile.TemporaryDirectory() as d:
         path = write_pdf(os.path.join(d, "x.pdf"), others)
         with pytest.raises(ValueError) as err:
-            pick(path, d, "203336")
+            pick(path, d, "900103")
         message = str(err.value)
         assert "และอีก 195 หน้า" in message
         assert message.count("(") <= 6

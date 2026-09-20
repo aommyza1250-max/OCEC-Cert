@@ -18,12 +18,12 @@ H · O · N · G · ...                                     ← ชื่อง�
 香港國際數學競賽總決賽
 Gold Award                                              ← รางวัล (Perfect Score ไม่มีบรรทัดนี้)
 This is awarded to                                      ← anchor
-JAYTIPAT CHATRATANAMALAI                                ← ชื่อผู้รับ
+SOMCHAI JAIDEE                                ← ชื่อผู้รับ
 from THAILAND                                           ← สัญชาติ
 for outstanding achievement in PRIMARY 3,               ← ระดับชั้น (มีจุลภาคท้าย)
 Hong Kong International Mathematical Olympiad Final Round 2026,   ← รอบ + ปี ค.ศ.
 22nd - 23rd August 2026, Hong Kong & worldwide
-Cert No: 203297                                         ← เลขผู้เข้าสอบ
+Cert No: 900101                                         ← เลขผู้เข้าสอบ
 23rd Aug 2026
 ```
 
