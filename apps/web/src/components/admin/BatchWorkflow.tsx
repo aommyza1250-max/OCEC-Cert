@@ -24,6 +24,9 @@ type Props = {
   } | null;
   /** จำนวนงานที่ยังไม่จบของรอบนี้ — มากกว่า 0 แปลว่ายังประมวลผลอยู่ */
   pendingJobs: number;
+  /** งานที่กำลังรันจริง (ถ้าไม่มี = งานถัดไปที่รอคิว) — ใช้บอกว่าตอนนี้ทำขั้นไหนอยู่
+   *  ต่างจาก latestJob ที่เป็นงานล่าสุดที่ถูกสร้าง ซึ่งอาจยังไม่ถึงคิวทำ */
+  activeJob: { type: string; status: string; progress: Record<string, unknown> | null } | null;
   publishState: PublishState;
 };
 
@@ -108,7 +111,7 @@ export function BatchWorkflow(props: Props) {
         )}
       </StepCard>
 
-      {running && <ProgressBanner job={props.latestJob} />}
+      {running && <ProgressBanner job={props.activeJob} />}
 
       {/* ความผิดพลาดของไฟล์ที่อัปเข้ามาแสดงในช่องอัปโหลดของคนนั้นอยู่แล้ว
           ขึ้นซ้ำตรงนี้อีกมีแต่จะรก ที่นี่จึงเหลือไว้เฉพาะตอนระบบพังจริง */}
@@ -198,8 +201,10 @@ function ZipActions({ batchId }: { batchId: string }) {
  *  ของเดิมขึ้นแค่ "กำลังประมวลผล..." ซึ่งแอดมินแยกไม่ออกว่าอยู่ขั้นตัดหน้าหรือขั้นจับคู่
  *  และไม่รู้ว่าจะอีกนานแค่ไหน พอรอนานก็ไม่แน่ใจว่าค้างหรือยังเดินอยู่
  */
-function ProgressBanner({ job }: { job: Props["latestJob"] }) {
+function ProgressBanner({ job }: { job: Props["activeJob"] }) {
   const stage = job ? (STAGE_LABEL[job.type] ?? "กำลังประมวลผล") : "กำลังประมวลผล";
+  // งานที่ยังรอคิวยังไม่มีความคืบหน้า บอกให้ชัดว่ารออยู่ ไม่ใช่ทำอยู่
+  const waiting = job?.status === "QUEUED";
   const done = numberOf(job?.progress?.done);
   const total = numberOf(job?.progress?.total);
   const percent = done !== null && total ? Math.min(100, Math.round((done / total) * 100)) : null;
@@ -207,7 +212,7 @@ function ProgressBanner({ job }: { job: Props["latestJob"] }) {
   return (
     <div className="rounded-2xl border border-brand-line bg-brand-soft px-5 py-4">
       <p className="text-sm font-medium text-brand">
-        {stage}
+        {waiting ? `รอคิว: ${stage}` : stage}
         {done !== null && total ? ` ${done} / ${total} หน้า` : "..."}
       </p>
 

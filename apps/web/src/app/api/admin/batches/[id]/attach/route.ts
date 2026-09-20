@@ -60,10 +60,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const job = await prisma.$transaction(async (tx) => {
     await tx.batch.update({
       where: { id },
+      // ไม่ตั้งสถานะให้การอัป Excel เอง ปล่อยให้ worker ตั้งตอนที่งานจับคู่เริ่มทำจริง
+      // ถ้าตั้งตรงนี้ การอัป Excel ระหว่างที่ยังตัดหน้าไม่เสร็จ จะทำให้หน้าจอบอกว่า
+      // "กำลังจับคู่" ทั้งที่ยังตัดหน้าอยู่ และงานจับคู่ยังไม่ได้เริ่มด้วยซ้ำ
       data:
         kind === "zip"
           ? { sourceZipKey: uploadedKey, status: "SPLITTING" }
-          : { sourceExcelKey: uploadedKey, ...(rosterOnly ? {} : { status: "MATCHING" }) },
+          : { sourceExcelKey: uploadedKey },
     });
     if (rosterOnly) return null;
     return tx.job.create({
