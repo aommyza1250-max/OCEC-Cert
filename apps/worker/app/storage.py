@@ -122,7 +122,7 @@ def certificate_stem(
 ) -> str:
     """ชื่อไฟล์ตามสเปก: {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี}
 
-    ตัวอย่าง: JAYTIPAT_CHATRATANAMALAI_HKIMO_FINAL_GOLD_2026
+    ตัวอย่าง: SOMCHAI_JAIDEE_HKIMO_FINAL_GOLD_2026
 
     หน้าที่อ่านชื่อไม่ออกจะได้เลขหน้าแทนชื่อ เพื่อให้ยังมีไฟล์ให้แอดมินไปจับคู่เองได้
     """

@@ -15,7 +15,7 @@ def state(*keys: tuple[str, str]) -> ExistingState:
     return ExistingState(max_page=10, stems=set(), keys=set(keys))
 
 
-def info(name="JAYTIPAT CHATRATANAMALAI", cert_no="203297") -> PageInfo:
+def info(name="SOMCHAI JAIDEE", cert_no="900101") -> PageInfo:
     return PageInfo(name=name, level="PRIMARY 3", cert_no=cert_no, country="THAILAND")
 
 
@@ -24,21 +24,21 @@ def bundle(award: str) -> Bundle:
 
 
 def test_หน้าเดิมเลขเดิมรางวัลเดิมถือว่าซ้ำ():
-    assert _already_imported(state(("203297", "GOLD")), info(), bundle("GOLD")) is True
+    assert _already_imported(state(("900101", "GOLD")), info(), bundle("GOLD")) is True
 
 
 def test_เลขเดิมแต่คนละรางวัลไม่ใช่ของซ้ำ():
     # A ได้ Perfect Score ไปแล้ว ใบ Gold ที่ตามมาทีหลังต้องเข้าได้
-    existing = state(("203297", "PERFECT_SCORE"))
+    existing = state(("900101", "PERFECT_SCORE"))
     assert _already_imported(existing, info(), bundle("GOLD")) is False
 
 
 def test_รางวัลเดิมแต่คนละคนไม่ใช่ของซ้ำ():
-    assert _already_imported(state(("203297", "GOLD")), info(cert_no="203306"), bundle("GOLD")) is False
+    assert _already_imported(state(("900101", "GOLD")), info(cert_no="900102"), bundle("GOLD")) is False
 
 
 def test_ไม่มีเลขให้ใช้ชื่อแทน():
-    existing = state(("JAYTIPAT CHATRATANAMALAI", "GOLD"))
+    existing = state(("SOMCHAI JAIDEE", "GOLD"))
     assert _already_imported(existing, info(cert_no=None), bundle("GOLD")) is True
 
 
@@ -56,4 +56,4 @@ def test_อ่านไม่ได้ทั้งเลขและชื่�
 
 
 def test_ไม่มีรางวัลก็ตัดสินไม่ได้():
-    assert _dedupe_key("203297", "SOMCHAI JAIDEE", None) is None
+    assert _dedupe_key("900101", "SOMCHAI JAIDEE", None) is None

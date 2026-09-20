@@ -23,8 +23,8 @@ def page(cert_no=None, name=None):
 
 
 def test_เลขผู้เข้าสอบมาก่อนชื่อเสมอ():
-    somchai = row(cert_no="203297", name_en="SOMCHAI JAIDEE")
-    found, how = _find_row(page("203297", "SOMCHAI JAIDEE"), {"203297": somchai}, {})
+    somchai = row(cert_no="900101", name_en="SOMCHAI JAIDEE")
+    found, how = _find_row(page("900101", "SOMCHAI JAIDEE"), {"900101": somchai}, {})
     assert (found, how) == (somchai, "cert")
 
 
@@ -46,13 +46,13 @@ def test_ไม่เจอทั้งเลขและชื่อ():
 
 def test_เลขตรงแต่ชื่อไม่ตรงต้องไม่ผ่าน():
     # กันกรณีเลขชนกันโดยบังเอิญ หรือ Excel เป็นคนละรอบ
-    assert _names_agree(page("203297", "SOMCHAI JAIDEE"), row(name_en="PIYADA SRISUK")) is False
+    assert _names_agree(page("900101", "SOMCHAI JAIDEE"), row(name_en="PIYADA SRISUK")) is False
 
 
 def test_เลขตรงและชื่อตรงผ่าน():
-    assert _names_agree(page("203297", "SOMCHAI JAIDEE"), row(name_en="Mr. Somchai Jaidee")) is True
+    assert _names_agree(page("900101", "SOMCHAI JAIDEE"), row(name_en="Mr. Somchai Jaidee")) is True
 
 
 def test_หน้าที่อ่านชื่อไม่ออกให้เชื่อเลขไปก่อน():
     # ดีกว่าทิ้งใบนั้นไปเฉย ๆ เพราะเลขบนหน้ากับใน Excel ตรงกันอยู่แล้ว
-    assert _names_agree(page("203297", None), row(name_en="SOMCHAI JAIDEE")) is True
+    assert _names_agree(page("900101", None), row(name_en="SOMCHAI JAIDEE")) is True
