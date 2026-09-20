@@ -275,7 +275,7 @@ function StudentBlock({ student }: { student: SearchResult }) {
           ต้องบอกตั้งแต่วันแรกที่เปิดใช้ ไม่ใช่ไปบอกตอนใกล้ครบกำหนดแล้วลบ */}
       <p className="border-t border-hairline px-3 py-2.5 text-xs text-ink-soft sm:px-6">
         ระบบเก็บเกียรติบัตรไว้ {RETENTION_YEARS} ปีนับจากวันเผยแพร่ หลังจากนั้นจะถูกลบออกจากระบบ
-        แนะนำให้บันทึกไฟล์เก็บไว้เอง
+        แนะนำให้บันทึกไฟล์เก็บไว้
       </p>
     </article>
   );
@@ -327,7 +327,7 @@ function NoResults({ query }: { query: string }) {
       <div className="mt-5 border-t border-hairline pt-4 sm:mt-6">
         <p className="flex items-start gap-2 text-sm text-ink-soft sm:text-base">
           <InfoIcon className="mt-0.5 h-5 w-5 shrink-0" />
-          ถ้ายังไม่พบ อาจเป็นเพราะยังไม่ได้นำเกียรติบัตรรอบนั้นเข้าระบบ
+          ถ้าหากยังไม่พบ กรุณาติดต่อผ่านทาง Line Official Account
         </p>
         <p className="mt-3 font-semibold text-ink">สอบถาม / ติดต่อแอดมิน</p>
         <LineContactButton className="mt-1.5" />
