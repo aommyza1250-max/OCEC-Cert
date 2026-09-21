@@ -26,10 +26,17 @@ export function publicUrl(key: string) {
 }
 
 /**
- * ลิงก์ดาวน์โหลด PDF แบบมีอายุ
+ * ลิงก์ดาวน์โหลดไฟล์แบบมีอายุ
  * ใช้ presigned แทน public URL เพื่อไม่ให้ใครไล่เดา key แล้วดูดไฟล์ทั้ง bucket
+ * ตั้งค่า ResponseContentType เป็น application/octet-stream เป็นค่าตั้งต้น
+ * เพื่อบังคับให้ Safari บน iOS เด้งหน้าต่างดาวน์โหลดของระบบแทนที่จะเปิดแท็บพรีวิว
  */
-export async function presignedDownloadUrl(key: string, filename: string, expiresIn = 900) {
+export async function presignedDownloadUrl(
+  key: string,
+  filename: string,
+  contentType = "application/octet-stream",
+  expiresIn = 900,
+) {
   return getSignedUrl(
     s3(),
     new GetObjectCommand({
@@ -37,7 +44,7 @@ export async function presignedDownloadUrl(key: string, filename: string, expire
       Key: key,
       // บังคับให้เบราว์เซอร์ดาวน์โหลดพร้อมตั้งชื่อไฟล์ แทนที่จะเปิดในแท็บ
       ResponseContentDisposition: `attachment; filename="${encodeURIComponent(filename)}"`,
-      ResponseContentType: "application/pdf",
+      ResponseContentType: contentType,
     }),
     { expiresIn },
   );
