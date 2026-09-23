@@ -1,0 +1,118 @@
+# โปรไฟล์เกียรติบัตรและแคตตาล็อกรางวัล
+
+เอกสารสำหรับคนแก้โค้ด อธิบายว่าระบบอ่านเกียรติบัตรของแต่ละรายการสอบอย่างไร และจะเพิ่มหรือแก้ได้อย่างไร
+แอดมินแก้เองไม่ได้ ทุกการเปลี่ยนแปลงต้องผ่าน code review, เทส และ deploy
+
+## แบ่งเป็นสองส่วน
+
+| ส่วน | อยู่ที่ | ใครอ่าน | ทำหน้าที่ |
+|---|---|---|---|
+| **manifest** (JSON) | `shared/certificate-profiles/<รายการ>.json` | worker และเว็บ | รายการรางวัล ชื่อโฟลเดอร์ที่รับ ป้ายชื่อ ลำดับ และกติกาโฟลเดอร์ของแต่ละรอบ |
+| **โปรไฟล์** (Python) | `apps/worker/app/certificate_profiles/<รายการ>.py` | worker | อ่านข้อความบนหน้า: ชื่อ เลข ระดับชั้น from รอบ/ปี และข้อความรางวัล |
+
+ที่แยกแบบนี้เพราะทั้งเว็บและ worker ต้องรู้รายการรางวัลให้ตรงกัน
+ถ้าเขียนแยกกันสองที่ วันหนึ่งจะเหลื่อมกันโดยไม่มีอะไรฟ้อง ส่วนการอ่านหน้ามีแค่ worker ที่ทำ
+
+## เลือกโปรไฟล์จาก (รายการสอบ, รอบ)
+
+`registry.py` จับคู่ `(HKIMO, FINAL)` → `HKIMO_FINAL` เป็นต้น
+**ไม่มีโปรไฟล์กลางให้ถอยไปใช้** ถ้าคู่ไหนไม่มีโปรไฟล์ ระบบจะปฏิเสธตั้งแต่ตอนสร้างรอบนำเข้า
+เพราะถ้าอ่านหน้าด้วยกติกาของรายการอื่น จะได้ชื่อผิดคนหรือรางวัลผิดโดยไม่มีอะไรฟ้อง
+
+รอบนำเข้าบันทึก `profile_key` ไว้ตอนสร้าง ยังไม่มีการแยกเวอร์ชันตามปี
+ถ้าแก้โปรไฟล์แล้ว deploy การตัดหน้าครั้งถัดไปของทุกรอบที่ใช้โปรไฟล์นั้นจะใช้กติกาใหม่
+
+## รูปแบบ manifest
+
+```jsonc
+{
+  "program": "HKIMO",
+  "name": "Hong Kong International Mathematical Olympiad",
+  "rounds": {
+    "HEAT":  { "profileKey": "HKIMO_HEAT",  "levelSubfolder": false },
+    "FINAL": { "profileKey": "HKIMO_FINAL", "levelSubfolder": false }
+  },
+  "awards": [
+    {
+      "code": "GOLD",                  // รหัสถาวร เก็บลงฐานข้อมูล ห้ามเปลี่ยนหลังมีข้อมูลจริง
+      "label": "Gold",                 // ชื่อภาษาอังกฤษตามที่พิมพ์บนเกียรติบัตร
+      "labelTh": "เหรียญทอง",          // ไม่บังคับ
+      "kind": "PRIMARY",               // PRIMARY หรือ SUPPLEMENTAL
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Gold", "Gold Award"], // ชื่อโฟลเดอร์ใน ZIP ที่รับ (เทียบแบบตรงตัวหลัง folderKey)
+      "text": ["..."],                 // ไม่บังคับ: ข้อความรางวัลบนหน้าที่ไม่ได้ลงท้ายด้วย "Award"
+      "order": 10,                     // ลำดับการแสดงผล
+      "badge": "gold"                  // สีป้ายรางวัลบนหน้าเว็บ
+    }
+  ]
+}
+```
+
+(ไฟล์จริงเป็น JSON ล้วน ไม่มีคอมเมนต์)
+
+### กติกาที่ต้องรักษา
+
+- **รหัสรางวัลเป็นของรายการนั้นจริง ๆ** BBB ใช้ `1ST_PRIZE` ห้ามแปลงเป็น `GOLD`
+  ถ้าต้นทางตั้งชื่อโฟลเดอร์ต่างจากรางวัลจริง ให้เพิ่มเป็น alias ใน `folders` แทน
+  (เช่น BBB Heat ส่งโฟลเดอร์ `Gold/` แต่ทุกหน้าพิมพ์ว่า `1st Prize Award`)
+- **เพิ่มเฉพาะ alias ที่เจอในไฟล์จริง** ห้ามเดาชื่อไว้ล่วงหน้า เพราะ alias ที่กว้างเกินไปอาจทำให้โฟลเดอร์ที่ผิดถูกรับเป็นรางวัล
+- **alias ห้ามซ้ำกันภายในรายการเดียวกัน** เทสจะฟ้อง
+- ทุกรายการต้องมี `SPECIAL_AWARD` (SUPPLEMENTAL, ทั้งสองรอบ) และ `PARTICIPATION` (PRIMARY, Heat เท่านั้น)
+  แม้ยังไม่เคยมีคนได้ก็ตาม
+- รางวัลที่อยู่ในแคตตาล็อกแต่ไม่อยู่ในรอบนั้น (เช่น Participation ในรอบ Final) จะถูกปฏิเสธพร้อมบอกเหตุผล
+  ไม่ใช่ถูกมองว่าเป็นโฟลเดอร์ที่ไม่รู้จัก
+- `levelSubfolder: true` = รอบนั้นมีโฟลเดอร์ระดับชั้นใต้โฟลเดอร์รางวัลได้อีก 1 ชั้น (ตอนนี้มีแค่ HKISO Heat)
+
+### `kind` มีผลกับการเผยแพร่
+
+- **SUPPLEMENTAL** (เช่น Perfect Score, Special Award) ให้คู่กับรางวัลหลักเสมอ
+  ใครมีแต่ใบเสริมจะถูกค้างไว้ไม่เผยแพร่ (`MISSING_PRIMARY`)
+- ตัวเลือก "เฉพาะใบรางวัลหลัก" ของรอบนำเข้าจะซ่อนใบ SUPPLEMENTAL ทุกชนิด
+- กติกาอยู่ที่ `decidePublish` ใน `apps/web/src/lib/publish-rules.ts` ที่เดียว
+
+### การเทียบชื่อโฟลเดอร์
+
+`folder_key()` (Python) และ `folderKey()` (TypeScript) เรียก `basic_clean` / `basicClean` ของ normalize
+คือไม่สนตัวพิมพ์เล็ก-ใหญ่ `_` `-` และช่องว่างซ้ำ แล้วเทียบกับ alias **แบบตรงตัว** ไม่ใช่แบบ "มีคำว่า"
+เคสทดสอบร่วมอยู่ที่ `shared/certificate-profile-cases.json` อ่านโดยทั้ง pytest และ vitest
+
+## โปรไฟล์ Python
+
+`base.py` คือโปรไฟล์ตั้งต้น = โครงหน้าแบบ HKIMO ที่รายการส่วนใหญ่ใช้ร่วมกัน
+แต่ละรายการสร้างโปรไฟล์ของรอบ Heat และ Final โดยกำหนด:
+
+| ค่า | Heat | Final |
+|---|---|---|
+| `from_field` | `SCHOOL` — ค่าหลัง `from` คือโรงเรียน | `COUNTRY` — ค่าหลัง `from` คือประเทศ |
+| `nationality_policy` | `ACCEPT_ALL` | `THAILAND_ONLY` |
+
+รอบ Final: `THAILAND` ไปต่อ, ประเทศอื่นเป็น `SKIPPED_FOREIGN`, ไม่มีหรืออ่านไม่ออกเป็น `NATIONALITY_UNVERIFIED`
+(ไม่ทิ้งเงียบ ๆ และไม่ถือเอาเองว่าเป็นคนไทย)
+
+รอบ Heat: โรงเรียนบนหน้าเก็บไว้ใน `school_on_page` ใช้เทียบเป็นคำเตือนเท่านั้น โรงเรียนในรายชื่อเป็นค่าที่ใช้จริง
+
+### override เฉพาะส่วนที่ต่าง
+
+`parse()` เรียกเมธอดย่อยเหล่านี้ รายการที่หน้าตาต่างให้ override เฉพาะเมธอดที่ต่าง ไม่ต้องเขียนใหม่ทั้งตัว
+
+`extract_name` · `extract_candidate_no` · `extract_level` · `extract_from` · `extract_round_year` · `extract_award_text` · `extract_extra`
+
+ตัวอย่าง: `bbb.py` override `extract_name` (BBB ไม่มีบรรทัด `This is awarded to`) และ `extract_award_text`
+(ใบเข้าร่วมพิมพ์ว่า `Certificate of Participation`)
+
+ผลลัพธ์เป็น `ParsedCertificate` แบบเดียวกันทุกโปรไฟล์ ถ้ารอบหรือปีบนหน้าไม่ตรงกับรอบนำเข้า จะใส่ไว้ใน `errors`
+แล้วหน้านั้นจะเป็น `PARSE_REVIEW` ให้แอดมินตรวจ
+
+## เพิ่มรายการสอบใหม่
+
+1. สำรวจไฟล์จริงก่อน (เก็บไว้ใน `apps/worker/tmp/` ห้าม commit) ดูโครงบรรทัดด้วย `scripts/check_real_files.py`
+2. สร้าง `shared/certificate-profiles/<รายการ>.json` ตามรูปแบบข้างบน
+3. สร้าง `apps/worker/app/certificate_profiles/<รายการ>.py` ที่มีโปรไฟล์ Heat และ Final แล้วเพิ่มลง `PROFILES` ใน `registry.py`
+4. import manifest ใน `apps/web/src/lib/certificate-catalog.ts`
+5. เพิ่ม fixture สังเคราะห์ใน `apps/worker/tests/fixtures/builders.py` (ห้ามใช้ชื่อคนจริง) แล้วเพิ่มเทสใน `test_certificate_profiles.py`
+6. รันเทสทั้งสองฝั่ง เทสจะฟ้องถ้า manifest กับโปรไฟล์ Python ไม่ครบคู่กัน หรือถ้าการเพิ่มโปรไฟล์ใหม่ไปเปลี่ยนผลของโปรไฟล์อื่น
+
+```bash
+cd apps/web && pnpm test
+docker compose exec worker python -m pytest -q
+```
