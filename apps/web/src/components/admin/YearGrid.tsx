@@ -6,6 +6,8 @@ import { StatusBadge } from "./StatusBadge";
 
 export type GridCell = {
   batchId: string | null;
+  /** โปรไฟล์ของรายการ/รอบนี้ — ว่าง = ระบบยังอ่านเกียรติบัตรแบบนี้ไม่ได้ */
+  profileKey: string | null;
   status: string | null;
   certificates: number;
   /** รอบนำเข้าอื่นของรอบการสอบเดียวกัน (ปกติเป็น 0) */
@@ -95,6 +97,19 @@ export function YearGrid({ year, rows }: { year: number; rows: GridRow[] }) {
               {ROUNDS.map((round) => {
                 const cell = row.cells[round.key];
                 const busy = creating === `${row.programId}-${round.key}`;
+
+                if (!cell.batchId && !cell.profileKey) {
+                  return (
+                    <td key={round.key} className="px-4 py-3 align-top">
+                      <span
+                        className="block rounded-lg border border-hairline bg-paper px-3 py-2 text-sm text-ink-soft"
+                        title="ต้องเพิ่มโปรไฟล์ของรายการนี้ในโค้ดก่อน จึงจะนำเข้าได้"
+                      >
+                        ยังไม่รองรับ
+                      </span>
+                    </td>
+                  );
+                }
 
                 if (!cell.batchId) {
                   return (

@@ -21,8 +21,9 @@ const schema = z.object({
  * งานจริงทำที่ worker เพราะต้องลบไฟล์หลายร้อยชิ้น
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let sessionId: string;
   try {
-    await requireAdmin();
+    ({ sessionId } = await requireAdmin());
   } catch (response) {
     return response as Response;
   }
@@ -53,6 +54,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const job = await prisma.$transaction(async (tx) => {
     await tx.batch.update({ where: { id }, data: { status: "DELETING" } });
+    // บันทึกไว้ก่อนลบ — บันทึกนี้อยู่ต่อหลังรอบถูกลบ (ผูกกับรอบแบบ SET NULL และมีชื่อรอบกำกับ)
+    await tx.auditEvent.create({
+      data: {
+        batchId: id,
+        batchLabel: phrase,
+        entityType: "BATCH",
+        entityId: id,
+        action: "BATCH_DELETE_REQUESTED",
+        before: { status: batch.status },
+        after: { note: parsed.data.note ?? null },
+        sessionId,
+      },
+    });
     return tx.job.create({
       data: { batchId: id, type: "DELETE_BATCH", payload: { note: parsed.data.note ?? null } },
     });

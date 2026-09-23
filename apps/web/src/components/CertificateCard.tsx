@@ -35,7 +35,7 @@ export function CertificateCard({
       )}
 
       <div className="flex-1 px-1">
-        <AwardBadge award={cert.award} />
+        <AwardBadge label={cert.awardLabel} labelTh={cert.awardLabelTh} badge={cert.badge} />
         {/* ระดับชั้นกับเลขที่ใบอยู่บรรทัดเดียวกันบนมือถือ ลดจำนวนบรรทัดต่อการ์ด
             เพราะหน้าผลลัพธ์อาจมีหลายใบเรียงกันยาว */}
         <p className="mt-1.5 text-sm text-ink-soft sm:mt-2 sm:text-base">

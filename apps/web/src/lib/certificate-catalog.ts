@@ -61,6 +61,8 @@ type ProgramManifest = {
   program: string;
   name: string;
   profileKeys: Partial<Record<ExamRoundCode, string>>;
+  /** รอบที่ยอมให้มีโฟลเดอร์ระดับชั้นใต้โฟลเดอร์รางวัล (เช่น HKISO Heat: Gold/P3/) */
+  levelSubfolder: Partial<Record<ExamRoundCode, boolean>>;
   awards: AwardDef[];
 };
 
@@ -79,6 +81,7 @@ function load(raw: unknown, source: string): ProgramManifest {
   }
   const data = parsed.data;
   const profileKeys: ProgramManifest["profileKeys"] = {};
+  const levelSubfolder: ProgramManifest["levelSubfolder"] = {};
   for (const round of ROUNDS) {
     const config = data.rounds[round];
     if (!config) continue;
@@ -86,6 +89,7 @@ function load(raw: unknown, source: string): ProgramManifest {
       throw new Error(`${source}: profileKey ของรอบ ${round} ต้องเป็น ${data.program}_${round}`);
     }
     profileKeys[round] = config.profileKey;
+    levelSubfolder[round] = config.levelSubfolder;
   }
 
   const owner = new Map<string, string>();
@@ -114,6 +118,7 @@ function load(raw: unknown, source: string): ProgramManifest {
     program: data.program,
     name: data.name,
     profileKeys,
+    levelSubfolder,
     awards: awards.sort((a, b) => a.order - b.order || a.code.localeCompare(b.code)),
   };
 }
@@ -142,6 +147,10 @@ export function programManifests(): ProgramManifest[] {
 export function profileKeyFor(programCode: string, round: string): string | null {
   const manifest = MANIFESTS.get(programCode.toUpperCase());
   return manifest?.profileKeys[round as ExamRoundCode] ?? null;
+}
+
+export function allowsLevelSubfolder(programCode: string, round: string): boolean {
+  return MANIFESTS.get(programCode.toUpperCase())?.levelSubfolder[round as ExamRoundCode] ?? false;
 }
 
 /** รางวัลที่ใช้ได้ในรอบนี้ เรียงตามลำดับการแสดงผล */

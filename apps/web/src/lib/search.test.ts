@@ -80,6 +80,27 @@ describe("การจัดกลุ่มผลค้นหา", () => {
     ]);
   });
 
+  it("รายการที่มีรางวัลของตัวเองแสดงชื่อจริง ไม่ยุบเป็นเหรียญ", () => {
+    const result = student({ code: "BBB", year: 2026, round: "FINAL", award: "1ST_PRIZE" });
+    const cert = result.programs[0].sessions[0].certificates[0];
+    expect(cert.awardLabel).toBe("1st Prize");
+    expect(cert.awardLabelTh).toBe("รางวัลที่ 1");
+    expect(cert.badge).toBe("gold");
+  });
+
+  it("ใบรางวัลเข้าร่วมและรางวัลพิเศษเรียงหลังรางวัลหลัก", () => {
+    const result = student(
+      { code: "HKIMO", year: 2026, round: "HEAT", award: "SPECIAL_AWARD" },
+      { code: "HKIMO", year: 2026, round: "HEAT", award: "PARTICIPATION" },
+      { code: "HKIMO", year: 2026, round: "HEAT", award: "PERFECT_SCORE" },
+    );
+    expect(result.programs[0].sessions[0].certificates.map((c) => c.award)).toEqual([
+      "PARTICIPATION",
+      "PERFECT_SCORE",
+      "SPECIAL_AWARD",
+    ]);
+  });
+
   it("ปีล่าสุดของรายการสอบคิดจากปีที่มากที่สุด ไม่ใช่ใบแรกที่เจอ", () => {
     const result = student(
       { code: "HKIMO", year: 2023, round: "HEAT", award: "MERIT" },

@@ -6,6 +6,7 @@ import { ProgramManager } from "@/components/admin/ProgramManager";
 import { statusLabel } from "@/components/admin/StatusBadge";
 import { YearGrid, type GridRow } from "@/components/admin/YearGrid";
 import { isAuthenticated } from "@/lib/auth";
+import { profileKeyFor } from "@/lib/certificate-catalog";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,8 @@ export default async function AdminDashboard({
         const first = matches[0];
         return {
           batchId: first?.id ?? null,
+          // รายการ/รอบที่ยังไม่มีโปรไฟล์ เริ่มนำเข้าไม่ได้ — ไม่มีโปรไฟล์กลางให้ถอยไปใช้
+          profileKey: profileKeyFor(program.code, round),
           status: first?.status ?? null,
           certificates: first ? (certificatesOf.get(first.id) ?? 0) : 0,
           extras: Math.max(0, matches.length - 1),

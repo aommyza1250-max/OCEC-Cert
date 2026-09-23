@@ -1,7 +1,8 @@
 /** ตรรกะการค้นหาของหน้าสาธารณะ */
+import { awardDisplay } from "./certificate-catalog";
 import { MIN_QUERY_LENGTH } from "./constants";
 import { prisma } from "./db";
-import { awardRank, normalizeName, roundRank } from "./normalize";
+import { normalizeName, roundRank } from "./normalize";
 import { publicUrl } from "./r2";
 
 /** ต่ำกว่า MIN_QUERY_LENGTH ไม่ยอมค้นให้ — กันคนพิมพ์ตัวอักษรเดียวแล้วไล่ดูดรายชื่อทั้งฐาน
@@ -15,7 +16,15 @@ export type CertificateItem = {
   id: string;
   year: number;
   round: string;
+  /** รหัสรางวัลของรายการนั้นจริง ๆ เช่น GOLD หรือ 1ST_PRIZE ของ BBB */
   award: string;
+  /** ชื่อรางวัลที่ผู้ปกครองเห็น — ใช้ชื่อที่บันทึกไว้ตอนออกใบก่อนเสมอ */
+  awardLabel: string;
+  awardLabelTh: string | null;
+  /** สีของป้ายรางวัล (gold, silver, ..., participation, special) */
+  badge: string;
+  /** ลำดับการแสดงผลในกลุ่มเดียวกัน — รางวัลหลักก่อน รางวัลเสริมทีหลัง */
+  order: number;
   level: string | null;
   certNo: string | null;
   previewUrl: string | null;
@@ -83,6 +92,8 @@ export async function searchStudents(rawQuery: string): Promise<SearchResult[]> 
 type CertificateRow = {
   id: string;
   award: string;
+  awardLabel?: string | null;
+  awardLabelTh?: string | null;
   level: string | null;
   certNo: string | null;
   previewKey: string | null;
@@ -107,11 +118,16 @@ export function toSearchResult(student: {
     const { year, round } = cert.exam;
     const key = `${year}|${round}`;
     const session = program.sessions.get(key) ?? { year, round, certificates: [] };
+    const shown = awardDisplay(code, cert.award, { label: cert.awardLabel, labelTh: cert.awardLabelTh });
     session.certificates.push({
       id: cert.id,
       year,
       round,
       award: cert.award,
+      awardLabel: shown.label,
+      awardLabelTh: shown.labelTh,
+      badge: shown.badge,
+      order: shown.order,
       level: cert.level,
       certNo: cert.certNo,
       previewUrl: cert.previewKey ? publicUrl(cert.previewKey) : null,
@@ -124,7 +140,7 @@ export function toSearchResult(student: {
       const sessions = [...program.sessions.values()].sort(bySession);
       // ในกลุ่มเดียวกันเรียงตามรางวัล ไม่ปล่อยตามลำดับที่ฐานข้อมูลคืนมา
       for (const session of sessions) {
-        session.certificates.sort((a, b) => awardRank(a.award) - awardRank(b.award));
+        session.certificates.sort((a, b) => a.order - b.order);
       }
       return {
         code,

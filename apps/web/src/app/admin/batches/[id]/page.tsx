@@ -1,20 +1,15 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/AdminShell";
-import { BatchWorkflow, type PublishState } from "@/components/admin/BatchWorkflow";
+import { BatchWorkflow } from "@/components/admin/BatchWorkflow";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { DangerZone } from "@/components/admin/DangerZone";
 import { RetentionPanel } from "@/components/admin/RetentionPanel";
 import { SourcesPanel } from "@/components/admin/SourcesPanel";
-import { DuplicateReview, type DuplicateGroup } from "@/components/admin/DuplicateReview";
-import { MissingList } from "@/components/admin/MissingList";
-import { MatchTable } from "@/components/admin/MatchTable";
 import { isAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { batchConfirmPhrase } from "@/lib/batch-delete";
-import { loadMissingItems } from "@/lib/missing";
-import { decidePublish, needsPolicyDecision, PERFECT_SCORE } from "@/lib/publish";
-import { publicUrl } from "@/lib/r2";
+import { loadBatchView } from "@/lib/batch-view";
+import { allowsLevelSubfolder } from "@/lib/certificate-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -22,53 +17,12 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   if (!(await isAuthenticated())) redirect("/admin/login");
 
   const { id } = await params;
-  const batch = await prisma.batch.findUnique({
-    where: { id },
-    include: {
-      exam: { include: { program: true } },
-      jobs: { orderBy: { createdAt: "desc" }, take: 5 },
-      _count: { select: { certificates: true } },
-    },
-  });
-  if (!batch) notFound();
+  const view = await loadBatchView(id);
+  if (!view) notFound();
+  const { batch } = view;
 
-  // แสดงเฉพาะหน้าที่ยังต้องจัดการ — หน้าที่จับคู่แล้วไม่ต้องให้แอดมินไล่ดูทั้งหมด
-  const pending = await prisma.stagingPage.findMany({
-    where: { batchId: id, matchStatus: { in: ["UNMATCHED", "AMBIGUOUS"] } },
-    orderBy: { pageNumber: "asc" },
-    take: 200,
-  });
-
-  const duplicateGroups = await loadDuplicateGroups(id);
-  const publishState = await loadPublishState(id, batch.multiAwardPolicy);
-  const missingItems = await loadMissingItems(id);
-
-  const counts = await prisma.stagingPage.groupBy({
-    by: ["matchStatus"],
-    where: { batchId: id },
-    _count: true,
-  });
-
-  // แยกสองเรื่องออกจากกันให้ชัด
-  //   importing = กำลังตัดหน้า/จับคู่ ซึ่งผลลัพธ์ยังเปลี่ยนได้ จึงยังไม่ควรให้ตัดสินอะไร
-  //   pendingJobs = มีงานอะไรก็ได้ค้างอยู่ ใช้แค่ตัดสินว่าต้องรีเฟรชหน้าเองไหม
-  // ถ้าใช้ตัวเดียวกัน การกดเผยแพร่ (ซึ่งตั้งงานเคลียร์ไฟล์ต้นฉบับต่อ) จะทำให้
-  // รายการที่ต้องตัดสินหายไปเฉย ๆ ทั้งที่จับคู่เสร็จไปนานแล้ว
-  const [importingJobs, pendingJobs, runningJob, nextQueuedJob] = await Promise.all([
-    prisma.job.count({
-      where: { batchId: id, type: { in: ["SPLIT", "MATCH"] }, status: { in: ["QUEUED", "RUNNING"] } },
-    }),
-    prisma.job.count({ where: { batchId: id, status: { in: ["QUEUED", "RUNNING"] } } }),
-    // งานที่กำลังรันจริง — ไม่ใช่งานที่ถูกสร้างล่าสุด
-    // อัป Excel ระหว่างที่ยังตัดหน้าไม่เสร็จ จะได้งานจับคู่เป็นงานล่าสุดทันที
-    // ถ้าเอาอันนั้นมาแสดง แถบสถานะจะบอกว่า "กำลังจับคู่" ทั้งที่ยังตัดหน้าอยู่
-    prisma.job.findFirst({ where: { batchId: id, status: "RUNNING" }, orderBy: { createdAt: "asc" } }),
-    prisma.job.findFirst({ where: { batchId: id, status: "QUEUED" }, orderBy: { createdAt: "asc" } }),
-  ]);
-  const processing = importingJobs > 0;
-  const activeJob = runningJob ?? nextQueuedJob;
-
-  const deleteInfo = await loadDeleteInfo(id, batch.examId);
+  const exam = await prisma.batch.findUniqueOrThrow({ where: { id }, select: { examId: true } });
+  const deleteInfo = await loadDeleteInfo(id, exam.examId);
   const retention = await loadRetention(id);
   // เหตุผลที่ยังเคลียร์ไฟล์ต้นฉบับไม่ได้ อ่านจากผลตรวจครั้งล่าสุดของ worker
   // ไม่คำนวณซ้ำฝั่งนี้ เพราะถ้าสองฝั่งคิดไม่ตรงกัน แอดมินจะเห็นเหตุผลที่ไม่ตรงกับความจริง
@@ -79,122 +33,54 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   });
   const blockers = readBlockers(lastCleanup?.progress);
 
-  const roundLabel = batch.exam.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ";
+  const roundLabel = batch.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ";
 
   return (
     <AdminShell
-      title={`${batch.exam.program.code} ${roundLabel} ${batch.exam.year}`}
+      title={`${batch.programCode} ${roundLabel} ${batch.year}`}
       back={{ href: "/admin", label: "กลับหน้ารวม" }}
     >
       <div className="-mt-4 mb-6 space-y-1 text-sm text-ink-soft">
         <p className="flex flex-wrap items-center gap-2">
           <StatusBadge status={batch.status} />
-          <span>{batch.exam.program.name}</span>
-          <span>· สร้างเมื่อ {batch.createdAt.toLocaleDateString("th-TH")}</span>
+          <span>{batch.programName}</span>
+          <span>· สร้างเมื่อ {new Date(batch.createdAt).toLocaleDateString("th-TH")}</span>
+          {batch.profileKey && (
+            <span>
+              · โปรไฟล์ <code className="rounded bg-paper px-1.5 py-0.5 text-xs">{batch.profileKey}</code>
+            </span>
+          )}
         </p>
         <p>
           ไฟล์ที่ตัดได้จะชื่อ{" "}
           <code className="rounded bg-paper px-1.5 py-0.5 text-xs">
             {"{FNAME}_{LNAME}_"}
-            {batch.exam.program.code}_{batch.exam.round}_{"{AWARD}_"}
-            {batch.exam.year}.pdf
+            {batch.programCode}_{batch.round}_{"{AWARD}_"}
+            {batch.year}.pdf
           </code>
         </p>
       </div>
 
-      <BatchWorkflow
-        batchId={batch.id}
-        status={batch.status}
-        hasZip={Boolean(batch.sourceZipKey)}
-        hasExcel={Boolean(batch.sourceExcelKey)}
-        certificateCount={batch._count.certificates}
-        stats={batch.stats as Record<string, unknown>}
-        counts={Object.fromEntries(counts.map((c) => [c.matchStatus, c._count]))}
-        publishState={publishState}
-        latestJob={
-          batch.jobs[0]
-            ? {
-                id: batch.jobs[0].id,
-                type: batch.jobs[0].type,
-                status: batch.jobs[0].status,
-                // เอาเฉพาะบรรทัดแรก ส่วนที่เหลือเป็น traceback สำหรับคนแก้โค้ด ไม่ใช่สำหรับแอดมิน
-                error: batch.jobs[0].error?.split("\n")[0] ?? null,
-                userError: batch.jobs[0].userError,
-                progress: batch.jobs[0].progress as Record<string, unknown>,
-              }
-            : null
-        }
-        pendingJobs={pendingJobs}
-        activeJob={
-          activeJob
-            ? {
-                type: activeJob.type,
-                status: activeJob.status,
-                progress: activeJob.progress as Record<string, unknown>,
-              }
-            : null
-        }
-      />
-
-      {/* ระหว่างประมวลผลยังไม่ต้องให้ตัดสินอะไร รอสรุปทีเดียวตอนจบ
-          ของที่ค้างอยู่ตอนนี้เปลี่ยนได้อีกเมื่องานเดินต่อ ถ้าให้ตัดสินไปก่อน
-          แอดมินจะทำงานซ้ำและอาจตัดสินจากข้อมูลที่ยังไม่ครบ */}
-      {processing ? (
-        <p className="mt-10 rounded-2xl border border-brand-line bg-brand-soft px-5 py-4 text-sm text-brand">
-          กำลังประมวลผลอยู่ — รายการที่ต้องตัดสิน (ชื่อซ้ำ / จับคู่ไม่ได้ / ต้องตามเก็บ)
-          จะแสดงทีเดียวเมื่อจับคู่เสร็จทั้งหมด
-        </p>
-      ) : (
-        <>
-      <MissingList batchId={id} items={missingItems} />
-
-      <DuplicateReview groups={duplicateGroups} />
-
-      <section className="mt-10">
-        <h2 className="mb-1 font-semibold">หน้าที่ยังจับคู่ไม่ได้ ({pending.length})</h2>
-        <p className="mb-4 text-sm text-ink-soft">
-          ระบบไม่เดาให้เมื่อไม่มั่นใจ กรอกชื่อให้ตรงกับที่ปรากฏบนเกียรติบัตรเพื่อจับคู่ด้วยมือ
-        </p>
-        <MatchTable
-          pages={pending.map((page) => ({
-            id: page.id,
-            pageNumber: page.pageNumber,
-            extractedName: page.extractedName,
-            certNo: page.certNo,
-            level: page.level,
-            award: page.award,
-            matchStatus: page.matchStatus,
-            matchNote: page.matchNote,
-            previewUrl: page.previewKey ? publicUrl(page.previewKey) : null,
-            rawTextExcerpt: page.rawText.slice(0, 300),
-          }))}
-        />
-      </section>
-        </>
-      )}
+      <BatchWorkflow view={view} levelSubfolder={allowsLevelSubfolder(batch.programCode, batch.round)} />
 
       <section className="mt-10">
         <h2 className="mb-2 font-semibold">อายุการเก็บ</h2>
         <RetentionPanel
           batchId={id}
           expiresAt={retention.expiresAt?.toISOString() ?? null}
-          certificates={batch._count.certificates}
+          certificates={view.publish.certificateCount}
           deletedFiles={retention.deletedFiles}
         />
       </section>
 
       <section className="mt-10">
         <h2 className="mb-2 font-semibold">ไฟล์ต้นฉบับ</h2>
-        <SourcesPanel
-          batchId={id}
-          clearedAt={batch.sourcesClearedAt?.toISOString() ?? null}
-          blockers={blockers}
-        />
+        <SourcesPanel batchId={id} clearedAt={batch.sourcesClearedAt} blockers={blockers} />
       </section>
 
       <DangerZone
         batchId={id}
-        confirmPhrase={batchConfirmPhrase(batch.exam.program.code, batch.exam.round, batch.exam.year)}
+        confirmPhrase={batchConfirmPhrase(batch.programCode, batch.round, batch.year)}
         published={batch.status === "PUBLISHED"}
         counts={deleteInfo.counts}
         siblingBatches={deleteInfo.siblingBatches}
@@ -210,7 +96,7 @@ async function loadDeleteInfo(batchId: string, examId: string) {
     prisma.stagingPage.count({ where: { batchId } }),
     prisma.batch.count({ where: { examId, id: { not: batchId } } }),
     // ผู้เข้าสอบที่จะไม่เหลืออะไรเลยหลังลบรอบนี้
-    // (ยังมีใบจากรอบอื่น หรือมีหน้าในรอบอื่นชี้มาหา = ไม่ถูกลบ)
+    // (ยังมีใบจากรอบอื่น หรือมีหน้า/รายชื่อในรอบอื่นชี้มาหา = ไม่ถูกลบ)
     prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(DISTINCT c.student_id) AS count
       FROM certificates c
@@ -220,7 +106,10 @@ async function loadDeleteInfo(batchId: string, examId: string) {
           WHERE o.student_id = c.student_id AND o.batch_id <> ${batchId}::uuid)
         AND NOT EXISTS (
           SELECT 1 FROM staging_pages sp
-          WHERE sp.matched_student_id = c.student_id AND sp.batch_id <> ${batchId}::uuid)`,
+          WHERE sp.matched_student_id = c.student_id AND sp.batch_id <> ${batchId}::uuid)
+        AND NOT EXISTS (
+          SELECT 1 FROM roster_entries re
+          WHERE re.student_id = c.student_id AND re.batch_id <> ${batchId}::uuid)`,
   ]);
 
   return {
@@ -246,114 +135,4 @@ function readBlockers(progress: unknown): string[] | null {
   const list = (progress as { blockers?: unknown } | null | undefined)?.blockers;
   if (!Array.isArray(list)) return null;
   return list.filter((item): item is string => typeof item === "string");
-}
-
-/**
- * รวมหน้าที่ชื่อซ้ำกันไว้เป็นกลุ่มเดียว โดยดึงใบที่จับคู่ไปแล้วมาแสดงคู่กันด้วย
- * แอดมินจะได้เห็นเกียรติบัตรจริงทั้งสองใบพร้อมกันก่อนตัดสิน
- */
-async function loadDuplicateGroups(batchId: string): Promise<DuplicateGroup[]> {
-  const conflicts = await prisma.stagingPage.findMany({
-    where: { batchId, matchStatus: "DUPLICATE_NAME" },
-    orderBy: { pageNumber: "asc" },
-  });
-  if (conflicts.length === 0) return [];
-
-  const names = [
-    ...new Set(conflicts.map((p) => p.extractedNameNormalized).filter(Boolean)),
-  ] as string[];
-
-  const related = await prisma.stagingPage.findMany({
-    where: {
-      batchId,
-      extractedNameNormalized: { in: names },
-      matchStatus: { in: ["MATCHED", "DUPLICATE_NAME"] },
-    },
-    include: { matchedStudent: true },
-    orderBy: { pageNumber: "asc" },
-  });
-
-  const groups = new Map<string, DuplicateGroup>();
-  for (const page of related) {
-    const key = page.extractedNameNormalized!;
-    const group = groups.get(key) ?? { name: page.extractedName ?? key, pages: [] };
-    group.pages.push({
-      id: page.id,
-      pageNumber: page.pageNumber,
-      extractedName: page.extractedName,
-      certNo: page.certNo,
-      level: page.level,
-      previewUrl: page.previewKey ? publicUrl(page.previewKey) : null,
-      matchNote: page.matchNote,
-      award: page.award,
-      rosterAward: page.rosterAward,
-      isMatched: page.matchStatus === "MATCHED",
-      studentNameTh: page.matchedStudent?.nameTh ?? null,
-      studentNameEn: page.matchedStudent?.nameEn ?? null,
-      studentSchool: page.matchedStudent?.school ?? null,
-    });
-    groups.set(key, group);
-  }
-  return [...groups.values()];
-}
-
-/**
- * สรุปสถานะการเผยแพร่ให้หน้าเว็บแสดง
- *
- * ใช้ตรรกะเดียวกับตอนกดเผยแพร่จริง (src/lib/publish.ts) เพื่อให้สิ่งที่แอดมินเห็น
- * ตรงกับสิ่งที่จะเกิดขึ้นจริงเสมอ ไม่ใช่คำนวณคนละแบบแล้วเหลื่อมกัน
- */
-async function loadPublishState(
-  batchId: string,
-  policy: PublishState["policy"],
-): Promise<PublishState> {
-  const certificates = await prisma.certificate.findMany({
-    where: { batchId },
-    select: {
-      id: true,
-      award: true,
-      certNo: true,
-      published: true,
-      studentId: true,
-      student: { select: { nameEn: true, nameTh: true } },
-    },
-    orderBy: { pageNumber: "asc" },
-  });
-
-  const byStudent = new Map<string, typeof certificates>();
-  for (const c of certificates) {
-    byStudent.set(c.studentId, [...(byStudent.get(c.studentId) ?? []), c]);
-  }
-
-  const people = [...byStudent.entries()].map(([studentId, certs]) => ({
-    studentId,
-    certificates: certs.map((c) => ({ id: c.id, award: c.award })),
-  }));
-
-  const decision = decidePublish(people, policy);
-  const publishedIds = new Set(certificates.filter((c) => c.published).map((c) => c.id));
-  const nameOf = (studentId: string) => {
-    const first = byStudent.get(studentId)?.[0];
-    return first?.student.nameEn ?? first?.student.nameTh ?? "ไม่ระบุชื่อ";
-  };
-
-  return {
-    policy,
-    needsDecision: needsPolicyDecision(people),
-    publishedCount: publishedIds.size,
-    held: decision.heldStudents.map((h) => ({
-      name: nameOf(h.studentId),
-      certNo: byStudent.get(h.studentId)?.[0]?.certNo ?? null,
-      reason: h.reason,
-    })),
-    multiAward: people
-      .filter(
-        (p) =>
-          p.certificates.some((c) => c.award === PERFECT_SCORE) &&
-          p.certificates.some((c) => c.award !== PERFECT_SCORE),
-      )
-      .map((p) => ({ name: nameOf(p.studentId), awards: p.certificates.map((c) => c.award) })),
-    // ข้อมูลครบแล้วแต่ยังไม่ถูกเผยแพร่ — เกิดหลังเติมไฟล์ที่ตกหล่นเข้ารอบที่เผยแพร่ไปแล้ว
-    readyToPublish: decision.publish.filter((certId) => !publishedIds.has(certId)).length,
-  };
 }

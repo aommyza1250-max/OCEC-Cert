@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
+import { profileKeyFor } from "@/lib/certificate-catalog";
 import { prisma } from "@/lib/db";
 
 const schema = z.object({
@@ -33,6 +34,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "ไม่พบรายการสอบที่เลือก" }, { status: 404 });
   }
 
+  // อ่านเกียรติบัตรด้วยโปรไฟล์ของรายการ/รอบนั้นเท่านั้น ไม่มีโปรไฟล์กลางให้ถอยไปใช้
+  // ถ้ายอมให้เริ่ม แล้วไปอ่านด้วยกติกาของรายการอื่น จะได้ชื่อผิดคนหรือรางวัลผิดโดยไม่มีอะไรฟ้อง
+  const profileKey = profileKeyFor(program.code, round);
+  if (!profileKey) {
+    return NextResponse.json(
+      {
+        error: `ระบบยังอ่านเกียรติบัตรของ ${program.code} รอบ ${round === "HEAT" ? "Heat" : "Final"} ไม่ได้`,
+        hint: "ต้องเพิ่มโปรไฟล์ของรายการนี้ในโค้ดก่อน จึงจะนำเข้าได้",
+      },
+      { status: 400 },
+    );
+  }
+
   const exam = await prisma.exam.upsert({
     where: { programId_round_year: { programId, round, year } },
     update: {},
@@ -56,7 +70,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const batch = await prisma.batch.create({ data: { examId: exam.id, note: note || null } });
+  const batch = await prisma.batch.create({
+    data: { examId: exam.id, note: note || null, profileKey },
+  });
 
-  return NextResponse.json({ id: batch.id });
+  return NextResponse.json({ id: batch.id, profileKey });
 }
