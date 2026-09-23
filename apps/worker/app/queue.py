@@ -16,22 +16,32 @@ log = logging.getLogger(__name__)
 
 
 def claim_next_job() -> dict[str, Any] | None:
-    """หยิบงานถัดไปมาทำ พร้อมล็อกไว้ไม่ให้ worker ตัวอื่นหยิบซ้ำ"""
+    """หยิบงานถัดไปมาทำ พร้อมล็อกไว้ไม่ให้ worker ตัวอื่นหยิบซ้ำ
+
+    รอบนำเข้าเดียวกันทำได้ทีละงานเสมอ — ข้ามงานของรอบที่มีงานกำลังรันอยู่
+    และล็อกแถว batch ก่อนตั้งสถานะ เพื่อไม่ให้ไปสวนกับการแก้ไขจากหน้าเว็บที่ถือล็อกเดียวกันอยู่
+    (เว็บตรวจว่าไม่มีงานค้างก่อนแก้ภายใต้ล็อกนี้ งานจึงเริ่มกลางการแก้ไขไม่ได้)
+    """
     with connection() as conn:
         with conn.transaction():
             row = conn.execute(
                 """
-                SELECT id, type, batch_id, payload, attempts
-                FROM jobs
-                WHERE status = 'QUEUED'
-                ORDER BY created_at
-                FOR UPDATE SKIP LOCKED
+                SELECT j.id, j.type, j.batch_id, j.payload, j.attempts
+                FROM jobs j
+                WHERE j.status = 'QUEUED'
+                  AND (j.batch_id IS NULL OR NOT EXISTS (
+                        SELECT 1 FROM jobs r
+                        WHERE r.batch_id = j.batch_id AND r.status = 'RUNNING'))
+                ORDER BY j.created_at
+                FOR UPDATE OF j SKIP LOCKED
                 LIMIT 1
                 """
             ).fetchone()
 
             if row is None:
                 return None
+            if row["batch_id"]:
+                conn.execute("SELECT 1 FROM batches WHERE id = %s FOR UPDATE", (row["batch_id"],))
 
             conn.execute(
                 """

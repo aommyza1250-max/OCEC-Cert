@@ -15,15 +15,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _intake import TestBatch, cleanup, create_batch, upload_zip, use_roster  # noqa: E402
 from app import config  # noqa: E402
-from app.db import connection, new_id  # noqa: E402
-from app.storage import list_keys, upload_bytes  # noqa: E402
+from app.db import connection  # noqa: E402
+from app.storage import list_keys  # noqa: E402
 from app.tasks import expire  # noqa: E402
-from app.tasks.match_excel import run_match  # noqa: E402
-from app.tasks.split import run_split  # noqa: E402
-from tests.fixtures.builders import make_award_zip, make_bundle_pdf, make_roster_xlsx  # noqa: E402
+from tests.fixtures.builders import make_bundle_pdf  # noqa: E402
 
-XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 PEOPLE = [
     {"name": "OMEGA EXPIRED", "level": "Primary 5", "cert_no": "97001", "award": "GOLD"},
     {"name": "SIGMA EXPIRED", "level": "Primary 6", "cert_no": "97002", "award": "SILVER"},
@@ -52,10 +50,10 @@ def set_enabled(value: bool) -> None:
 
 
 def main() -> int:
-    code = f"E2EEXP{new_id()[:6].upper()}"
-    print(f"สร้างข้อมูลทดสอบ (รายการสอบ {code})")
-    batch_id = build_batch(code, 2024)
-    keep_id = build_batch(code, 2023)  # รอบที่ยังไม่เผยแพร่ ไว้ตรวจว่าไม่ถูกแตะ
+    a, b = create_batch(), create_batch()
+    print(f"สร้างข้อมูลทดสอบ (HKIMO FINAL ปี {a.year} และ {b.year})")
+    batch_id = build_batch(a)
+    keep_id = build_batch(b)  # รอบที่ยังไม่เผยแพร่ ไว้ตรวจว่าไม่ถูกแตะ
 
     try:
         publish_and_backdate(batch_id)
@@ -88,7 +86,7 @@ def main() -> int:
         check("ไฟล์ยังอยู่ครบ", len(list_keys(f"certificates/{keep_id}/")) == len(PEOPLE))
         check("ไม่มีวันหมดอายุ", expires_count(keep_id) == 0)
     finally:
-        cleanup(code, [batch_id, keep_id])
+        cleanup([a, b], "EXPIRED")
 
     print()
     if failures:
@@ -98,40 +96,12 @@ def main() -> int:
     return 0
 
 
-def build_batch(code: str, year: int) -> str:
-    with connection() as conn:
-        program = conn.execute(
-            """
-            INSERT INTO exam_programs (id, code, name, updated_at) VALUES (%s, %s, %s, NOW())
-            ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id
-            """,
-            (new_id(), code, f"ทดสอบ {code}"),
-        ).fetchone()["id"]
-        exam = conn.execute(
-            "INSERT INTO exams (id, program_id, round, year) VALUES (%s, %s, 'FINAL', %s) RETURNING id",
-            (new_id(), program, year),
-        ).fetchone()["id"]
-        batch_id = conn.execute(
-            "INSERT INTO batches (id, exam_id, status, updated_at) VALUES (%s, %s, 'DRAFT', NOW()) RETURNING id",
-            (new_id(), exam),
-        ).fetchone()["id"]
-
-    entries = [dict(p, country="THAILAND", year=year) for p in PEOPLE]
-    zip_key = f"sources/{batch_id}/bundle-test.zip"
-    upload_bytes(zip_key, make_award_zip({p["award"]: make_bundle_pdf([p]) for p in entries}),
-                 "application/zip")
-    upload_bytes(f"sources/{batch_id}/roster.xlsx",
-                 make_roster_xlsx([{"cert_no": p["cert_no"], "name_en": p["name"],
-                                    "level": p["level"], "award": p["award"]} for p in entries]),
-                 XLSX_MIME)
-    with connection() as conn:
-        conn.execute(
-            "UPDATE batches SET source_zip_key = %s, source_excel_key = %s WHERE id = %s",
-            (zip_key, f"sources/{batch_id}/roster.xlsx", batch_id),
-        )
-    run_split(batch_id, lambda _: None, {"zipKey": zip_key})
-    run_match(batch_id, lambda _: None)
-    return batch_id
+def build_batch(target: TestBatch) -> str:
+    """รายชื่อ -> ใช้รายชื่อ -> ZIP (โฟลเดอร์ online/<รางวัล>) -> จับคู่ ตามขั้นตอนจริง"""
+    entries = [dict(p, country="THAILAND", year=target.year) for p in PEOPLE]
+    use_roster(target.batch_id, entries)
+    upload_zip(target.batch_id, {f"online/{p['award']}/{p['cert_no']}.pdf": make_bundle_pdf([p]) for p in entries})
+    return target.batch_id
 
 
 def publish_and_backdate(batch_id: str) -> None:
@@ -181,23 +151,6 @@ def searchable_count(batch_id: str) -> int:
 def _scalar(sql: str, batch_id: str) -> int:
     with connection() as conn:
         return conn.execute(sql, (batch_id,)).fetchone()["n"]
-
-
-def cleanup(code: str, batch_ids: list[str]) -> None:
-    from app.storage import delete_keys
-
-    for batch_id in batch_ids:
-        for prefix in ("certificates", "previews", "sources"):
-            delete_keys([k["key"] for k in list_keys(f"{prefix}/{batch_id}/")])
-    with connection() as conn:
-        conn.execute("DELETE FROM batches WHERE id = ANY(%s)", (batch_ids,))
-        conn.execute("DELETE FROM students WHERE name_en LIKE '%EXPIRED'")
-        conn.execute(
-            "DELETE FROM exams WHERE program_id IN (SELECT id FROM exam_programs WHERE code = %s)",
-            (code,),
-        )
-        conn.execute("DELETE FROM exam_programs WHERE code = %s", (code,))
-    print("\n(ล้างข้อมูลทดสอบเรียบร้อย)")
 
 
 if __name__ == "__main__":

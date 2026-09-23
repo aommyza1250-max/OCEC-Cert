@@ -28,28 +28,9 @@ class Settings:
 
     worker_shared_secret: str
 
-    # ---- รูปแบบข้อความบนหน้าเกียรติบัตร (อ้างอิงจากไฟล์จริง ดู docs/pdf-parsing-notes.md) ----
-    # ข้อความบอกสัญชาติในเกียรติบัตรรวมประเทศ
-    nationality_pattern: str = r"from\s+THAILAND"
-    # บรรทัดสัญชาติ — ชื่อผู้รับอยู่บรรทัด "ก่อน" บรรทัดนี้
-    country_line_prefix: str = "from "
-    # ข้อความนำหน้าชื่อ — ชื่อผู้รับอยู่บรรทัด "ถัดจาก" บรรทัดนี้
-    name_anchor: str = "This is awarded to"
-    # ข้อความนำหน้าระดับชั้น
-    level_line_prefix: str = "for outstanding achievement in"
-    # เลขบนหน้ากระดาษ ของจริงเขียน "Cert No: 900101"
-    cert_no_pattern: str = r"(?:Cert\s+)?No:\s*(\d+)"
-    # บรรทัดรางวัล ของจริงเขียน "Gold Award" — หน้า Perfect Score ไม่มีบรรทัดนี้
-    award_line_pattern: str = r"^(.+?)\s+Award$"
-    # รอบและปี ของจริงเขียน "... Olympiad Final Round 2026,"
-    round_year_pattern: str = r"(Final|Heat)\s+Round\s+(\d{4})"
-    # ชื่อบนเกียรติบัตรเป็นอังกฤษพิมพ์ใหญ่ล้วน ใช้ตรวจว่าหยิบถูกบรรทัดไหม
-    # ชื่อบนเกียรติบัตรเป็นอังกฤษพิมพ์ใหญ่ล้วน แต่ของจริงมีวงเล็บด้วย
-    # เช่น PANISA(KORYA) PARINYAPRUEANG ที่ใส่ชื่อเล่นไว้ในวงเล็บ
-    name_validation_pattern: str = r"[A-Z][A-Z .\'\-()]+"
-
-    # ใส่ regex ที่มี capture group เดียวเพื่อข้ามตรรกะ anchor ทั้งหมด (เผื่อแบบฟอร์มต่างออกไปมาก)
-    name_pattern: str = ""
+    # กติกาอ่านหน้าเกียรติบัตรไม่ได้อยู่ที่นี่แล้ว — อยู่ในโปรไฟล์รายรายการสอบ
+    # (app/certificate_profiles/) ตัวแปร environment ชุดเดิมอย่าง NAME_ANCHOR หรือ CERT_NO_PATTERN
+    # ถูกถอดออก เพราะค่าเดียวใช้กับทุกรายการ แก้เพื่อรายการหนึ่งจะไปเปลี่ยนผลของรายการอื่นเงียบ ๆ
 
     # 72 DPI = 841x595 px เท่าขนาดกระดาษ A4 นอนพอดี ไฟล์ราว 85 KB/ใบ
     # มือถือจอกว้าง 390px แสดงที่ 2 เท่า กดดูเต็มจอยังอ่านชื่อและเลขได้ครบ
@@ -83,21 +64,6 @@ def settings() -> Settings:
         r2_bucket=_require("R2_BUCKET"),
         r2_force_path_style=os.environ.get("R2_FORCE_PATH_STYLE", "false") == "true",
         worker_shared_secret=_require("WORKER_SHARED_SECRET"),
-        nationality_pattern=os.environ.get("NATIONALITY_PATTERN", r"from\s+THAILAND"),
-        country_line_prefix=os.environ.get("COUNTRY_LINE_PREFIX", "from "),
-        name_anchor=os.environ.get("NAME_ANCHOR", "This is awarded to"),
-        level_line_prefix=os.environ.get(
-            "LEVEL_LINE_PREFIX", "for outstanding achievement in"
-        ),
-        cert_no_pattern=os.environ.get("CERT_NO_PATTERN", r"(?:Cert\s+)?No:\s*(\d+)"),
-        award_line_pattern=os.environ.get("AWARD_LINE_PATTERN", r"^(.+?)\s+Award$"),
-        round_year_pattern=os.environ.get(
-            "ROUND_YEAR_PATTERN", r"(Final|Heat)\s+Round\s+(\d{4})"
-        ),
-        name_validation_pattern=os.environ.get(
-            "NAME_VALIDATION_PATTERN", r"[A-Z][A-Z .\'\-()]+"
-        ),
-        name_pattern=os.environ.get("NAME_PATTERN", ""),
         retention_enabled=os.environ.get("RETENTION_ENABLED", "").lower() == "true",
         source_keep_days=int(os.environ.get("SOURCE_ZIP_KEEP_DAYS", "0")),
         preview_dpi=int(os.environ.get("PREVIEW_DPI", "72")),

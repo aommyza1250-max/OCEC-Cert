@@ -5,7 +5,6 @@
 """
 
 import json
-from pathlib import Path
 
 import pymupdf
 import pytest

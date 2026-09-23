@@ -1,163 +1,91 @@
-"""เทสการเติมไฟล์ของคนที่ตกหล่นทีละใบ
+"""เทสการคัดหน้าของผู้เข้าสอบคนเดียวออกจากไฟล์ที่แอดมินอัปมา
 
-แอดมินโยน PDF เข้ามาตรง ๆ ในบล็อกของคนนั้น ไม่ต้องสร้างโฟลเดอร์ ไม่ต้องอัด ZIP
-ระบบต้องตรวจก่อนว่าไฟล์เป็นของคนที่ควรจะเป็นจริง ก่อนลงมือประมวลผลอะไรทั้งนั้น
-และต้องคัดเฉพาะหน้าของคนนั้นออกมา ไม่ใช่ประมวลผลทั้งเล่มที่ต้นทางส่งกลับมา
+แอดมินโยน PDF เข้ามาให้คนใดคนหนึ่งโดยตรง ระบบต้องตรวจก่อนว่าไฟล์เป็นของคนนั้นจริง
+(เลขและชื่อต้องตรง) และต้องคัดเฉพาะหน้าของคนนั้นออกมา ไม่ใช่ประมวลผลทั้งเล่มที่ต้นทางส่งกลับมา
 """
-
-import os
-import tempfile
 
 import pymupdf
 import pytest
 
-from app.tasks.extract import PageInfo
-from app.tasks.split import _pick_own_page, _resolve_award
-from app.tasks.zip_bundle import Bundle
+from app.certificate_profiles import get_profile
+from app.tasks.split import pick_own_page
 from tests.fixtures.builders import make_bundle_pdf
 
+PROFILE = get_profile("HKIMO", "FINAL")
+GOLD = PROFILE.catalog.get("GOLD")
+PERFECT = PROFILE.catalog.get("PERFECT_SCORE")
 
-def write_pdf(path: str, entries: list[dict]) -> str:
-    with open(path, "wb") as fp:
-        fp.write(make_bundle_pdf(entries))
-    return path
-
-
-def pick(path: str, workdir: str, cert_no: str, name: str = "", award: str = "") -> dict:
-    """เรียกตัวคัดหน้าจริง โดยเก็บผลลงไฟล์ใน workdir ของเทส"""
-    return _pick_own_page(path, os.path.join(workdir, "picked.pdf"), cert_no, name, award)
+MALEE = {"name": "MALEE RUNGROJ", "country": "THAILAND", "level": "PRIMARY 3", "cert_no": "900103", "award": "Gold"}
+SOMEONE_ELSE = {"name": "SOMCHAI JAIDEE", "country": "THAILAND", "level": "PRIMARY 3", "cert_no": "900101", "award": "Gold"}
+ENTRY = {"candidate_no": "900103", "name_en": "MALEE RUNGROJ", "name_th": None}
 
 
-def page_count(path: str) -> int:
-    with pymupdf.open(path) as doc:
-        return doc.page_count
-
-
-MALEE = {
-    "name": "MALEE RUNGROJ",
-    "country": "THAILAND",
-    "level": "PRIMARY 3",
-    "cert_no": "900103",
-    "award": "Gold",
-}
-SOMEONE_ELSE = {
-    "name": "SOMCHAI JAIDEE",
-    "country": "THAILAND",
-    "level": "PRIMARY 3",
-    "cert_no": "900101",
-    "award": "Gold",
-}
+def pick(entries: list[dict], award=GOLD, entry=ENTRY):
+    with pymupdf.open(stream=make_bundle_pdf(entries), filetype="pdf") as doc:
+        return pick_own_page(doc, PROFILE, 2026, entry, award)
 
 
 def test_ไฟล์ของคนที่ถูกต้องผ่านได้():
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [MALEE])
-        pick(path, d, "900103")  # ไม่โยน error = ผ่าน
+    index, note = pick([MALEE])
+    assert index == 0
+    assert note == {"sourcePages": 1, "usedPage": 1}
 
 
 def test_หยิบไฟล์ผิดคนต้องไม่รับ_และบอกว่าเป็นของใคร():
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [SOMEONE_ELSE])
-        with pytest.raises(ValueError) as err:
-            pick(path, d, "900103")
-        message = str(err.value)
-        assert "900103" in message
-        assert "900101" in message
-        assert "SOMCHAI JAIDEE" in message
+    with pytest.raises(ValueError) as err:
+        pick([SOMEONE_ELSE])
+    message = str(err.value)
+    assert "900103" in message and "900101" in message and "SOMCHAI JAIDEE" in message
 
 
 def test_แก้ชื่อมาแต่ลืมแก้เลข_ต้องบอกให้ชัดว่าต้องแก้อะไร():
     # เคสจริงที่เจอ: แอดมินแก้ไฟล์เอง เปลี่ยนแค่ชื่อ ลืมแก้บรรทัด Cert No
-    # ถ้าบอกแค่ "ไม่ตรง" แอดมินจะไม่รู้ว่าต้องไปแก้อะไรต่อ
-    wrong_number = dict(SOMEONE_ELSE, name="MALEE RUNGROJ")
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [wrong_number])
-        with pytest.raises(ValueError) as err:
-            pick(path, d, "900103", "MALEE RUNGROJ")
-        message = str(err.value)
-        assert "ชื่อบนเกียรติบัตรตรงกับ" in message
-        assert "900101" in message      # เลขที่อยู่บนหน้าจริง
-        assert "900103" in message      # เลขที่ควรจะเป็น
-        assert "Cert No" in message     # บอกว่าต้องไปแก้บรรทัดไหน
+    with pytest.raises(ValueError) as err:
+        pick([dict(SOMEONE_ELSE, name="MALEE RUNGROJ")])
+    message = str(err.value)
+    assert "900101" in message and "900103" in message and "Cert No" in message
 
 
-def test_ชื่อก็ไม่ตรงเลขก็ไม่ตรง_บอกว่าเป็นไฟล์ของใคร():
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [SOMEONE_ELSE])
-        with pytest.raises(ValueError, match="SOMCHAI JAIDEE"):
-            pick(path, d, "900103", "MALEE RUNGROJ")
+def test_เลขตรงแต่ชื่อไม่ตรงต้องไม่รับ():
+    with pytest.raises(ValueError, match="ชื่อ"):
+        pick([dict(MALEE, name="PIYADA SRISUK")])
 
 
-def test_ไฟล์รวมเล่ม_ต้องคัดเฉพาะหน้าของคนนั้นออกมาหน้าเดียว():
-    # ของจริงต้นทางส่งไฟล์รวมเล่มกลับมา ไม่ได้แยกหน้าให้
-    # ถ้าปล่อยทั้งเล่มเข้าไป ระบบจะไล่อ่านใหม่ทุกหน้าเหมือนนำเข้าทั้งรอบ
+def test_ไฟล์รวมเล่ม_คัดเฉพาะหน้าของคนนั้น():
     others = [dict(SOMEONE_ELSE, cert_no=str(210000 + i)) for i in range(20)]
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [*others, MALEE])
-        note = pick(path, d, "900103")
-
-        assert page_count(os.path.join(d, "picked.pdf")) == 1
-        assert note["sourcePages"] == 21
-        assert note["usedPage"] == 21
-        assert "21 หน้า" in note["note"]
+    index, note = pick([*others, MALEE])
+    assert index == 20
+    assert note["sourcePages"] == 21 and note["usedPage"] == 21
+    assert "21 หน้า" in note["note"]
 
 
-def test_ไฟล์หน้าเดียว_ไม่ต้องมีหมายเหตุอะไร():
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [MALEE])
-        note = pick(path, d, "900103")
-        assert note["sourcePages"] == 1
-        assert "note" not in note
-
-
-def test_คนเดียวมีหลายใบในเล่ม_เลือกใบที่ขาดจากรางวัล():
-    # ในเล่มมีทั้งใบ Gold และใบ Perfect Score ของคนเดียวกัน
-    # ใบที่ขาดคือ Gold -> ต้องหยิบหน้าที่พิมพ์ว่า Gold Award
+def test_คนเดียวมีหลายใบในเล่ม_เลือกด้วยข้อความรางวัลบนหน้า():
     perfect = dict(MALEE)
     perfect.pop("award")  # หน้า Perfect Score ไม่มีข้อความรางวัล
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [perfect, MALEE])
-        assert pick(path, d, "900103", "", "GOLD")["usedPage"] == 2
-        assert pick(path, d, "900103", "", "PERFECT_SCORE")["usedPage"] == 1
+    assert pick([perfect, MALEE], GOLD)[0] == 1
+    assert pick([perfect, MALEE], PERFECT)[0] == 0
 
 
 def test_คนเดียวหลายหน้าแยกไม่ออก_ต้องไม่เดา_และบอกให้แยกไฟล์มา():
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), [MALEE, MALEE])
-        with pytest.raises(ValueError) as err:
-            pick(path, d, "900103", "", "GOLD")
-        message = str(err.value)
-        assert "2 หน้า" in message
-        assert "หน้าเดียว" in message
+    with pytest.raises(ValueError) as err:
+        pick([MALEE, MALEE], GOLD)
+    assert "2 หน้า" in str(err.value) and "หน้าเดียว" in str(err.value)
 
 
-def test_ไฟล์ผิดคนที่มีหลายร้อยหน้า_ข้อความต้องไม่ยาวเป็นพรืด():
+def test_ไฟล์ผิดคนหลายร้อยหน้า_ข้อความต้องไม่ยาวเป็นพรืด():
     others = [dict(SOMEONE_ELSE, cert_no=str(210000 + i)) for i in range(200)]
-    with tempfile.TemporaryDirectory() as d:
-        path = write_pdf(os.path.join(d, "x.pdf"), others)
-        with pytest.raises(ValueError) as err:
-            pick(path, d, "900103")
-        message = str(err.value)
-        assert "และอีก 195 หน้า" in message
-        assert message.count("(") <= 6
+    with pytest.raises(ValueError) as err:
+        pick(others)
+    message = str(err.value)
+    assert "และอีก 195 หน้า" in message
+    assert message.count("(") <= 6
 
 
-def test_รางวัลอ่านจากหน้ากระดาษก่อนค่าที่คาดไว้():
-    # ระบบคาดว่าเป็น Gold แต่บนหน้าพิมพ์ว่า Silver -> เชื่อหน้ากระดาษ
-    bundle = Bundle(award="GOLD", source_file="x.pdf")
-    info = PageInfo(name="A B", level=None, cert_no="1", country=None, award_on_page="Silver")
-    assert _resolve_award(bundle, info, prefer_page_award=True).award == "SILVER"
+def test_หน้าของต่างชาติต้องปฏิเสธ():
+    with pytest.raises(ValueError, match="JAPAN"):
+        pick([dict(MALEE, country="JAPAN")])
 
 
-def test_หน้าที่ไม่มีบรรทัดรางวัลใช้ค่าที่คาดไว้():
-    # หน้า Perfect Score ไม่มีข้อความรางวัลพิมพ์อยู่
-    bundle = Bundle(award="PERFECT_SCORE", source_file="x.pdf")
-    info = PageInfo(name="A B", level=None, cert_no="1", country=None, award_on_page=None)
-    assert _resolve_award(bundle, info, prefer_page_award=True).award == "PERFECT_SCORE"
-
-
-def test_ทางอัป_ZIP_ต้องเชื่อโฟลเดอร์เสมอ():
-    # โฟลเดอร์คือแหล่งความจริงของรางวัล ห้ามให้ข้อความบนหน้ามาแทนที่
-    bundle = Bundle(award="GOLD", source_file="Gold/x.pdf")
-    info = PageInfo(name="A B", level=None, cert_no="1", country=None, award_on_page="Silver")
-    assert _resolve_award(bundle, info, prefer_page_award=False).award == "GOLD"
+def test_หน้าของรอบอื่นต้องปฏิเสธ():
+    with pytest.raises(ValueError, match="HEAT"):
+        pick([dict(MALEE, round="Heat")])

@@ -109,6 +109,15 @@ def _writer(page):
     return write, write_inline_chars
 
 
+def make_zip(files: dict[str, bytes]) -> bytes:
+    """บีบไฟล์ตาม path ที่กำหนดเป็น ZIP — ใช้สร้างโครงแบบใหม่ online/<รางวัล>/*.pdf"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path, data in files.items():
+            zf.writestr(path, data)
+    return buffer.getvalue()
+
+
 def make_award_zip(bundles: dict[str, bytes], extra_files: dict[str, bytes] | None = None) -> bytes:
     """บีบไฟล์รวมเล่มเป็น ZIP โดยแยกโฟลเดอร์ตามรางวัล ตามที่แอดมินจะอัปโหลดจริง
 
@@ -140,6 +149,7 @@ def make_roster_xlsx(
         "level": "GRADE",
         "name_en": "CANDIDATE NAME",
         "award": "AWARD",
+        "mode": "EXAM MODE",
     }
     workbook = Workbook()
     sheet = workbook.active

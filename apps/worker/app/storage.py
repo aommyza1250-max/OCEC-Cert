@@ -91,13 +91,25 @@ def delete_keys(keys: list[str]) -> int:
     return deleted
 
 
-def certificate_pdf_key(batch_id: str, stem: str) -> str:
-    return f"certificates/{batch_id}/{stem}.pdf"
+def certificate_pdf_key(batch_id: str, stem: str, job_id: str | None = None) -> str:
+    """ไฟล์ของเกียรติบัตรรายคน — ใส่ job_id ไว้ใน path เพื่อให้ย้อนงานที่พังได้ทั้งก้อน
+
+    งานที่ตายกลางทางทิ้งไฟล์ไว้ครึ่งหนึ่งเสมอ ถ้ารู้ prefix ของงานนั้น ลบทีเดียวก็สะอาด
+    ไม่ต้องไล่เดาว่าไฟล์ไหนมีแถวในฐานข้อมูลอ้างอยู่หรือไม่
+    """
+    folder = f"{batch_id}/{job_id}" if job_id else batch_id
+    return f"certificates/{folder}/{stem}.pdf"
 
 
-def preview_key(batch_id: str, stem: str) -> str:
+def preview_key(batch_id: str, stem: str, job_id: str | None = None) -> str:
     # prefix previews/ ถูกตั้งให้อ่านสาธารณะได้ เพื่อให้เสิร์ฟผ่าน CDN ตรง ๆ
-    return f"previews/{batch_id}/{stem}.webp"
+    folder = f"{batch_id}/{job_id}" if job_id else batch_id
+    return f"previews/{folder}/{stem}.webp"
+
+
+def job_output_prefixes(batch_id: str, job_id: str) -> list[str]:
+    """prefix ของไฟล์ทั้งหมดที่งานนี้สร้าง — ใช้ย้อนงานที่พัง"""
+    return [f"certificates/{batch_id}/{job_id}/", f"previews/{batch_id}/{job_id}/"]
 
 
 def safe_part(text: str) -> str:

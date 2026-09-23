@@ -14,7 +14,6 @@ from .queue import (
     claim_next_job,
     fail_job,
     finish_job,
-    merge_batch_stats,
     requeue_stale_jobs,
     set_batch_status,
     set_progress,
@@ -22,10 +21,17 @@ from .queue import (
 from .tasks.cleanup_sources import run_cleanup_sources
 from .tasks.delete_batch import run_delete_batch
 from .tasks.expire import run_expire
-from .tasks.match_excel import run_match
-from .tasks.split import run_split
+from .tasks.match import run_match
+from .tasks.roster import run_roster_activate, run_roster_validate
+from .tasks.split import rollback_job_outputs, run_split
 
 log = logging.getLogger(__name__)
+
+# งานที่แก้ข้อมูลของรอบนำเข้า — ห้ามทำตอนรอบนั้นเผยแพร่อยู่ (ต้องยกเลิกการเผยแพร่ก่อนเสมอ)
+INTAKE_JOBS = frozenset({"SPLIT", "MATCH", "ROSTER_VALIDATE", "ROSTER_ACTIVATE"})
+
+# สถานะที่แสดงระหว่างทำงาน — งานตรวจรายชื่อไม่เปลี่ยนสถานะรอบ เพราะไม่แตะข้อมูลที่ใช้อยู่
+RUNNING_STATUS = {"SPLIT": "SPLITTING", "MATCH": "MATCHING", "ROSTER_ACTIVATE": "MATCHING"}
 
 # ตั้งค่าเมื่อมีงานใหม่เข้ามา เพื่อให้ลูปตื่นทันทีไม่ต้องรอครบรอบ poll
 wake = threading.Event()
@@ -99,71 +105,14 @@ def _queue_daily_expire() -> None:
         log.exception("ตั้งงานกวาดอายุประจำวันไม่สำเร็จ")
 
 
-def _batch_status(batch_id: str) -> str:
+def _batch_status(batch_id: str) -> str | None:
     from .db import connection
 
     with connection() as conn:
         row = conn.execute(
-            "SELECT status FROM batches WHERE id = %s", (batch_id,)
+            "SELECT status::text AS status FROM batches WHERE id = %s", (batch_id,)
         ).fetchone()
-    return row["status"] if row else "DRAFT"
-
-
-def _queue_cleanup_sources(batch_id: str) -> None:
-    """ตั้งงานเคลียร์ไฟล์ต้นฉบับ ถ้ายังไม่เคยเคลียร์และยังไม่มีงานค้างอยู่
-
-    ตัวงานจะตรวจเงื่อนไขเองอีกที ตรงนี้แค่กันไม่ให้ตั้งคิวซ้ำซ้อน
-    """
-    from .db import connection, new_id
-
-    with connection() as conn:
-        row = conn.execute(
-            """
-            SELECT b.sources_cleared_at,
-                   (SELECT COUNT(*) FROM jobs j
-                    WHERE j.batch_id = b.id AND j.type = 'CLEANUP_SOURCES'
-                      AND j.status IN ('QUEUED', 'RUNNING')) AS pending
-            FROM batches b WHERE b.id = %s
-            """,
-            (batch_id,),
-        ).fetchone()
-        if not row or row["sources_cleared_at"] or row["pending"]:
-            return
-        conn.execute(
-            "INSERT INTO jobs (id, type, batch_id) VALUES (%s, 'CLEANUP_SOURCES', %s)",
-            (new_id(), batch_id),
-        )
-    log.info("ตั้งงานเคลียร์ไฟล์ต้นฉบับให้ batch %s", batch_id)
-    wake.set()
-
-
-def _queue_match_if_roster_ready(batch_id: str) -> None:
-    """ตั้งงานจับคู่ต่อให้เอง ถ้ารอบนั้นมีไฟล์รายชื่ออยู่แล้ว
-
-    ถูกเรียกทุกครั้งที่ตัดหน้าเสร็จ จึงต้องกันการตั้งคิวซ้ำด้วย
-    ไม่งั้นอัปไฟล์รัว ๆ จะได้งานจับคู่ซ้อนกันหลายใบโดยไม่จำเป็น
-    """
-    from .db import connection, new_id
-
-    with connection() as conn:
-        row = conn.execute(
-            """
-            SELECT b.source_excel_key,
-                   (SELECT COUNT(*) FROM jobs j
-                    WHERE j.batch_id = b.id AND j.type = 'MATCH'
-                      AND j.status IN ('QUEUED', 'RUNNING')) AS pending
-            FROM batches b WHERE b.id = %s
-            """,
-            (batch_id,),
-        ).fetchone()
-        if not row or not row["source_excel_key"] or row["pending"]:
-            return
-        conn.execute(
-            "INSERT INTO jobs (id, type, batch_id) VALUES (%s, 'MATCH', %s)",
-            (new_id(), batch_id),
-        )
-    log.info("ตั้งงานจับคู่ต่อให้ batch %s อัตโนมัติ (มีไฟล์รายชื่อรออยู่แล้ว)", batch_id)
-    wake.set()
+    return row["status"] if row else None
 
 
 def _run_one() -> bool:
@@ -171,67 +120,92 @@ def _run_one() -> bool:
     if job is None:
         return False
 
-    job_id, batch_id, job_type = job["id"], job["batch_id"], job["type"]
+    job_id, batch_id, job_type = str(job["id"]), job["batch_id"], job["type"]
+    batch_id = str(batch_id) if batch_id else None
+    payload = job.get("payload") or {}
     log.info("เริ่มงาน %s (%s) ของ batch %s", job_id, job_type, batch_id)
 
-    # รอบที่เผยแพร่ไปแล้วต้องยังเผยแพร่อยู่หลังเติมไฟล์หรือจับคู่ใหม่
-    # ไม่งั้นผู้ปกครองจะค้นไม่เจอทั้งรอบทันทีที่แอดมินเติมไฟล์ตกหล่นเข้าไป
-    previous_status = _batch_status(batch_id) if batch_id else "DRAFT"
-    was_published = previous_status == "PUBLISHED"
+    previous_status = _batch_status(batch_id) if batch_id else None
 
     def on_progress(progress: dict[str, Any]) -> None:
         set_progress(job_id, progress)
 
     try:
+        if job_type in INTAKE_JOBS:
+            # เว็บกันไว้แล้วทั้งปุ่มและ API แต่เช็กซ้ำที่นี่ เผื่องานค้างคิวมาตั้งแต่ก่อนกดเผยแพร่
+            if previous_status == "PUBLISHED":
+                raise ValueError("รอบนี้เผยแพร่อยู่ ต้องยกเลิกการเผยแพร่ก่อนจึงจะนำเข้าหรือแก้ไขได้")
+            if previous_status in (None, "DELETING"):
+                raise ValueError("รอบนำเข้านี้ถูกลบหรือกำลังถูกลบ")
+            if job_type in RUNNING_STATUS:
+                set_batch_status(batch_id, RUNNING_STATUS[job_type])
+
         if job_type == "SPLIT":
-            set_batch_status(batch_id, "SPLITTING")
-            stats = run_split(batch_id, on_progress, job.get("payload") or {})
-            # singlePdf เป็นหมายเหตุของงานชิ้นนี้ (ใช้หน้าไหนของไฟล์ที่อัปมา)
-            # ไม่ใช่ยอดของรอบนำเข้า ถ้าเอาไปรวมจะค้างอยู่ในสถิติรอบไปตลอด
-            merge_batch_stats(batch_id, {k: v for k, v in stats.items() if k != "singlePdf"})
-            set_batch_status(batch_id, "PUBLISHED" if was_published else "SPLIT_DONE")
-            # ตัดหน้าเสร็จแล้วถ้ามีไฟล์รายชื่ออยู่แล้ว ให้จับคู่ต่อเองเลย ครอบคลุมสองกรณี:
-            #   - แอดมินวาง ZIP กับ Excel พร้อมกันตั้งแต่ต้น (ไม่ต้องกลับมาทำอีกจังหวะ)
-            #   - เติมไฟล์ที่ตกหล่นเข้ารอบที่เคยจับคู่ไปแล้ว (ไม่ต้องอัป Excel ชุดเดิมซ้ำ)
-            if stats.get("pagesSplit"):
-                _queue_match_if_roster_ready(batch_id)
+            stats = run_split(batch_id, job_id, on_progress, payload)
         elif job_type == "MATCH":
-            set_batch_status(batch_id, "MATCHING")
-            stats = run_match(batch_id, on_progress)
-            merge_batch_stats(batch_id, stats)
-            set_batch_status(batch_id, "PUBLISHED" if was_published else "READY")
-            # จับคู่ใหม่ในรอบที่เผยแพร่ไปแล้ว อาจทำให้เงื่อนไขเคลียร์ไฟล์ต้นฉบับครบพอดี
-            if was_published:
-                _queue_cleanup_sources(batch_id)
+            stats = run_match(batch_id, on_progress, payload)
+        elif job_type == "ROSTER_VALIDATE":
+            stats = run_roster_validate(batch_id, on_progress, payload)
+        elif job_type == "ROSTER_ACTIVATE":
+            stats = run_roster_activate(batch_id, on_progress, payload)
+            # รายชื่อเปลี่ยน = ผลจับคู่อัตโนมัติเดิมใช้ไม่ได้แล้ว ต้องคำนวณใหม่ทั้งรอบทันที
+            stats["match"] = run_match(batch_id, on_progress)
         elif job_type == "EXPIRE":
             # งานของทั้งระบบ ไม่ผูกกับรอบนำเข้าใด batch_id จึงเป็น None
-            stats = run_expire(batch_id, on_progress, job.get("payload") or {})
-            finish_job(job_id, {"stage": "done", **stats})
-            log.info("งาน %s (กวาดอายุ) เสร็จแล้ว", job_id)
-            return True
+            stats = run_expire(batch_id, on_progress, payload)
         elif job_type == "CLEANUP_SOURCES":
-            stats = run_cleanup_sources(batch_id, on_progress, job.get("payload") or {})
+            stats = run_cleanup_sources(batch_id, on_progress, payload)
         elif job_type == "DELETE_BATCH":
             # ลบทั้งรอบ — แถว batch หายไปพร้อมกับแถว job ของงานนี้เอง (cascade)
-            # จึงห้ามไปแตะ set_batch_status/merge_batch_stats หลังจากนี้
-            stats = run_delete_batch(batch_id, on_progress, job.get("payload") or {})
+            # จึงห้ามไปแตะ set_batch_status หรือ finish_job หลังจากนี้
+            stats = run_delete_batch(batch_id, on_progress, payload)
             log.info("งาน %s (ลบรอบนำเข้า) เสร็จแล้ว: %s", job_id, stats)
             return True
         else:
             raise ValueError(f"ไม่รู้จักงานชนิด {job_type}")
 
-        finish_job(job_id, {"stage": "done", **{k: v for k, v in stats.items() if k != "unmatchedRows"}})
+        if job_type in RUNNING_STATUS:
+            set_batch_status(batch_id, _settled_status(batch_id))
+        finish_job(job_id, {"stage": "done", **stats})
         log.info("งาน %s เสร็จแล้ว", job_id)
     except Exception as exc:
-        # ความผิดพลาดของไฟล์ที่อัปเข้ามา (หยิบไฟล์ผิดคน, จัดโฟลเดอร์ไม่ถูก) ลองใหม่ไปก็เหมือนเดิม
-        # และไม่ได้แปลว่ารอบนำเข้าพัง ของที่นำเข้าไปแล้วยังใช้งานได้ตามปกติ
-        permanent = isinstance(exc, ValueError)
-        fail_job(job_id, f"{exc}\n{traceback.format_exc()}", job["attempts"] + 1, permanent)
-
-        if permanent:
-            set_batch_status(batch_id, previous_status)
-        elif job["attempts"] + 1 >= settings().max_attempts:
-            # พังด้วยเหตุอื่นจนหมดโควต้าลองใหม่ ให้ batch แสดงว่าพัง แอดมินจะได้เห็น
-            set_batch_status(batch_id, "FAILED")
+        _handle_failure(job, job_id, batch_id, job_type, previous_status, exc)
 
     return True
+
+
+def _handle_failure(
+    job: dict[str, Any], job_id: str, batch_id: str | None, job_type: str,
+    previous_status: str | None, exc: Exception,
+) -> None:
+    # ความผิดพลาดของไฟล์ที่อัปเข้ามา (หยิบไฟล์ผิดคน, จัดโฟลเดอร์ไม่ถูก) ลองใหม่ไปก็เหมือนเดิม
+    # และไม่ได้แปลว่ารอบนำเข้าพัง ของที่นำเข้าไปแล้วยังใช้งานได้ตามปกติ
+    permanent = isinstance(exc, ValueError)
+
+    if job_type == "SPLIT" and batch_id:
+        # ย้อนทุกอย่างที่งานนี้สร้างไว้ ไม่ปล่อยหน้าครึ่ง ๆ กลาง ๆ ค้างในรอบนำเข้า
+        # ถ้าจะลองใหม่ ตัวงานก็ย้อนเองอีกรอบตอนเริ่ม จึงทำซ้ำได้ไม่เสียหาย
+        try:
+            rollback_job_outputs(batch_id, job_id)
+        except Exception:
+            log.exception("ย้อนงาน %s ไม่สำเร็จ — จะลองอีกครั้งตอนงานนี้เริ่มใหม่", job_id)
+
+    fail_job(job_id, f"{exc}\n{traceback.format_exc()}", job["attempts"] + 1, permanent)
+    if not batch_id or job_type not in RUNNING_STATUS:
+        return
+    if permanent or job["attempts"] + 1 < settings().max_attempts:
+        set_batch_status(batch_id, previous_status or "READY")
+    else:
+        # พังด้วยเหตุอื่นจนหมดโควต้าลองใหม่ ให้ batch แสดงว่าพัง แอดมินจะได้เห็น
+        set_batch_status(batch_id, "FAILED")
+
+
+def _settled_status(batch_id: str) -> str:
+    """สถานะหลังงานเสร็จ: มีรายชื่อแล้ว = พร้อมตรวจ ยังไม่มี = ร่าง"""
+    from .db import connection
+
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT active_roster_import_id FROM batches WHERE id = %s", (batch_id,)
+        ).fetchone()
+    return "READY" if row and row["active_roster_import_id"] else "DRAFT"
