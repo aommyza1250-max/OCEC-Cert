@@ -47,23 +47,56 @@ enum ExamRound {
 }
 
 enum BatchStatus {
-  DRAFT        // สร้างแล้วแต่ยังไม่อัปโหลด ZIP
+  DRAFT        // สร้างแล้วแต่ยังไม่มีรายชื่อผู้เข้าสอบที่ใช้งานอยู่
   SPLITTING    // worker กำลังตัดหน้า
-  SPLIT_DONE   // ตัดเสร็จ รอ Excel
-  MATCHING     // worker กำลังจับคู่กับ Excel
-  READY        // จับคู่เสร็จ รอแอดมินตรวจ/publish
-  PUBLISHED    // ผู้ใช้ทั่วไปค้นเจอแล้ว
+  SPLIT_DONE   // (ระบบเดิม) ตัดเสร็จ รอ Excel — ขั้นตอนใหม่ไม่ใช้แล้ว เพราะรายชื่อต้องมาก่อน
+  MATCHING     // worker กำลังจับคู่กับรายชื่อ
+  READY        // มีรายชื่อแล้ว ยังไม่เผยแพร่ — อัปไฟล์ แก้ไข และตรวจได้
+  PUBLISHED    // ผู้ใช้ทั่วไปค้นเจอแล้ว — ห้ามอัปโหลดหรือแก้ไขจนกว่าจะยกเลิกการเผยแพร่
   FAILED       // job พัง ดูรายละเอียดที่ Job.error
   DELETING     // กำลังลบทั้งรอบ — กันไม่ให้มีใครไปกดอย่างอื่นกับรอบที่กำลังหายไป
 }
 
 enum MatchStatus {
-  UNMATCHED       // ตัดหน้าได้แล้วแต่ยังไม่มีคู่ใน Excel
-  MATCHED         // จับคู่แล้ว มี Certificate ออกมา
-  SKIPPED_FOREIGN // หน้าของผู้เข้าสอบต่างชาติ (batch international) — ข้ามตั้งแต่ต้น
-  AMBIGUOUS       // ชื่อตรงกับหน้าใน PDF มากกว่า 1 หน้า ต้องให้คนตัดสิน
-  DUPLICATE_NAME  // ชื่อซ้ำกับหน้าที่จับคู่ไปแล้วในรายการสอบเดียวกัน — แอดมินต้องดูใบจริงแล้วตัดสิน
-  DISCARDED       // แอดมินตัดสินแล้วว่าเป็นใบซ้ำ ไม่ต้องนำเข้า
+  UNMATCHED              // ยังไม่มีผู้เข้าสอบในรายชื่อที่ตรงกับหน้านี้ (หรือเลขไม่มีในรายชื่อ)
+  MATCHED                // จับคู่แล้ว มี Certificate ออกมา
+  SKIPPED_FOREIGN        // หน้าของผู้เข้าสอบต่างชาติ (รอบ Final) — ข้ามตั้งแต่ต้น
+  AMBIGUOUS              // ระบุตัวไม่ได้ (ชื่อตรงหลายคน) ต้องให้คนตัดสิน
+  DUPLICATE_NAME         // ผู้เข้าสอบคนนี้มีใบรางวัลเดียวกันที่รับไปแล้ว — ต้องดูว่าเป็นใบซ้ำหรืออะไร
+  DISCARDED              // แอดมินทิ้งหน้านี้แล้ว — เก็บไว้เป็นหลักฐาน ไม่เผยแพร่
+  NAME_MISMATCH          // เลขตรงกับรายชื่อ แต่ชื่อบนหน้าไม่ตรง
+  MODE_MISMATCH          // เลขและชื่อตรง แต่อยู่คนละโฟลเดอร์ online/onsite กับรายชื่อ
+  NATIONALITY_UNVERIFIED // รอบ Final แต่หน้านี้ไม่มีหลักฐานพอจะบอกว่าเป็นคนไทย
+  PARSE_REVIEW           // รอบหรือปีบนหน้าไม่ตรงกับรอบนำเข้า — อาจเป็นไฟล์ผิดชุด
+  SUPERSEDED             // มีหน้าที่อัปมาใหม่กว่ามาแทนแล้ว — เก็บไว้เป็นหลักฐาน
+}
+
+/// ผู้เข้าสอบคนนี้สอบแบบไหน — ใช้ในหลังบ้านเท่านั้น ไม่แสดงบนหน้าค้นหาสาธารณะ
+enum ExamMode {
+  ONLINE
+  ONSITE
+}
+
+/// รายชื่อแถวนี้มาจากไหน — รายการที่แอดมินเพิ่มเองต้องรอดจากการอัป Excel ชุดใหม่
+enum RosterSource {
+  EXCEL
+  MANUAL
+}
+
+enum RosterImportStatus {
+  PENDING    // อัปไฟล์แล้ว รอ worker ตรวจ
+  INVALID    // ตรวจไม่ผ่าน — ไม่แตะรายชื่อที่ใช้อยู่เลย
+  READY      // ตรวจผ่าน รอแอดมินกดใช้ (ถ้ามีรายการที่ชนกับที่เพิ่มเอง ต้องตัดสินก่อน)
+  ACTIVATING // แอดมินกดใช้แล้ว รอ worker สลับรายชื่อ
+  ACTIVE     // ชุดที่ใช้อยู่
+  SUPERSEDED // เคยใช้ แต่มีชุดใหม่มาแทนแล้ว
+  DISCARDED  // ทิ้งแล้ว — แอดมินทิ้งเอง หรือมีไฟล์ใหม่กว่าอัปมาก่อนจะได้ใช้
+}
+
+/// หน้านี้เข้ามาทางไหน
+enum PageSource {
+  ZIP        // ZIP ที่แยกโฟลเดอร์ online/onsite และรางวัล
+  SINGLE_PDF // แอดมินอัป PDF ให้ผู้เข้าสอบคนใดคนหนึ่งโดยตรง (เพิ่มใบหรือเปลี่ยนไฟล์)
 }
 
 /// ฮ่องกงส่งเกียรติบัตรฉบับจริงให้แบบไหนในรอบนั้น
@@ -78,6 +111,10 @@ enum MultiAwardPolicy {
 enum JobType {
   SPLIT
   MATCH
+  /// อ่านและตรวจไฟล์รายชื่อ Excel เก็บเป็นร่าง — ยังไม่แตะรายชื่อที่ใช้อยู่
+  ROSTER_VALIDATE
+  /// สลับรายชื่อที่ใช้อยู่เป็นชุดใหม่ในทรานแซกชันเดียว แล้วจับคู่ใหม่ทั้งรอบ
+  ROSTER_ACTIVATE
   /// ลบทั้งรอบนำเข้า ทั้งไฟล์บน R2 และแถวในฐานข้อมูล
   DELETE_BATCH
   /// ลบไฟล์ต้นฉบับ (ZIP และ PDF ที่อัปทีละใบ) หลังจับคู่ครบและเผยแพร่แล้ว
@@ -151,6 +188,7 @@ model Student {
 
   certificates  Certificate[]
   stagingPages  StagingPage[]
+  rosterEntries RosterEntry[]
 
   // การค้นหาใช้ LIKE '%คำค้น%' ซึ่ง btree index ช่วยไม่ได้เลย ต้องใช้ trigram index
   @@index([nameEnNormalized(ops: raw("gin_trgm_ops"))], type: Gin, map: "students_name_en_normalized_trgm_idx")
@@ -162,12 +200,21 @@ model Student {
   @@map("students")
 }
 
-/// รอบการนำเข้า 1 ครั้ง = ZIP เกียรติบัตร 1 ไฟล์ + Excel รายชื่อ 1 ไฟล์
+/// รอบการนำเข้าของการสอบ 1 รอบ (รายการ + รอบ + ปี) — มีผู้เข้าสอบทั้ง online และ onsite
+/// รายชื่อ (roster) ต้องมาก่อน แล้วจึงอัป ZIP เกียรติบัตรได้หลายครั้ง
 model Batch {
   id     String      @id @default(uuid()) @db.Uuid
   examId String      @map("exam_id") @db.Uuid
   exam   Exam        @relation(fields: [examId], references: [id], onDelete: Restrict)
   status BatchStatus @default(DRAFT)
+
+  /// โปรไฟล์ที่ใช้อ่านเกียรติบัตรของรอบนี้ เช่น HKIMO_HEAT — ตั้งตอนสร้างจากรายการ + รอบ
+  /// ว่าง = รอบนำเข้าจากระบบเดิม (ก่อนมีโปรไฟล์) ซึ่งนำเข้าต่อด้วยขั้นตอนใหม่ไม่ได้
+  profileKey String? @map("profile_key")
+
+  /// รายชื่อชุดที่ใช้อยู่ — unique จึงมีได้ชุดเดียวต่อรอบเสมอ
+  activeRosterImportId String?       @unique @map("active_roster_import_id") @db.Uuid
+  activeRosterImport   RosterImport? @relation("BatchActiveRoster", fields: [activeRosterImportId], references: [id], onDelete: SetNull)
 
   /// ZIP ที่แอดมินอัปโหลด — ข้างในแยกโฟลเดอร์ตามรางวัล (gold/, silver/, ...)
   sourceZipKey   String? @map("source_zip_key")
@@ -188,13 +235,153 @@ model Batch {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  jobs         Job[]
-  stagingPages StagingPage[]
-  certificates Certificate[]
+  jobs          Job[]
+  stagingPages  StagingPage[]
+  certificates  Certificate[]
+  rosterImports RosterImport[] @relation("BatchRosterImports")
+  rosterEntries RosterEntry[]
+  auditEvents   AuditEvent[]
 
   @@index([examId])
   @@index([status])
   @@map("batches")
+}
+
+/// การอัป Excel รายชื่อ 1 ครั้ง — เก็บเป็นร่างก่อน ถ้าไฟล์ผิดจะไม่แตะรายชื่อที่ใช้อยู่เลย
+model RosterImport {
+  id      String             @id @default(uuid()) @db.Uuid
+  batchId String             @map("batch_id") @db.Uuid
+  batch   Batch              @relation("BatchRosterImports", fields: [batchId], references: [id], onDelete: Cascade)
+  status  RosterImportStatus @default(PENDING)
+
+  /// ไฟล์บน R2 — ได้ key ใหม่ทุกครั้งที่อัป ร่างที่ผิดจึงไม่มีทางทับไฟล์ของชุดที่ใช้อยู่
+  sourceKey String  @map("source_key")
+  fileName  String? @map("file_name")
+
+  uploadedAt  DateTime  @default(now()) @map("uploaded_at")
+  validatedAt DateTime? @map("validated_at")
+  activatedAt DateTime? @map("activated_at")
+
+  totalCount  Int @default(0) @map("total_count")
+  onlineCount Int @default(0) @map("online_count")
+  onsiteCount Int @default(0) @map("onsite_count")
+
+  /// ปัญหาของไฟล์ครบทุกแถว [{row, column, message}] — ไม่หยุดที่แถวแรก
+  errors      Json @default("[]")
+  /// แถวที่ชนกับผู้เข้าสอบที่แอดมินเพิ่มเอง — ต้องตัดสินก่อนจึงจะใช้ชุดนี้ได้
+  conflicts   Json @default("[]")
+  /// การตัดสินของแอดมินตอนกดใช้ เก็บไว้ตรวจย้อนหลัง
+  resolutions Json @default("[]")
+
+  rows      RosterImportRow[]
+  entries   RosterEntry[]
+  activeFor Batch?            @relation("BatchActiveRoster")
+
+  @@index([batchId, uploadedAt])
+  @@map("roster_imports")
+}
+
+/// แถวในไฟล์ Excel ที่ตรวจผ่านแล้ว — เป็นร่าง ยังไม่ใช่รายชื่อที่ใช้อยู่
+model RosterImportRow {
+  id          String       @id @default(uuid()) @db.Uuid
+  importId    String       @map("import_id") @db.Uuid
+  import      RosterImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  rowNumber   Int          @map("row_number")
+  candidateNo String       @map("candidate_no")
+  nameEn      String?      @map("name_en")
+  nameTh      String?      @map("name_th")
+  examMode    ExamMode     @map("exam_mode")
+  school      String?
+  level       String?
+  rawAward    String?      @map("raw_award")
+
+  @@unique([importId, candidateNo])
+  @@map("roster_import_rows")
+}
+
+/// ผู้เข้าสอบ 1 คนในรอบนำเข้านี้ — แหล่งความจริงว่าใครควรได้เกียรติบัตร
+///
+/// แยกจาก Student เพราะรูปแบบการสอบ เลขผู้เข้าสอบ และระดับชั้นเป็นของการสอบครั้งนี้
+/// ส่วน Student คือตัวคนที่ใช้ซ้ำข้ามปี (หน้าค้นหาสาธารณะอ่านจาก Student)
+model RosterEntry {
+  id      String @id @default(uuid()) @db.Uuid
+  batchId String @map("batch_id") @db.Uuid
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  /// เลขผู้เข้าสอบ = Cert No บนหน้าเกียรติบัตร — ไม่ซ้ำกันทั้ง online และ onsite
+  candidateNo String @map("candidate_no")
+
+  nameEn           String? @map("name_en")
+  nameTh           String? @map("name_th")
+  // ผลจาก normalizeName() — ห้ามเขียนค่าดิบลงคอลัมน์นี้
+  nameEnNormalized String? @map("name_en_normalized")
+  nameThNormalized String? @map("name_th_normalized")
+  nameEnSortKey    String? @map("name_en_sort_key")
+
+  examMode ExamMode     @map("exam_mode")
+  source   RosterSource
+
+  /// โรงเรียนตามรายชื่อ — เป็นค่าหลัก ส่วนโรงเรียนบนหน้าเกียรติบัตรรอบ Heat ใช้ตรวจทานเท่านั้น
+  school           String?
+  schoolNormalized String? @map("school_normalized")
+  level            String?
+  /// รางวัลตามที่ Excel เขียน (มักเป็นรางวัลสูงสุดแค่รางวัลเดียว) — ใช้ตรวจทานและบอกว่าไฟล์ไหนขาด
+  rawAward         String? @map("raw_award")
+  /// แถวที่เท่าไรในไฟล์ Excel — ให้แอดมินเปิดไปดูได้ถูกที่
+  sourceRow        Int?    @map("source_row")
+
+  rosterImportId String?       @map("roster_import_id") @db.Uuid
+  rosterImport   RosterImport? @relation(fields: [rosterImportId], references: [id], onDelete: SetNull)
+
+  /// ผูกกับตัวคนเมื่อระบุตัวได้แน่นอนแล้วเท่านั้น — ชื่อพ้องแยกไม่ออก = ว่างไว้ให้แอดมินตัดสิน
+  studentId             String?  @map("student_id") @db.Uuid
+  student               Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  /// true = แอดมินเลือกตัวคนเอง (ชื่อพ้อง หรือแยกเป็นคนใหม่)
+  studentLinkedManually Boolean  @default(false) @map("student_linked_manually")
+
+  /// เพิ่มทุกครั้งที่แก้ — กันสองแท็บแก้ทับกันเงียบ ๆ
+  version Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  certificates Certificate[]
+  stagingPages StagingPage[]
+
+  @@unique([batchId, candidateNo])
+  @@index([batchId, examMode])
+  // ใช้จับคู่สำรองด้วยชื่อ (เมื่ออ่านเลขไม่ได้) และค้นหาในหน้าแก้ไขของแอดมิน
+  @@index([batchId, nameEnNormalized])
+  @@index([batchId, nameThNormalized])
+  @@index([studentId])
+  @@map("roster_entries")
+}
+
+/// บันทึกการแก้ไขของแอดมิน — ตอบได้ว่าอะไรเปลี่ยนจากอะไรเป็นอะไร เมื่อไหร่ จาก session ไหน
+///
+/// ระบบใช้รหัสผ่านร่วมกันทั้งทีม จึงระบุตัวคนไม่ได้ เก็บได้แค่รหัส session ที่ล็อกอิน
+/// ห้ามเขียนราวกับรู้ว่าใครทำ จนกว่าจะมีบัญชีผู้ใช้แยกรายคน
+model AuditEvent {
+  id         String  @id @default(uuid()) @db.Uuid
+  batchId    String? @map("batch_id") @db.Uuid
+  batch      Batch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  /// ชื่อรอบนำเข้า (เช่น HKIMO FINAL 2026) — ยังอ่านรู้เรื่องแม้รอบนั้นถูกลบไปแล้ว
+  batchLabel String? @map("batch_label")
+
+  entityType String  @map("entity_type")
+  entityId   String? @map("entity_id")
+  action     String
+  before     Json?
+  after      Json?
+  /// รหัส session แบบสุ่มที่ออกตอนล็อกอิน — ไม่ใช่ค่า cookie ซึ่งเอาไปใช้แทนการล็อกอินได้
+  sessionId  String  @map("session_id")
+  note       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([batchId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_events")
 }
 
 /// 1 หน้าที่ตัดออกมาจาก PDF รวมเล่ม — ยังไม่ผูกกับผู้เข้าสอบจนกว่าจะ match สำเร็จ
@@ -218,7 +405,58 @@ model StagingPage {
 
   /// รางวัล — มาจากชื่อโฟลเดอร์ใน ZIP ซึ่งเป็นแหล่งความจริงเดียวที่ครบ
   /// (หน้า Perfect Score ไม่มีข้อความรางวัลพิมพ์อยู่เลย)
+  /// เป็นรหัสของรายการนั้นจริง ๆ เช่น BBB เป็น 1ST_PRIZE ไม่ใช่ GOLD
+  /// **ห้ามแก้หลังนำเข้า** — ถ้าแอดมินเปลี่ยนรางวัล ให้เขียนที่ awardOverride แทน
   award String?
+  /// ชื่อรางวัลตามแคตตาล็อก ณ ตอนนำเข้า
+  awardLabel String? @map("award_label")
+  /// รางวัลที่แอดมินเปลี่ยนเองอย่างตั้งใจ (มีบันทึกใน audit_events) — ว่าง = ใช้ตามโฟลเดอร์
+  awardOverride   String?   @map("award_override")
+  awardOverrideAt DateTime? @map("award_override_at")
+
+  /// online/onsite ตามโฟลเดอร์ใน ZIP — ห้ามแก้หลังนำเข้า (เป็นหลักฐานว่าต้นทางจัดไฟล์ไว้อย่างไร)
+  /// ว่าง = หน้าจากระบบเดิมก่อนมีการแยกรูปแบบการสอบ
+  examMode ExamMode? @map("exam_mode")
+
+  /// ค่าหลัง from บนหน้า: รอบ Heat เป็นโรงเรียน รอบ Final เป็นประเทศ — แยกคอลัมน์กันไม่ให้ปนกัน
+  schoolOnPage  String? @map("school_on_page")
+  countryOnPage String? @map("country_on_page")
+
+  /// ข้อสังเกตจากการอ่านหน้า / ปัญหาที่ต้องให้แอดมินตัดสิน / ข้อมูลเฉพาะรายการ (เช่นวิชาของ HKICO)
+  warnings    Json @default("[]")
+  parseErrors Json @default("[]") @map("parse_errors")
+  extra       Json @default("{}")
+
+  /// ลายนิ้วมือของเนื้อหาหน้า — อัปหน้าเดิมซ้ำแล้วจำได้ ไม่เกิดรายการตรวจซ้ำซ้อน
+  fingerprint String?
+
+  /// ผู้เข้าสอบในรายชื่อที่หน้านี้ผูกอยู่ (ทั้งที่จับคู่สำเร็จ และที่ติดปัญหาแต่รู้ว่าเป็นของใคร)
+  rosterEntryId String?      @map("roster_entry_id") @db.Uuid
+  rosterEntry   RosterEntry? @relation(fields: [rosterEntryId], references: [id], onDelete: SetNull)
+
+  /// อัปมากับงานไหน — ไว้ไล่ย้อนว่ามาจากไฟล์ไหน และย้อนงานที่พังได้
+  sourceJobId String?     @map("source_job_id") @db.Uuid
+  sourceJob   Job?        @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
+  sourceKind  PageSource? @map("source_kind")
+
+  // ---- การตัดสินของแอดมิน — ตัวจับคู่ใหม่ต้องรักษาไว้ ไม่ล้างทิ้ง ----
+  /// "ใช้รูปแบบการสอบตามรายชื่อ" — ใช้ได้เฉพาะกับรูปแบบนี้ ถ้ารายชื่อเปลี่ยนรูปแบบ การตัดสินนี้หมดผล
+  modeConfirmedFor       ExamMode? @map("mode_confirmed_for")
+  modeConfirmedAt        DateTime? @map("mode_confirmed_at")
+  /// แอดมินดูแล้วว่าเป็นคนไทย (หน้าที่ไม่มีหลักฐานสัญชาติ)
+  nationalityConfirmedAt DateTime? @map("nationality_confirmed_at")
+  /// แอดมินดูแล้วว่ารับได้แม้รอบ/ปีบนหน้าไม่ตรง
+  parseAcceptedAt        DateTime? @map("parse_accepted_at")
+  /// แอดมินผูกหน้านี้กับผู้เข้าสอบเอง — เก็บเลข/ชื่อ/รูปแบบของคนนั้น ณ ตอนตัดสิน
+  /// ถ้ารายชื่อเปลี่ยนภายหลัง การตัดสินนี้ต้องกลับไปให้ตรวจใหม่ ไม่เชื่อต่อเงียบ ๆ
+  manualMatch            Json?     @map("manual_match")
+  /// ข้อมูลประกอบการตัดสิน เช่นผู้เข้าสอบที่เป็นไปได้หลายคน
+  review                 Json      @default("{}")
+  /// หน้าใหม่ที่มาแทนหน้านี้ (สถานะ SUPERSEDED)
+  supersededById         String?   @map("superseded_by_id") @db.Uuid
+
+  /// เพิ่มทุกครั้งที่แอดมินตัดสินหน้านี้ — กันสองแท็บตัดสินทับกัน
+  version Int @default(0)
   /// รางวัลตามที่พิมพ์บนหน้า ใช้ cross-check กับโฟลเดอร์ — null ได้เป็นปกติ
   awardOnPage String? @map("award_on_page")
   /// ปี ค.ศ. ที่อ่านได้จากหน้า ใช้ประกอบชื่อไฟล์
@@ -251,6 +489,10 @@ model StagingPage {
   @@index([extractedNameNormalized])
   // ใช้จับคู่ด้วยเลขเกียรติบัตร ซึ่งแม่นกว่าชื่อเมื่อมีคนชื่อซ้ำ
   @@index([batchId, certNo], map: "staging_pages_batch_id_cert_no_idx")
+  // ใช้ตรวจว่าเคยอัปหน้านี้มาแล้วหรือยัง
+  @@index([batchId, fingerprint])
+  @@index([rosterEntryId])
+  @@index([sourceJobId])
   @@map("staging_pages")
 }
 
@@ -271,10 +513,19 @@ model Certificate {
   previewKey String? @map("preview_key")
   pageNumber Int     @map("page_number")
 
-  /// รางวัล (GOLD/SILVER/BRONZE/MERIT/PERFECT_SCORE) — บังคับต้องมี
+  /// รหัสรางวัลที่ใช้จริง (ตามโฟลเดอร์ หรือตามที่แอดมินเปลี่ยน) เป็นรหัสของรายการนั้นจริง ๆ
+  /// เช่น GOLD, PERFECT_SCORE หรือ 1ST_PRIZE ของ BBB — บังคับต้องมี
   /// เพราะเป็นส่วนหนึ่งของกติกา unique ด้านล่าง และ Postgres ถือว่า NULL ไม่เท่ากับ NULL
   /// ถ้าปล่อยให้ว่างได้ กติกานั้นจะกันของซ้ำไม่ได้จริง
   award String
+  /// ชื่อรางวัลที่ผู้ปกครองเห็น ณ ตอนออกใบ — แก้แคตตาล็อกทีหลังแล้วใบเก่าไม่เปลี่ยนชื่อตาม
+  /// ว่าง = ใบจากระบบเดิม ใช้ชื่อจากแคตตาล็อกแทน
+  awardLabel   String? @map("award_label")
+  awardLabelTh String? @map("award_label_th")
+
+  /// ผู้เข้าสอบในรายชื่อที่ใบนี้เป็นของเขา — ว่าง = ใบจากระบบเดิม
+  rosterEntryId String?      @map("roster_entry_id") @db.Uuid
+  rosterEntry   RosterEntry? @relation(fields: [rosterEntryId], references: [id], onDelete: Cascade)
   /// เลขบนหน้าเกียรติบัตร = CANDIDATE NO ใน Excel
   certNo      String? @map("cert_no")
   candidateNo String? @map("candidate_no")
@@ -296,6 +547,9 @@ model Certificate {
   // (ของจริง: ผู้ที่ได้ Perfect Score จะได้ใบ Gold มาด้วยอีกใบ)
   // แต่รางวัลเดียวกันซ้ำสองใบไม่ได้ — นั่นแปลว่าจับคู่ผิดหรือไฟล์ซ้ำ
   @@unique([examId, studentId, award])
+  // คีย์ซ้ำหลักของขั้นตอนใหม่ = (รอบนำเข้า, เลขผู้เข้าสอบ, รางวัล) — ผู้เข้าสอบ 1 คนในรายชื่อ
+  // มีได้หลายใบถ้าคนละรางวัล แต่รางวัลเดียวกันซ้ำไม่ได้
+  @@unique([rosterEntryId, award])
   @@index([studentId])
   @@index([batchId])
   /// ตัวกวาดอายุถามด้วยเงื่อนไขนี้ทุกวัน
@@ -325,6 +579,9 @@ model Job {
   createdAt  DateTime  @default(now()) @map("created_at")
   startedAt  DateTime? @map("started_at")
   finishedAt DateTime? @map("finished_at")
+
+  /// หน้าที่งานนี้สร้างขึ้น — ใช้ย้อนงานที่พัง และบอกแอดมินว่าหน้าไหนมาจากการอัปครั้งไหน
+  stagingPages StagingPage[]
 
   @@index([status, createdAt])
   @@index([batchId])
