@@ -1,0 +1,41 @@
+{
+  "_readme": "เคสทดสอบร่วมของแคตตาล็อกรางวัล อ่านโดยทั้ง vitest (apps/web) และ pytest (apps/worker) — ถ้าฝั่งหนึ่งผ่านอีกฝั่งไม่ผ่าน แปลว่าสองฝั่งอ่านชื่อโฟลเดอร์ไม่ตรงกันแล้ว ต้องแก้ทันที",
+  "folderKeys": [
+    { "why": "ขีดล่างกลายเป็นช่องว่าง", "input": "Perfect_Score", "key": "PERFECT SCORE" },
+    { "why": "ไม่สนตัวพิมพ์และช่องว่างหัวท้าย", "input": "  perfect   score ", "key": "PERFECT SCORE" },
+    { "why": "ขีดกลางกลายเป็นช่องว่าง", "input": "PERFECT-SCORE", "key": "PERFECT SCORE" },
+    { "why": "ตัวเลขลำดับติดคำ ห้ามแยกให้เอง", "input": "3rdPrize", "key": "3RDPRIZE" },
+    { "why": "ชื่อที่มีรหัสรายการนำหน้า", "input": "HKICO Gold", "key": "HKICO GOLD" },
+    { "why": "ว่างเปล่า", "input": "   ", "key": "" }
+  ],
+  "folders": [
+    { "why": "ชื่อมาตรฐาน", "program": "HKIMO", "round": "FINAL", "folder": "Gold", "award": "GOLD" },
+    { "why": "ตัวพิมพ์เล็กและขีดล่าง", "program": "HKIMO", "round": "FINAL", "folder": "perfect_score", "award": "PERFECT_SCORE" },
+    { "why": "โฟลเดอร์ Perfect ของจริง", "program": "TIMO", "round": "HEAT", "folder": "Perfect", "award": "PERFECT_SCORE" },
+    { "why": "รางวัลเข้าร่วมมีเฉพาะรอบ Heat", "program": "HKIMO", "round": "HEAT", "folder": "Participation", "award": "PARTICIPATION" },
+    { "why": "รางวัลเข้าร่วมในรอบ Final ต้องไม่ผ่าน", "program": "HKIMO", "round": "FINAL", "folder": "Participation", "award": null },
+    { "why": "รางวัลพิเศษรับทั้งสองรอบ", "program": "HKISO", "round": "FINAL", "folder": "Special", "award": "SPECIAL_AWARD" },
+    { "why": "รางวัลพิเศษรับทั้งสองรอบ (Heat)", "program": "HKIMO", "round": "HEAT", "folder": "Special Award", "award": "SPECIAL_AWARD" },
+    { "why": "BBB เก็บรางวัลจริงเป็น Prize ห้ามยุบเป็นเหรียญ", "program": "BBB", "round": "FINAL", "folder": "1st Prize", "award": "1ST_PRIZE" },
+    { "why": "โฟลเดอร์ Gold ของ BBB Heat พิมพ์บนหน้าว่า 1st Prize", "program": "BBB", "round": "HEAT", "folder": "Gold", "award": "1ST_PRIZE" },
+    { "why": "BBB เขียนติดกัน", "program": "BBB", "round": "HEAT", "folder": "3rdPrize", "award": "3RD_PRIZE" },
+    { "why": "HKICO Final มีรหัสรายการนำหน้า", "program": "HKICO", "round": "FINAL", "folder": "HKICO Gold", "award": "GOLD" },
+    { "why": "ชื่อที่มีรหัสรายการอื่นนำหน้าต้องไม่ผ่าน", "program": "HKIMO", "round": "FINAL", "folder": "HKICO Gold", "award": null },
+    { "why": "รางวัลที่ไม่มีในแคตตาล็อก", "program": "HKIMO", "round": "FINAL", "folder": "Platinum", "award": null },
+    { "why": "ห้ามตัดคำท้ายให้เองในชื่อโฟลเดอร์", "program": "HKIMO", "round": "FINAL", "folder": "Gold Medal", "award": null },
+    { "why": "ชื่อระดับชั้นไม่ใช่รางวัล", "program": "HKISO", "round": "HEAT", "folder": "P3", "award": null }
+  ],
+  "profiles": [
+    { "program": "HKIMO", "round": "HEAT", "profileKey": "HKIMO_HEAT" },
+    { "program": "HKIMO", "round": "FINAL", "profileKey": "HKIMO_FINAL" },
+    { "program": "TIMO", "round": "HEAT", "profileKey": "TIMO_HEAT" },
+    { "program": "TIMO", "round": "FINAL", "profileKey": "TIMO_FINAL" },
+    { "program": "BBB", "round": "HEAT", "profileKey": "BBB_HEAT" },
+    { "program": "BBB", "round": "FINAL", "profileKey": "BBB_FINAL" },
+    { "program": "HKICO", "round": "HEAT", "profileKey": "HKICO_HEAT" },
+    { "program": "HKICO", "round": "FINAL", "profileKey": "HKICO_FINAL" },
+    { "program": "HKISO", "round": "HEAT", "profileKey": "HKISO_HEAT" },
+    { "program": "HKISO", "round": "FINAL", "profileKey": "HKISO_FINAL" },
+    { "program": "NOPE", "round": "HEAT", "profileKey": null }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "_readme": "แคตตาล็อกรางวัลและกติกาโฟลเดอร์ของ HKISO — รอบ Heat ของจริงซอยโฟลเดอร์ระดับชั้นไว้ใต้โฟลเดอร์รางวัล (Gold/P3/) จึงเปิด levelSubfolder เฉพาะรอบนี้ รูปแบบไฟล์ดูที่ docs/certificate-profiles.md",
+  "program": "HKISO",
+  "name": "Hong Kong International Science Olympiad",
+  "rounds": {
+    "HEAT": { "profileKey": "HKISO_HEAT", "levelSubfolder": true },
+    "FINAL": { "profileKey": "HKISO_FINAL", "levelSubfolder": false }
+  },
+  "awards": [
+    {
+      "code": "GOLD",
+      "label": "Gold",
+      "labelTh": "เหรียญทอง",
+      "kind": "PRIMARY",
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Gold", "Gold Award"],
+      "order": 10,
+      "badge": "gold"
+    },
+    {
+      "code": "SILVER",
+      "label": "Silver",
+      "labelTh": "เหรียญเงิน",
+      "kind": "PRIMARY",
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Silver", "Silver Award"],
+      "order": 20,
+      "badge": "silver"
+    },
+    {
+      "code": "BRONZE",
+      "label": "Bronze",
+      "labelTh": "เหรียญทองแดง",
+      "kind": "PRIMARY",
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Bronze", "Bronze Award"],
+      "order": 30,
+      "badge": "bronze"
+    },
+    {
+      "code": "MERIT",
+      "label": "Merit",
+      "labelTh": "ชมเชย",
+      "kind": "PRIMARY",
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Merit", "Merit Award"],
+      "order": 40,
+      "badge": "merit"
+    },
+    {
+      "code": "PARTICIPATION",
+      "label": "Participation",
+      "labelTh": "เข้าร่วม",
+      "kind": "PRIMARY",
+      "rounds": ["HEAT"],
+      "folders": ["Participation", "Participation Award"],
+      "text": ["Certificate of Participation"],
+      "order": 50,
+      "badge": "participation"
+    },
+    {
+      "code": "PERFECT_SCORE",
+      "label": "Perfect Score",
+      "labelTh": "คะแนนเต็ม",
+      "kind": "SUPPLEMENTAL",
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Perfect", "Perfect Score", "Perfect Score Award"],
+      "order": 60,
+      "badge": "perfect"
+    },
+    {
+      "code": "SPECIAL_AWARD",
+      "label": "Special Award",
+      "labelTh": "รางวัลพิเศษ",
+      "kind": "SUPPLEMENTAL",
+      "rounds": ["HEAT", "FINAL"],
+      "folders": ["Special", "Special Award"],
+      "order": 70,
+      "badge": "special"
+    }
+  ]
+}
