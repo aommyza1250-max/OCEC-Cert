@@ -8,6 +8,8 @@ Redesign the admin intake flow so the roster becomes the durable source of expec
 
 The redesign also adds a searchable admin editor, safe incremental certificate uploads, explicit issue resolution, partial publishing, and durable audit records. Exam mode is an admin-only field and is never shown on public search or download pages.
 
+Certificate parsing is selected by exam program and round. Each program owns a Python profile with separate Heat and Final behavior, while a shared declarative manifest supplies the award catalog to both Python and TypeScript. Awards retain the source program's real codes and labels; for example, `1ST_PRIZE` is not collapsed into `GOLD`.
+
 This design intentionally does not migrate or backfill the one existing data set. After implementation, the old data will be backed up, cleared in a separate operation, and re-imported through the new flow.
 
 ## Goals
@@ -23,6 +25,8 @@ This design intentionally does not migrate or backfill the one existing data set
 - Allow admins to search and edit participant and certificate data after withdrawing publication.
 - Publish valid participants while holding unresolved participants back.
 - Preserve enough source and audit data to explain every manual correction.
+- Isolate certificate-layout rules by exam program and round.
+- Preserve each program's real award names, including optional special and participation awards.
 
 ## Non-goals
 
@@ -31,6 +35,8 @@ This design intentionally does not migrate or backfill the one existing data set
 - Migrating or backfilling old batches.
 - Introducing named admin accounts. The current shared admin authentication cannot identify a human actor reliably; audit events will record the authenticated admin session, timestamp, and change details. Named actors require a separate authentication project.
 - Inferring awards from certificate text or the roster. The ZIP award folder remains the primary award source.
+- Versioning certificate profiles by year. The first implementation has one Heat and one Final profile per program; historical research will determine whether versioning is necessary later.
+- Allowing admins to edit parser regexes, folder rules, or award catalogs. Those changes require code review, tests, and deployment.
 
 ## Core invariants
 
@@ -39,12 +45,119 @@ This design intentionally does not migrate or backfill the one existing data set
 3. A candidate number is unique across both modes within a batch.
 4. One participant may have only one mode within a batch.
 5. Every roster entry is expected to have at least one accepted certificate.
-6. A participant may have multiple certificates only when their awards differ.
+6. A participant may have multiple certificates only when their program-specific award codes differ.
 7. The normal duplicate key for a certificate is `(batch, candidate number, award)`.
-8. Awards come from the ZIP award folder. A later admin reclassification is an explicit, audited override and never an inference from page text or Excel.
+8. Awards come from the ZIP award folder and the selected profile's whitelist. A later admin reclassification is an explicit, audited override and never an inference from page text or Excel.
 9. The system never guesses when a name, identity, mode, or duplicate is ambiguous.
 10. No upload or edit is allowed while a batch is published. An admin must explicitly withdraw publication first.
 11. Large files continue to travel directly between the browser and R2. They never pass through the Next.js server.
+12. Every supported `(program code, round)` pair resolves to exactly one profile. Missing profiles fail closed; there is no silent generic fallback.
+
+## Certificate profile architecture
+
+### Module layout
+
+The worker uses one Python module per exam program, with separate Heat and Final profile objects inside that module:
+
+```text
+apps/worker/app/certificate_profiles/
+├── base.py
+├── common.py
+├── registry.py
+├── hkimo.py
+├── timo.py
+├── bbb.py
+├── hkico.py
+└── hkiso.py
+```
+
+- `base.py` defines the profile contract, parsed result, policies, and award types.
+- `common.py` contains reusable text, anchor, candidate-number, year, school, country, and path helpers.
+- Each program module declares one Heat and one Final profile and overrides only behavior that is truly different.
+- `registry.py` maps `(program code, round)` to the matching profile object.
+
+For example:
+
+```text
+(HKIMO, HEAT)  -> HKIMO_HEAT
+(HKIMO, FINAL) -> HKIMO_FINAL
+(BBB, HEAT)    -> BBB_HEAT
+(BBB, FINAL)   -> BBB_FINAL
+```
+
+The registry is a selector, not a parser. `split.py` asks the registry for the profile belonging to its batch and then passes every page to that profile. An unsupported pair is rejected before any source file is processed.
+
+### Profile contract
+
+Every profile declares:
+
+- program code and round
+- whether `from` represents a school, a country, or neither
+- nationality policy
+- folder/path policy
+- allowed award catalog
+- name, candidate-number, level, round, and year extraction behavior
+- optional program-specific metadata extraction
+
+Every profile returns the same conceptual `ParsedCertificate` result:
+
+- name
+- candidate number
+- level
+- `schoolOnPage`
+- `countryOnPage`
+- round and year found on the page
+- award text found on the page for cross-checking
+- optional extra metadata
+- warnings
+- blocking parse errors
+
+The existing `extract.py` becomes orchestration around this contract rather than a home for one global set of environment regexes. Common layouts use shared helpers; genuinely different layouts such as BBB may override focused methods such as name extraction.
+
+### Profile selection and future versioning
+
+The web checks shared profile metadata before allowing an import batch to begin. An exam program may exist administratively without a parser, but an unsupported program/round cannot start intake.
+
+The batch and jobs record a stable `profileKey`, such as `HKIMO_HEAT`, for diagnostics. This release intentionally has no `V1`/`V2` profile selection. Editing a profile and redeploying changes the behavior used by later reprocessing of that profile; this limitation is accepted until historical certificate layouts have been studied.
+
+The profile interface must remain isolated enough that future versioned registry keys can be introduced without changing the split and match pipelines.
+
+## Program-specific award catalogs
+
+Award definitions live in shared declarative manifests readable by both Python and TypeScript:
+
+```text
+shared/certificate-profiles/
+├── hkimo.json
+├── timo.json
+├── bbb.json
+├── hkico.json
+└── hkiso.json
+```
+
+Python program modules own page parsing; the shared manifests own display and folder-recognition metadata so the worker and web cannot silently drift.
+
+Each award definition contains:
+
+- stable program-specific code
+- original English display label
+- optional Thai label
+- `PRIMARY` or `SUPPLEMENTAL` kind
+- allowed rounds
+- exact folder aliases
+- display order
+- badge presentation key
+
+Programs retain their real award taxonomy. BBB can use `1ST_PRIZE`, `2ND_PRIZE`, and `3RD_PRIZE`; those codes must not normalize to `GOLD`, `SILVER`, and `BRONZE`. The database and public UI preserve the source program's label.
+
+All program catalogs support:
+
+- `SPECIAL_AWARD` as a `SUPPLEMENTAL` award in Heat and Final.
+- `PARTICIPATION` as a `PRIMARY` award in Heat only.
+
+These two definitions are allowed even when the current sample set contains no recipient. `PARTICIPATION` in a Final ZIP is invalid. Unknown or misspelled folder awards stop the whole ZIP; the system never creates a new award automatically.
+
+The folder-derived award is authoritative. Award text extracted from the page and the roster award are cross-checks only.
 
 ## Data model
 
@@ -90,6 +203,10 @@ Constraints and indexes:
 - Normalized-name indexes for admin search and fallback matching.
 - An active roster entry cannot have a null exam mode.
 
+### Batch profile selection
+
+Each batch stores the selected unversioned `profileKey`. It is derived from program code and round through the supported-profile manifest when the batch is created. Intake APIs revalidate that the matching worker profile exists before queuing work.
+
 ### RosterImport and draft rows
 
 A roster replacement must not alter active data until the whole file has passed validation. Store each attempted import as a `RosterImport` and its parsed rows as draft import rows, or an equivalent durable draft representation.
@@ -115,6 +232,9 @@ Add:
 - nullable `rosterEntryId`.
 - a source upload/job identifier so repeated uploads and cleanup are traceable.
 - an optional explicit award override while preserving the original folder-derived award.
+- `schoolOnPage` and `countryOnPage` as distinct nullable fields.
+- program-specific folder award code and a snapshot of its display label.
+- parser warnings, blocking errors, and optional extra metadata required for review.
 
 Extend the review states so the UI can distinguish at least:
 
@@ -131,9 +251,9 @@ The original source path, folder-derived award, and folder-derived mode remain i
 
 ### Certificate changes
 
-Each certificate links to its `RosterEntry`. Multiple certificates may link to one roster entry when awards differ.
+Each certificate links to its `RosterEntry`. Multiple certificates may link to one roster entry when program-specific award codes differ.
 
-The certificate keeps the effective award used publicly. If an admin reclassifies an award, the staging page retains both the original folder award and the override, and the audit log records the transition.
+The certificate keeps the effective `awardCode` and display-label snapshot used publicly. If an admin reclassifies an award, the staging page retains both the original folder award and the override, and the audit log records the transition.
 
 The public search model remains based on `Student`; exam mode is not exposed publicly.
 
@@ -156,7 +276,7 @@ Each event records batch, entity type and ID, action, before/after values, times
 
 ### 1. Create an unpublished batch
 
-The existing exam program, round, and year selection remains. A new batch begins unpublished and has no active roster.
+The existing exam program, round, and year selection remains. The web resolves and displays the unversioned profile key for the selected program and round. A batch cannot begin intake if that pair has no supported profile. A new supported batch begins unpublished and has no active roster.
 
 ### 2. Upload and activate the roster
 
@@ -218,6 +338,15 @@ HKIMO/online/gold/file.pdf
 HKIMO/onsite/silver/file.pdf
 ```
 
+The profile may declare a deeper structure where it is part of the source format. For example, a profile may accept grade below the award:
+
+```text
+online/gold/P3/file.pdf
+online/gold/S2/file.pdf
+```
+
+Award discovery follows the selected profile's exact path policy. It does not use the immediate parent directory blindly, and it does not search arbitrary ancestors until something resembles an award.
+
 Mac metadata files and other explicitly ignored platform artifacts remain ignored. A PDF may not sit outside the mode and award hierarchy.
 
 Before splitting any page, the worker performs a full structural preflight. The whole ZIP is rejected without changing active data when:
@@ -225,24 +354,28 @@ Before splitting any page, the worker performs a full structural preflight. The 
 - no supported PDF exists
 - a PDF lacks an online/onsite ancestor in the supported position
 - a PDF lacks a recognized award folder
-- an award folder cannot be normalized
+- an award folder is not an exact alias in the selected program/round catalog
+- `PARTICIPATION` appears in a Final profile
 - the hierarchy is otherwise ambiguous
 
 Unknown awards stop the whole job. The system never guesses or silently skips them.
 
 ZIPs are uploaded directly to R2, downloaded by the worker to disk, and processed one contained PDF at a time. The worker must not load the whole ZIP or all contained PDFs into memory.
 
+Preflight reports the selected profile, modes found, file and page counts, award counts, unsupported file types, invalid paths, and unknown awards before split work begins.
+
 ### 5. Match each certificate page
 
 For each eligible page:
 
-1. Apply the existing round-specific nationality rule: Heat processes every page; Final retains only eligible Thai pages and records skipped foreign pages.
-2. Read the certificate/candidate number.
-3. Find the active roster entry by candidate number.
-4. Verify the certificate name against the roster name.
-5. Compare ZIP mode with roster mode.
-6. Take the award from the award folder.
-7. Create or update a certificate only after the checks pass.
+1. Parse the page with the batch's registered program/round profile.
+2. Apply the profile's nationality policy.
+3. Read the certificate/candidate number.
+4. Find the active roster entry by candidate number.
+5. Verify the certificate name against the roster name.
+6. Compare ZIP mode with roster mode.
+7. Take the program-specific award code from the award folder/catalog.
+8. Create or update a certificate only after the checks pass.
 
 Candidate number is the primary key because it is guaranteed unique across online and onsite participants in a batch.
 
@@ -254,7 +387,13 @@ Per-page errors do not stop other valid pages:
 - candidate number matches but name does not: `NAME_MISMATCH`
 - candidate number and name match but mode differs: `MODE_MISMATCH`
 - multiple fallback candidates: `AMBIGUOUS`
+- a Final page without enough evidence to verify Thailand: `NATIONALITY_UNVERIFIED`
+- page round or year conflicts with the batch: blocking parse review
 - an accepted certificate already owns the effective duplicate key: duplicate review or skip, depending on whether the page is byte-for-byte/source-equivalent
+
+Heat profiles accept every participant page and interpret the value after `from` as `schoolOnPage`. The roster/Excel school remains authoritative. A difference between roster school and page school creates a warning but does not block matching when candidate number and name agree. If the roster school is blank, the page value is shown as an admin suggestion and is not copied automatically.
+
+Final profiles interpret the value after `from` as `countryOnPage`. `THAILAND` continues to matching, another country becomes `SKIPPED_FOREIGN`, and a missing or unreadable country becomes `NATIONALITY_UNVERIFIED` rather than being silently discarded or assumed Thai.
 
 ### 6. Incremental ZIP uploads and deduplication
 
@@ -266,7 +405,7 @@ An admin may upload ZIPs repeatedly after the roster exists and while the batch 
 - A page for a candidate not yet in the roster remains in staging. Adding that roster entry later triggers rematching.
 - A roster entry without an accepted certificate appears in the missing-file queue.
 
-The duplicate implementation must account for unresolved states. The existence of a bad quarantined page must not cause a later correct page to be skipped.
+The duplicate implementation must account for unresolved states. The existence of a bad quarantined page must not cause a later correct page to be skipped. The effective duplicate key uses the real program-specific award code; for example, `1ST_PRIZE` remains distinct from `GOLD`.
 
 ### 7. Add a missing participant manually
 
@@ -330,7 +469,8 @@ A replacement PDF must pass candidate-number and name checks before becoming act
 Award reclassification is not a free-text edit. It is an explicit action that:
 
 - requires confirmation
-- checks that the participant does not already have the target award
+- limits the target to the selected program/round catalog
+- checks that the participant does not already have the target program-specific award code
 - preserves the folder-derived original award
 - records the effective override and audit event
 
@@ -398,9 +538,15 @@ All tests use synthetic fixtures. Real rosters and certificates must never enter
 ### ZIP and matching tests
 
 - Combined, online-only, onsite-only, and one-wrapper ZIP layouts pass.
+- Profile-declared deeper folder layouts pass only for the programs that declare them.
 - Missing mode, missing award, loose PDF, and unknown award reject the whole ZIP before mutation.
+- `PARTICIPATION` is accepted in Heat and rejected in Final.
+- `SPECIAL_AWARD` is accepted as supplemental in both rounds.
+- Program-specific labels remain distinct; `1ST_PRIZE` never becomes `GOLD`.
 - Candidate number, name, and mode agreement produces `MATCHED`.
 - Name mismatch and mode mismatch produce distinct states.
+- Heat stores `schoolOnPage`, keeps the roster school authoritative, and reports differences as warnings.
+- Final accepts `THAILAND`, skips explicit foreign countries, and sends missing country evidence to `NATIONALITY_UNVERIFIED`.
 - Unique name-plus-mode fallback works when candidate number is unreadable.
 - Ambiguous fallback never creates a certificate.
 - Multiple awards for one participant work; the same award cannot duplicate.
@@ -426,6 +572,10 @@ All tests use synthetic fixtures. Real rosters and certificates must never enter
 - Large ZIP processing continues to use disk and one-contained-PDF-at-a-time reading.
 - Browser uploads continue to use presigned R2 PUTs.
 - Any normalization change is implemented in both TypeScript and Python and covered by the shared normalization cases.
+- Every supported shared-manifest `(program, round)` pair has exactly one registered Python profile.
+- Every profile returns the common parsed-result contract for synthetic Heat and Final fixtures.
+- Award aliases are unique within a program/round catalog and are read identically by Python and TypeScript.
+- Adding one profile cannot change parser results for another profile.
 
 ## Acceptance criteria
 
@@ -439,3 +589,6 @@ The design is complete when an admin can:
 6. Publish all valid participants while holding unresolved participants back.
 7. Withdraw publication before any subsequent upload or edit.
 8. Trace manual corrections to their prior values, new values, time, and authenticated admin session.
+9. Select the correct unversioned parser from program and round without a generic fallback.
+10. Preserve original program award codes and labels, including special awards and Heat participation.
+11. Treat Heat `from` text as a school cross-check and Final `from` text as nationality evidence.
