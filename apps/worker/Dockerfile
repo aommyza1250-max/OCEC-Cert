@@ -9,6 +9,8 @@ WORKDIR /app
 COPY apps/worker/pyproject.toml ./pyproject.toml
 COPY apps/worker/app ./app
 RUN pip install --no-cache-dir . && rm -rf /root/.cache
+# แคตตาล็อกรางวัลของแต่ละรายการสอบ — ชุดเดียวกับที่เว็บใช้ (dev compose mount ไว้ที่เดียวกันนี้)
+COPY shared/certificate-profiles /shared/certificate-profiles
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
