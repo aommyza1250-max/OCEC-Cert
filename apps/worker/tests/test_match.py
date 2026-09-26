@@ -4,6 +4,7 @@
 """
 
 from app.tasks.match import Entry, Page, StudentRow, decide, manual_snapshot, resolve_identities
+from app.tasks.split import _printed_modes
 
 
 def entry(no="900101", name="SOMCHAI JAIDEE", mode="ONLINE", id=None, **extra) -> Entry:
@@ -84,6 +85,29 @@ def test_อ่านเลขไม่ได้_ชื่อตรงแต่�
 def test_หน้าที่อ่านชื่อไม่ออก_เชื่อเลข():
     d = one([page(name=None)], [entry()])
     assert d.status == "MATCHED"
+
+
+def test_zip_แยกเฉพาะรางวัล_ใช้โหมดจากรายชื่อหลังตรวจเลขและชื่อ():
+    d = one([page(mode=None, mode_source="ROSTER")], [entry(mode="ONSITE")])
+    assert (d.status, d.entry_id) == ("MATCHED", "e900101")
+
+
+def test_zip_แยกเฉพาะรางวัล_ไม่มีเลขหรือชื่อ_ต้องรอตรวจ():
+    assert one([page(no=None, mode=None, mode_source="ROSTER")], [entry()]).status == "UNMATCHED"
+    assert one([page(name=None, mode=None, mode_source="ROSTER")], [entry()]).status == "UNMATCHED"
+
+
+def test_zip_แยกเฉพาะรางวัล_ชื่อผิดหรือโหมดบนใบผิด_ต้องรอตรวจ():
+    assert one([page(name="OTHER PERSON", mode_source="ROSTER")], [entry()]).status == "NAME_MISMATCH"
+    d = one([page(mode_source="ROSTER", printed_mode="ONSITE")], [entry(mode="ONLINE")])
+    assert d.status == "MODE_MISMATCH"
+    assert one([page(mode_source="ROSTER", printed_mode="ONSITE", mode_confirmed_for="ONLINE")],
+               [entry(mode="ONLINE")]).status == "MATCHED"
+
+
+def test_ข้อความ_online_ในชื่อโรงเรียนไม่ใช่หลักฐานรูปแบบสอบ():
+    assert _printed_modes("from ONLINE SCHOOL\nCert No: 100001") == set()
+    assert _printed_modes("Exam Mode: Onsite\nfrom ONLINE SCHOOL") == {"ONSITE"}
 
 
 def test_คนเดียวหลายรางวัลได้_รางวัลเดียวกันซ้ำไม่ได้():

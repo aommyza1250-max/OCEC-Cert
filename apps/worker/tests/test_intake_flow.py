@@ -279,6 +279,49 @@ def test_ZIP_รวมสองรูปแบบ_จับคู่ด้วย
     assert all(e["student_id"] for e in entries(batch))
 
 
+def test_zip_แยกเฉพาะรางวัล_ใช้โหมดจากรายชื่อและจับคู่ทั้งสองแบบ(db):
+    batch = make_batch()
+    use_roster(batch, SOMCHAI, MALEE)
+    stats = upload_zip(batch, {"Gold/both.pdf": pdf(page_of(SOMCHAI), page_of(MALEE))})
+    assert stats["preflight"]["layout"] == "AWARD_ONLY"
+    assert stats["byMode"] == {"ONLINE": 1, "ONSITE": 1}
+    assert statuses(batch) == {"MATCHED": ["100001", "100002"]}
+    assert [(p["cert_no"], p["mode"]) for p in pages(batch)] == [
+        ("100001", "ONLINE"), ("100002", "ONSITE"),
+    ]
+    assert len(certificates(batch)) == 2
+
+
+def test_zip_แยกเฉพาะรางวัล_เลขหายหรือชื่อผิดค้างให้ตรวจ(db):
+    batch = make_batch()
+    use_roster(batch, SOMCHAI, MALEE)
+    upload_zip(batch, {"Gold/both.pdf": pdf(
+        page_of(SOMCHAI, cert_no=None), page_of(MALEE, name="OTHER PERSON"),
+    )})
+    assert statuses(batch) == {"NAME_MISMATCH": ["100002"], "UNMATCHED": [None]}
+    assert certificates(batch) == []
+
+
+def test_zip_แยกเฉพาะรางวัล_โหมดที่พิมพ์ผิดต้องรอตรวจ(db):
+    batch = make_batch()
+    use_roster(batch, SOMCHAI)
+    upload_zip(batch, {"Gold/a.pdf": pdf(page_of(SOMCHAI, mode_line="Exam Mode: ONSITE"))})
+    assert statuses(batch) == {"MODE_MISMATCH": ["100001"]}
+    assert certificates(batch) == []
+
+
+def test_zip_แยกเฉพาะรางวัล_รายชื่อเปลี่ยนโหมดแล้วคำนวณใหม่(db):
+    batch = make_batch()
+    use_roster(batch, SOMCHAI)
+    upload_zip(batch, {"Gold/a.pdf": pdf(page_of(SOMCHAI))})
+    with connection() as conn:
+        conn.execute("UPDATE roster_entries SET exam_mode = 'ONSITE' WHERE batch_id = %s", (batch,))
+    run_match(batch, noop)
+    assert statuses(batch) == {"MATCHED": ["100001"]}
+    assert pages(batch)[0]["mode"] == "ONSITE"
+    assert len(certificates(batch)) == 1
+
+
 def test_ชื่อไม่ตรงกับรูปแบบไม่ตรงเป็นคนละสถานะ(db):
     batch = make_batch()
     use_roster(batch, SOMCHAI, MALEE)

@@ -28,6 +28,7 @@ def make_bundle_pdf(entries: list[dict]) -> bytes:
       country  สัญชาติ — ใส่แล้วจะเกิดบรรทัด "from <country>"
       level    ระดับชั้น เช่น "PRIMARY 3"
       cert_no  เลขบนหน้า — ใส่แล้วจะเกิดบรรทัด "Cert No: <cert_no>"
+      mode_line  ข้อความรูปแบบการสอบที่พิมพ์บนใบ เช่น "Exam Mode: ONLINE"
       school   โรงเรียน — ใส่แล้วจะเกิดบรรทัด "from <school>" (แบบรอบ Heat)
       award    ข้อความรางวัล เช่น "Gold" -> พิมพ์เป็น "Gold Award"
                ไม่ใส่ = ไม่มีบรรทัดรางวัล (เลียนแบบหน้า Perfect Score ของจริง)
@@ -80,6 +81,8 @@ def make_bundle_pdf(entries: list[dict]) -> bytes:
         write(f"22nd - 23rd August {year}, Hong Kong & worldwide", 11)
         if entry.get("cert_no"):
             write(f"Cert No: {entry['cert_no']}", 10)
+        if entry.get("mode_line"):
+            write(entry["mode_line"], 10)
         write(f"23rd Aug {year}", 10)
 
     data = doc.tobytes()

@@ -414,8 +414,9 @@ model StagingPage {
   awardOverride   String?   @map("award_override")
   awardOverrideAt DateTime? @map("award_override_at")
 
-  /// online/onsite ตามโฟลเดอร์ใน ZIP — ห้ามแก้หลังนำเข้า (เป็นหลักฐานว่าต้นทางจัดไฟล์ไว้อย่างไร)
-  /// ว่าง = หน้าจากระบบเดิมก่อนมีการแยกรูปแบบการสอบ
+  /// online/onsite ตามโฟลเดอร์ใน ZIP หรืออ้างจากรายชื่อเมื่อ ZIP แยกตามรางวัล
+  /// แบบหลังเก็บ extra.modeSource = ROSTER และตัวจับคู่คำนวณใหม่เมื่อรายชื่อเปลี่ยน
+  /// ว่างได้เมื่ออ่านเลขไม่พบในรายชื่อ หรือเป็นหน้าจากระบบเดิม
   examMode ExamMode? @map("exam_mode")
 
   /// ค่าหลัง from บนหน้า: รอบ Heat เป็นโรงเรียน รอบ Final เป็นประเทศ — แยกคอลัมน์กันไม่ให้ปนกัน

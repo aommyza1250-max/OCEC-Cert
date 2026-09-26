@@ -228,7 +228,7 @@ Only one roster import is active for a batch. Invalid or unresolved drafts never
 
 Add:
 
-- `examMode`, read from the ZIP path.
+- `examMode`, read from the ZIP path for mode/award ZIPs or derived from the matched roster entry for award-only ZIPs; `extra.modeSource` records which.
 - nullable `rosterEntryId`.
 - a source upload/job identifier so repeated uploads and cleanup are traceable.
 - an optional explicit award override while preserving the original folder-derived award.
@@ -247,7 +247,7 @@ Extend the review states so the UI can distinguish at least:
 - `DISCARDED`
 - existing foreign-page handling where applicable
 
-The original source path, folder-derived award, and folder-derived mode remain immutable evidence even after a manual correction.
+The original source path and folder-derived award remain immutable evidence. A mode read from the ZIP path remains immutable evidence; an award-only ZIP has no folder mode, so its roster-derived mode is recalculated after roster changes.
 
 ### Certificate changes
 
@@ -329,9 +329,10 @@ Supported layouts are:
 ```text
 online/{award}/*.pdf
 onsite/{award}/*.pdf
+{award}/*.pdf
 ```
 
-A ZIP may contain both roots or only one. It may also have one harmless outer wrapper directory:
+A ZIP uses either mode/award folders or award-only folders, never both layouts together. In the mode/award layout it may contain both roots or only one. Both layouts may have one harmless outer wrapper directory:
 
 ```text
 HKIMO/online/gold/file.pdf
@@ -347,22 +348,24 @@ online/gold/S2/file.pdf
 
 Award discovery follows the selected profile's exact path policy. It does not use the immediate parent directory blindly, and it does not search arbitrary ancestors until something resembles an award.
 
-Mac metadata files and other explicitly ignored platform artifacts remain ignored. A PDF may not sit outside the mode and award hierarchy.
+Mac metadata files and other explicitly ignored platform artifacts remain ignored. A PDF may not sit outside the selected hierarchy.
 
 Before splitting any page, the worker performs a full structural preflight. The whole ZIP is rejected without changing active data when:
 
 - no supported PDF exists
-- a PDF lacks an online/onsite ancestor in the supported position
 - a PDF lacks a recognized award folder
 - an award folder is not an exact alias in the selected program/round catalog
 - `PARTICIPATION` appears in a Final profile
 - the hierarchy is otherwise ambiguous
+- mode/award and award-only layouts are mixed in one ZIP
 
 Unknown awards stop the whole job. The system never guesses or silently skips them.
 
 ZIPs are uploaded directly to R2, downloaded by the worker to disk, and processed one contained PDF at a time. The worker must not load the whole ZIP or all contained PDFs into memory.
 
 Preflight reports the selected profile, modes found, file and page counts, award counts, unsupported file types, invalid paths, and unknown awards before split work begins.
+
+For award-only ZIPs (approved 2026-09-26), each page gets its mode from the active roster entry found by its printed candidate number. The source is recorded as `ROSTER` and recalculated if the roster changes. The printed name must agree before automatic matching; missing numbers, unknown numbers, and unreadable or mismatched names remain for admin review. A standalone `ONLINE`/`ONSITE` line or `Exam Mode: ...` line, when present, is checked against the roster. School differences are warnings. Folder-derived awards remain authoritative.
 
 ### 5. Match each certificate page
 
@@ -373,13 +376,13 @@ For each eligible page:
 3. Read the certificate/candidate number.
 4. Find the active roster entry by candidate number.
 5. Verify the certificate name against the roster name.
-6. Compare ZIP mode with roster mode.
+6. Compare ZIP mode with roster mode when the ZIP provides one; otherwise derive mode from the roster after identifying the entry, and compare any explicit mode printed on the page.
 7. Take the program-specific award code from the award folder/catalog.
 8. Create or update a certificate only after the checks pass.
 
 Candidate number is the primary key because it is guaranteed unique across online and onsite participants in a batch.
 
-If the number cannot be read, fallback matching may use normalized name plus exam mode only when that identifies exactly one roster entry. Multiple possible entries become `AMBIGUOUS`; the system does not choose one.
+If the number cannot be read in a mode/award ZIP, fallback matching may use normalized name plus the folder mode only when that identifies exactly one roster entry. Multiple possible entries become `AMBIGUOUS`; the system does not choose one. An award-only ZIP has no independent mode for this fallback, so a page without a readable number remains `UNMATCHED` for manual review.
 
 Per-page errors do not stop other valid pages:
 
@@ -423,7 +426,7 @@ Future Excel replacements preserve manual entries unless the admin explicitly me
 
 ### 8. Resolve mode mismatch
 
-The review UI shows certificate preview, candidate number, name, roster mode, ZIP mode, award, source ZIP, and source path.
+The review UI shows certificate preview, candidate number, name, roster mode, ZIP mode or mode source, any printed mode, award, source ZIP, and source path.
 
 The admin can:
 
@@ -539,7 +542,8 @@ All tests use synthetic fixtures. Real rosters and certificates must never enter
 
 - Combined, online-only, onsite-only, and one-wrapper ZIP layouts pass.
 - Profile-declared deeper folder layouts pass only for the programs that declare them.
-- Missing mode, missing award, loose PDF, and unknown award reject the whole ZIP before mutation.
+- Missing award, loose PDF, unknown award, and mixed layouts reject the whole ZIP before mutation.
+- Award-only ZIPs use roster mode after number and name checks; missing or mismatched evidence remains unresolved.
 - `PARTICIPATION` is accepted in Heat and rejected in Final.
 - `SPECIAL_AWARD` is accepted as supplemental in both rounds.
 - Program-specific labels remain distinct; `1ST_PRIZE` never becomes `GOLD`.
@@ -547,7 +551,7 @@ All tests use synthetic fixtures. Real rosters and certificates must never enter
 - Name mismatch and mode mismatch produce distinct states.
 - Heat stores `schoolOnPage`, keeps the roster school authoritative, and reports differences as warnings.
 - Final accepts `THAILAND`, skips explicit foreign countries, and sends missing country evidence to `NATIONALITY_UNVERIFIED`.
-- Unique name-plus-mode fallback works when candidate number is unreadable.
+- Unique name-plus-mode fallback works for mode/award ZIPs when candidate number is unreadable; award-only ZIPs hold those pages for manual review.
 - Ambiguous fallback never creates a certificate.
 - Multiple awards for one participant work; the same award cannot duplicate.
 - Append skips accepted certificates.

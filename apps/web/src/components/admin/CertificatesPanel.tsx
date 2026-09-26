@@ -12,7 +12,7 @@ import { UploadDropzone } from "./UploadDropzone";
 /**
  * ขั้นที่ 2: ZIP เกียรติบัตร — อัปได้หลายครั้ง แต่ละครั้งเติมเฉพาะที่ยังไม่มี
  *
- * โครงใน ZIP: online/<รางวัล>/*.pdf และ onsite/<รางวัล>/*.pdf (มีแบบเดียวก็ได้)
+ * โครงใน ZIP: online/onsite/<รางวัล>/*.pdf หรือ <รางวัล>/*.pdf
  * ระบบตรวจโครงสร้างทั้งไฟล์ก่อนแตะข้อมูล ผิดข้อเดียวคือไม่นำเข้าอะไรเลย และบอกปัญหาครบในครั้งเดียว
  */
 export function CertificatesPanel({
@@ -47,6 +47,7 @@ export function CertificatesPanel({
         <summary className="cursor-pointer font-medium">โครงโฟลเดอร์ที่รับ ({profileKey})</summary>
         <pre className="mt-2 overflow-x-auto rounded bg-card p-3 text-xs leading-relaxed">
           {[
+            "<รางวัล>/ไฟล์.pdf                         (ใช้โหมดจากรายชื่อ)",
             "online/<รางวัล>/ไฟล์.pdf",
             "onsite/<รางวัล>/ไฟล์.pdf",
             ...(levelSubfolder ? ["online/<รางวัล>/<ระดับชั้น>/ไฟล์.pdf   (รายการนี้มีโฟลเดอร์ระดับชั้นได้)"] : []),
@@ -54,7 +55,11 @@ export function CertificatesPanel({
         </pre>
         <p className="mt-2 text-ink-soft">
           มีโฟลเดอร์ครอบชั้นนอกได้ 1 ชั้น (เช่น <code>HKIMO/online/gold/…</code>) · ZIP เดียวมีทั้ง online และ
-          onsite หรือแบบเดียวก็ได้
+          onsite หรือแบบเดียวก็ได้ · อย่าปนสองโครงใน ZIP เดียวกัน
+        </p>
+        <p className="mt-2 text-ink-soft">
+          ถ้าแยกเฉพาะรางวัล ระบบใช้เลขบนใบหารายชื่อ ตรวจชื่อ แล้วใช้ Online/Onsite ตามรายชื่อ;
+          เลขหรือชื่อที่ยืนยันไม่ได้จะรอให้แอดมินตรวจ
         </p>
         <p className="mt-2 text-ink-soft">ชื่อโฟลเดอร์รางวัลที่รอบนี้รับ (ไม่สนตัวพิมพ์เล็ก-ใหญ่):</p>
         <ul className="mt-1 grid gap-1 sm:grid-cols-2">
@@ -106,6 +111,7 @@ const STAT_LABELS: [string, string][] = [
 function UploadCard({ upload, locked }: { upload: UploadRecord; locked: string | null }) {
   const preflight = (upload.progress.preflight ?? null) as Preflight | null;
   const stats = upload.progress;
+  const byMode = (stats.byMode ?? {}) as Record<string, number>;
   const running = upload.status === "QUEUED" || upload.status === "RUNNING";
   const title = upload.fileName ?? (upload.kind === "single" ? "PDF รายคน" : "ไฟล์ ZIP");
   const livePages = Object.entries(upload.pages).filter(([status]) => !["DISCARDED", "SUPERSEDED"].includes(status));
@@ -127,11 +133,18 @@ function UploadCard({ upload, locked }: { upload: UploadRecord; locked: string |
       {preflight && <PreflightSummary preflight={preflight} />}
 
       {upload.status === "DONE" && (
-        <p className="mt-1 text-ink-soft">
-          {STAT_LABELS.filter(([key]) => Number(stats[key]) > 0)
-            .map(([key, label]) => `${label} ${stats[key]}`)
-            .join(" · ") || "ไม่มีหน้าใหม่"}
-        </p>
+        <>
+          <p className="mt-1 text-ink-soft">
+            {STAT_LABELS.filter(([key]) => Number(stats[key]) > 0)
+              .map(([key, label]) => `${label} ${stats[key]}`)
+              .join(" · ") || "ไม่มีหน้าใหม่"}
+          </p>
+          {preflight?.layout === "AWARD_ONLY" && Object.keys(byMode).length > 0 && (
+            <p className="mt-1 text-ink-soft">
+              โหมดจากรายชื่อ: Online {byMode.ONLINE ?? 0} หน้า · Onsite {byMode.ONSITE ?? 0} หน้า
+            </p>
+          )}
+        </>
       )}
 
       {upload.status === "FAILED" && upload.error && (
@@ -158,21 +171,25 @@ function UploadCard({ upload, locked }: { upload: UploadRecord; locked: string |
 }
 
 type Preflight = {
+  layout?: "MODE_AWARD" | "AWARD_ONLY";
   files?: number;
   pages?: number;
   modes?: Record<string, { files: number; pages: number }>;
   awards?: Record<string, number>;
   unsupportedFiles?: string[];
   unsupportedCount?: number;
+  problemCounts?: Record<string, number>;
 };
 
 function PreflightSummary({ preflight }: { preflight: Preflight }) {
   const modes = Object.entries(preflight.modes ?? {});
+  const failed = Object.values(preflight.problemCounts ?? {}).some((count) => count > 0);
   return (
     <div className="mt-1 text-ink-soft">
       {preflight.files ? (
         <p>
-          ตรวจโครงสร้างผ่าน: {preflight.files} ไฟล์ {preflight.pages} หน้า
+          {failed ? "ตรวจโครงสร้างไม่ผ่าน" : "ตรวจโครงสร้างผ่าน"}: {preflight.files} ไฟล์ {preflight.pages} หน้า
+          {preflight.layout === "AWARD_ONLY" && " · โหมดอ้างจากรายชื่อ"}
           {modes.length > 0 && ` (${modes.map(([m, v]) => `${m === "ONLINE" ? "Online" : "Onsite"} ${v.pages} หน้า`).join(", ")})`}
           {preflight.awards &&
             ` · ${Object.entries(preflight.awards)

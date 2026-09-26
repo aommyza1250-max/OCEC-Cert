@@ -22,8 +22,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 import pymupdf
@@ -125,6 +126,7 @@ def _run_zip(
     log.info("ตรวจ ZIP ผ่าน: %s ไฟล์ %s หน้า", len(report.bundles), sum(b.pages for b in report.bundles))
 
     existing = ExistingState.load(batch["id"])
+    roster_modes = _load_roster_modes(batch["id"]) if report.layout == "AWARD_ONLY" else None
     stats = _new_stats("zip", payload)
     total = sum(b.pages for b in report.bundles)
 
@@ -132,7 +134,8 @@ def _run_zip(
         for bundle in stream:
             with pymupdf.open(stream=bundle.data, filetype="pdf") as doc:
                 for index in range(doc.page_count):
-                    _process_page(batch, profile, job_id, doc, index, bundle, existing, stats, "ZIP")
+                    _process_page(batch, profile, job_id, doc, index, bundle, existing, stats, "ZIP",
+                                  roster_modes=roster_modes)
                     read = stats["pagesRead"]
                     if read % 10 == 0 or read == total:
                         progress.update({"stage": "split", "done": read, "total": total})
@@ -174,12 +177,24 @@ def _process_page(
     stats: dict[str, Any],
     source_kind: str,
     confirm_nationality: bool = False,
+    roster_modes: dict[str, str] | None = None,
 ) -> str | None:
     """ประมวลผลหน้า 1 หน้า — คืน id ของหน้าที่บันทึกใหม่ หรือ None ถ้าข้าม"""
     stats["pagesRead"] += 1
     page = doc[index]
     text = page_text(page)
     parsed = profile.parse(text, batch["year"])
+    extra = dict(parsed.extra)
+    if roster_modes is not None:
+        # Award-only ZIP has no independent mode folder. Keep the provenance so rematch can
+        # rederive the mode after a roster replacement instead of trusting a stale snapshot.
+        extra["modeSource"] = "ROSTER"
+        modes_on_page = _printed_modes(text)
+        if len(modes_on_page) == 1:
+            extra["printedMode"] = next(iter(modes_on_page))
+        elif len(modes_on_page) > 1:
+            parsed = replace(parsed, errors=(*parsed.errors, "พบทั้ง ONLINE และ ONSITE บนหน้าเดียวกัน"))
+        bundle = replace(bundle, mode=roster_modes.get(parsed.candidate_no or ""))
     fingerprint = page_fingerprint(page, text)
 
     if (fingerprint, bundle.mode, bundle.award) in existing.recognized:
@@ -192,7 +207,6 @@ def _process_page(
     existing.recognized.add((fingerprint, bundle.mode, bundle.award))
 
     status, warnings, confirmed = _initial_status(profile, parsed, confirm_nationality)
-    extra = dict(parsed.extra)
     if bundle.level_folder:
         extra["folderLevel"] = bundle.level_folder
 
@@ -215,7 +229,8 @@ def _process_page(
         upload_bytes(prev_key, render_webp(page, cfg.preview_dpi, cfg.preview_quality), "image/webp")
         stats["pagesSplit"] += 1
         stats["byAward"][bundle.award] = stats["byAward"].get(bundle.award, 0) + 1
-        stats["byMode"][bundle.mode] = stats["byMode"].get(bundle.mode, 0) + 1
+        if bundle.mode:
+            stats["byMode"][bundle.mode] = stats["byMode"].get(bundle.mode, 0) + 1
         if status == "NATIONALITY_UNVERIFIED":
             stats["nationalityUnverified"] += 1
         elif status == "PARSE_REVIEW":
@@ -240,6 +255,24 @@ def _process_page(
     )
     stats["newPages"] += 1
     return page_id
+
+
+_MODE_LINE = re.compile(r"(?i)^(?:(?:EXAM\s*MODE|MODE)\s*[:：]?\s*)?(ONLINE|ONSITE)$")
+
+
+def _printed_modes(text: str) -> set[str]:
+    """Only accept an explicit mode line; a word inside a school name is not evidence."""
+    return {match.group(1).upper() for line in text.splitlines()
+            if (match := _MODE_LINE.fullmatch(line.strip()))}
+
+
+def _load_roster_modes(batch_id: str) -> dict[str, str]:
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT candidate_no, exam_mode::text AS exam_mode FROM roster_entries WHERE batch_id = %s",
+            (batch_id,),
+        ).fetchall()
+    return {row["candidate_no"]: row["exam_mode"] for row in rows}
 
 
 def _initial_status(
@@ -274,7 +307,7 @@ class ExistingState:
     max_page: int = 0
     stems: set[str] = field(default_factory=set)
     # (ลายนิ้วมือหน้า, online/onsite, รางวัลตามโฟลเดอร์) ของทุกหน้าที่เคยอัป
-    recognized: set[tuple[str, str, str]] = field(default_factory=set)
+    recognized: set[tuple[str, str | None, str]] = field(default_factory=set)
     # (เลขผู้เข้าสอบ, รางวัล) ที่ออกใบไปแล้ว — นับทั้งรางวัลตามโฟลเดอร์และรางวัลที่แอดมินเปลี่ยน
     accepted: set[tuple[str, str]] = field(default_factory=set)
 
@@ -298,7 +331,7 @@ class ExistingState:
         for row in rows:
             if row["pdf_key"]:
                 state.stems.add(row["pdf_key"].rsplit("/", 1)[-1].removesuffix(".pdf"))
-            if row["fingerprint"] and row["exam_mode"] and row["award"]:
+            if row["fingerprint"] and row["award"]:
                 state.recognized.add((row["fingerprint"], row["exam_mode"], row["award"]))
             if row["accepted"]:
                 numbers = {row["entry_no"], row["cert_no"]} - {None}
@@ -651,4 +684,3 @@ def _insert_page(
                 json.dumps(extra, ensure_ascii=False), fingerprint, nationality_confirmed,
             ),
         )
-

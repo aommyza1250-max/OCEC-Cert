@@ -64,6 +64,8 @@ class Page:
     name_normalized: str | None
     exam_mode: str | None
     award: str
+    mode_source: str = "ZIP"
+    printed_mode: str | None = None
     fingerprint: str | None = None
     manual_match: dict[str, Any] | None = None
     mode_confirmed_for: str | None = None
@@ -161,6 +163,9 @@ def _decide_one(
             )
 
     if entry is None:
+        if page.mode_source == "ROSTER":
+            return Decision("UNMATCHED", keep_manual=keep_manual,
+                            note=note_prefix + "ไฟล์แบบแยกตามรางวัลอ่านเลขผู้เข้าสอบไม่ได้ — ต้องผูกกับรายชื่อด้วยมือ")
         if not page.name_normalized:
             return Decision("UNMATCHED", keep_manual=keep_manual,
                             note=note_prefix + "อ่านทั้งเลขและชื่อจากหน้านี้ไม่ได้ — ต้องจับคู่ด้วยมือ")
@@ -186,6 +191,19 @@ def _decide_one(
             "NAME_MISMATCH", entry.id, how, keep_manual=keep_manual,
             note=note_prefix + f"เลข {page.cert_no} ตรงกับรายชื่อ แต่ชื่อบนหน้าไม่ตรงกับชื่อในรายชื่อ",
         )
+
+    if page.mode_source == "ROSTER" and how == "number" and not page.name_normalized:
+        return Decision("UNMATCHED", entry.id, how, keep_manual=keep_manual,
+                        note=note_prefix + "อ่านชื่อบนเกียรติบัตรไม่ได้ — ต้องยืนยันตัวผู้เข้าสอบด้วยมือ")
+
+    if page.mode_source == "ROSTER":
+        if page.printed_mode and page.printed_mode != entry.exam_mode \
+                and page.mode_confirmed_for != entry.exam_mode:
+            return Decision("MODE_MISMATCH", entry.id, how, keep_manual=keep_manual,
+                            note=note_prefix + f"บนใบระบุ {_mode_text(page.printed_mode)} "
+                            f"แต่รายชื่อระบุ {_mode_text(entry.exam_mode)}")
+        return Decision("MATCHED", entry.id, how, keep_manual=keep_manual,
+                        note=None if keep_manual else "จับคู่ใหม่หลังรายชื่อเปลี่ยน")
 
     mode_ok = page.exam_mode == entry.exam_mode or page.mode_confirmed_for == entry.exam_mode
     if not mode_ok:
@@ -394,10 +412,10 @@ def _load_pages(conn: Any, batch_id: str) -> tuple[list[Page], dict[str, dict[st
                COALESCE(award_override, award) AS award, fingerprint, manual_match,
                mode_confirmed_for::text AS mode_confirmed_for, school_on_page, level,
                match_status::text AS match_status, roster_entry_id::text, matched_student_id::text,
-               match_note, review, matched_manually, roster_award, pdf_key, preview_key
+               match_note, review, matched_manually, roster_award, pdf_key, preview_key, extra
         FROM staging_pages
         WHERE batch_id = %s AND match_status::text = ANY(%s)
-          AND exam_mode IS NOT NULL AND award IS NOT NULL
+          AND (exam_mode IS NOT NULL OR extra->>'modeSource' = 'ROSTER') AND award IS NOT NULL
         ORDER BY page_number
         """,
         (batch_id, list(EVALUABLE)),
@@ -407,6 +425,8 @@ def _load_pages(conn: Any, batch_id: str) -> tuple[list[Page], dict[str, dict[st
             id=r["id"], page_number=r["page_number"], cert_no=r["cert_no"],
             name_normalized=r["extracted_name_normalized"], exam_mode=r["exam_mode"],
             award=r["award"], fingerprint=r["fingerprint"], manual_match=r["manual_match"],
+            mode_source=(r["extra"] or {}).get("modeSource", "ZIP"),
+            printed_mode=(r["extra"] or {}).get("printedMode"),
             mode_confirmed_for=r["mode_confirmed_for"], school_on_page=r["school_on_page"],
             level=r["level"],
         )
@@ -479,20 +499,23 @@ def _apply(
             "review": decision.review,
             "matched_manually": bool(manual_match),
             "roster_award": entry.raw_award if entry else before["roster_award"],
+            "exam_mode": (entry.exam_mode if entry else None) if page.mode_source == "ROSTER" else before["exam_mode"],
         }
         if any(before[k] != v for k, v in after.items()) or manual_match != before["manual_match"]:
             conn.execute(
                 """
                 UPDATE staging_pages
                 SET match_status = %s, roster_entry_id = %s, matched_student_id = %s, match_note = %s,
-                    review = %s, matched_manually = %s, roster_award = %s, manual_match = %s
+                    review = %s, matched_manually = %s, roster_award = %s, manual_match = %s,
+                    exam_mode = %s
                 WHERE id = %s
                 """,
                 (
                     after["match_status"], after["roster_entry_id"], after["matched_student_id"],
                     after["match_note"], json.dumps(after["review"], ensure_ascii=False),
                     after["matched_manually"], after["roster_award"],
-                    json.dumps(manual_match, ensure_ascii=False) if manual_match else None, page.id,
+                    json.dumps(manual_match, ensure_ascii=False) if manual_match else None,
+                    after["exam_mode"], page.id,
                 ),
             )
             stats["pagesChanged"] += 1

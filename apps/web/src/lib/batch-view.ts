@@ -49,6 +49,8 @@ export type IssuePage = {
   certNo: string | null;
   level: string | null;
   zipMode: Mode | null;
+  modeSource: "ZIP" | "ROSTER";
+  printedMode: Mode | null;
   award: string;
   awardLabel: string;
   folderAward: string | null;
@@ -329,6 +331,10 @@ export async function loadIssues(batchId: string, programCode: string): Promise<
   return pages
     .map((p) => {
       const review = (p.review ?? {}) as Record<string, unknown>;
+      const extra = (p.extra ?? {}) as Record<string, unknown>;
+      const modeSource: IssuePage["modeSource"] = extra.modeSource === "ROSTER" ? "ROSTER" : "ZIP";
+      const printedMode: Mode | null = extra.printedMode === "ONLINE" || extra.printedMode === "ONSITE"
+        ? extra.printedMode : null;
       const effective = p.awardOverride ?? p.award ?? "";
       const acceptedPage =
         typeof review.acceptedPageId === "string" ? acceptedById.get(review.acceptedPageId) : undefined;
@@ -342,6 +348,8 @@ export async function loadIssues(batchId: string, programCode: string): Promise<
         certNo: p.certNo,
         level: p.level,
         zipMode: p.examMode,
+        modeSource,
+        printedMode,
         award: effective,
         awardLabel: awardDisplay(programCode, effective).label,
         folderAward: p.award,

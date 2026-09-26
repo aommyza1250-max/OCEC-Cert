@@ -55,9 +55,25 @@ def test_ครอบลึกเกินหนึ่งชั้นต้อ�
     assert "too_deep_wrapper" in problems({"A/B/online/Gold/a.pdf": PDF})
 
 
-def test_ไม่มีโฟลเดอร์_online_onsite_ต้องปฏิเสธ():
-    # โครงแบบเดิม gold/*.pdf ใช้ไม่ได้แล้ว — ต้องรู้ว่าไฟล์เป็นของผู้เข้าสอบแบบไหน
-    assert "no_mode" in problems({"Gold/a.pdf": PDF})
+def test_แยกตามรางวัลอย่างเดียวรับได้_และรายงานว่าต้องใช้โหมดจากรายชื่อ():
+    report = preflight_zip(make_zip({"Gold/a.pdf": PDF, "Silver/b.pdf": PDF2}), FINAL, 2026)
+    assert report.layout == "AWARD_ONLY"
+    assert report.to_dict()["modes"] == {}
+    assert [(b.mode, b.award) for b in report.bundles] == [(None, "GOLD"), (None, "SILVER")]
+
+
+def test_แยกตามรางวัลมีโฟลเดอร์ครอบได้():
+    report = preflight_zip(make_zip({"BBB/Gold/a.pdf": PDF, "BBB/Silver/b.pdf": PDF2}), FINAL, 2026)
+    assert report.wrapper == "BBB"
+    assert report.layout == "AWARD_ONLY"
+
+
+def test_ปนโครงแยกโหมดกับแยกรางวัลใน_zip_เดียวกันต้องปฏิเสธ():
+    assert "mixed_layout" in problems({"Gold/a.pdf": PDF, "online/Silver/b.pdf": PDF2})
+
+
+def test_โฟลเดอร์รางวัลที่ไม่รู้จักในโครงใหม่ต้องหยุดทั้งงาน():
+    assert "unknown_award" in problems({"Gold/a.pdf": PDF, "Platinum/b.pdf": PDF2})
 
 
 def test_PDF_ลอยอยู่นอกโครงต้องปฏิเสธ():
@@ -92,6 +108,9 @@ def test_โฟลเดอร์ระดับชั้นใต้ราง�
     hkiso_heat = get_profile("HKISO", "HEAT")
     report = preflight_zip(make_zip({"online/Gold/P3/a.pdf": HEAT_PDF, "online/Gold/b.pdf": HEAT_PDF}), hkiso_heat, 2026)
     assert sorted(b.level_folder or "" for b in report.bundles) == ["", "P3"]
+    award_only = preflight_zip(make_zip({"Gold/P3/a.pdf": HEAT_PDF}), hkiso_heat, 2026)
+    assert (award_only.layout, award_only.bundles[0].level_folder) == ("AWARD_ONLY", "P3")
+    assert "ambiguous_path" in problems({"Gold/Silver/a.pdf": HEAT_PDF}, hkiso_heat)
     # รายการที่ไม่ได้ประกาศไว้ ห้ามอ่านโฟลเดอร์ลึกกว่านั้น
     assert "too_deep" in problems({"online/Gold/P3/a.pdf": HEAT_PDF}, HEAT)
 
@@ -135,7 +154,7 @@ def test_ไฟล์ที่ไม่ใช่_ZIP():
 
 
 def test_รายงานปัญหาทุกข้อในครั้งเดียว():
-    found = problems({"Gold/a.pdf": PDF, "online/Platinum/b.pdf": PDF, "online/c.pdf": PDF})
+    found = problems({"loose.pdf": PDF, "online/Platinum/b.pdf": PDF, "online/c.pdf": PDF})
     assert {"no_mode", "unknown_award", "no_award"} <= found.keys()
 
 

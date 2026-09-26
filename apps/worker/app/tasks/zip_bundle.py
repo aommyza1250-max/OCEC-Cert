@@ -1,9 +1,10 @@
 """ตรวจโครงสร้าง ZIP เกียรติบัตรให้ครบก่อนลงมือ แล้วค่อยอ่าน PDF ออกมาทีละไฟล์
 
-โครงที่รองรับ (ZIP เดียวมีทั้งสองรูปแบบ หรือแบบเดียวก็ได้):
+โครงที่รองรับ (ZIP หนึ่งไฟล์เลือกโครงเดียว):
 
     online/<รางวัล>/*.pdf
     onsite/<รางวัล>/*.pdf
+    <รางวัล>/*.pdf       # โหมดของแต่ละหน้าอ้างจากรายชื่อด้วยเลขบนใบ
 
   - ครอบด้วยโฟลเดอร์ชั้นนอกได้ 1 ชั้น (การซิปโฟลเดอร์บนเครื่องมักได้ชั้นนี้ติดมา)
         HKIMO/online/gold/a.pdf
@@ -31,7 +32,7 @@ from typing import Any
 
 import pymupdf
 
-from ..certificate_profiles import CertificateProfile, folder_key
+from ..certificate_profiles import AwardCatalog, CertificateProfile, folder_key
 
 # ขยะที่ระบบปฏิบัติการแถมมากับ zip เสมอ — ข้ามเงียบ ๆ ได้เพราะไม่ใช่เกียรติบัตรแน่นอน
 IGNORED_PREFIXES = ("__MACOSX/",)
@@ -51,7 +52,7 @@ class Bundle:
     เพื่อไม่ให้ต้องอม PDF ทุกไฟล์ไว้ในหน่วยความจำพร้อมกัน
     """
 
-    mode: str
+    mode: str | None
     award: str
     award_label: str
     source_file: str
@@ -76,6 +77,7 @@ class Preflight:
     # ชื่อโฟลเดอร์รางวัลที่รอบนี้รับ — ใส่ไว้ในข้อความผิดพลาดให้แอดมินแก้ได้ทันที
     accepted_folders: list[str] = field(default_factory=list)
     bundles: list[Bundle] = field(default_factory=list)
+    layout: str | None = None
     wrapper: str | None = None
     unsupported: list[str] = field(default_factory=list)
     ignored: int = 0
@@ -88,12 +90,14 @@ class Preflight:
         by_mode: dict[str, dict[str, int]] = {}
         by_award: Counter[str] = Counter()
         for b in self.bundles:
-            mode = by_mode.setdefault(b.mode, {"files": 0, "pages": 0})
-            mode["files"] += 1
-            mode["pages"] += b.pages
+            if b.mode:
+                mode = by_mode.setdefault(b.mode, {"files": 0, "pages": 0})
+                mode["files"] += 1
+                mode["pages"] += b.pages
             by_award[b.award] += b.pages
         return {
             "profileKey": self.profile_key,
+            "layout": self.layout,
             "files": len(self.bundles),
             "pages": sum(b.pages for b in self.bundles),
             "modes": by_mode,
@@ -111,6 +115,8 @@ class Preflight:
 def _pages_by_mode_award(bundles: list[Bundle]) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = {}
     for b in bundles:
+        if not b.mode:
+            continue
         slot = out.setdefault(b.mode, {})
         slot[b.award] = slot.get(b.award, 0) + b.pages
     return out
@@ -130,6 +136,8 @@ PROBLEM_TEXT = {
     "unreadable": "ไฟล์ PDF ที่เปิดไม่ได้",
     "empty_pdf": "ไฟล์ PDF ที่ไม่มีหน้าเลย",
     "wrong_round": "ไฟล์ที่เป็นเกียรติบัตรของรอบหรือปีอื่น",
+    "mixed_layout": "มีทั้งไฟล์แบบแยก online/onsite และแบบแยกตามรางวัลอย่างเดียวใน ZIP เดียวกัน",
+    "ambiguous_path": "เส้นทางมีชื่อรางวัลสองชั้น จึงบอกไม่ได้ว่าชั้นไหนคือรางวัล",
 }
 
 
@@ -146,7 +154,7 @@ def preflight_zip(zip_source, profile: CertificateProfile, batch_year: int | Non
     )
     policy = profile.path_policy
     wrappers: set[str | None] = set()
-    located: list[tuple[str, str, str, str | None]] = []
+    located: list[tuple[str, str | None, str, str | None]] = []
 
     with _open_zip(zip_source) as zf:
         for info in zf.infolist():
@@ -160,7 +168,7 @@ def preflight_zip(zip_source, profile: CertificateProfile, batch_year: int | Non
                 report.unsupported.append(name)
                 continue
 
-            found = _locate(name, policy.level_subfolder)
+            found = _locate(name, policy.level_subfolder, catalog)
             if isinstance(found, str):
                 report.problem(found, name)
                 continue
@@ -179,6 +187,11 @@ def preflight_zip(zip_source, profile: CertificateProfile, batch_year: int | Non
                 continue
             located.append((name, mode, award.code, level_folder))
 
+        found_modes = {mode is not None for _, mode, _, _ in located}
+        if len(found_modes) > 1:
+            report.problem("mixed_layout", "แยกไฟล์เป็น ZIP คนละรูปแบบก่อนอัปโหลด")
+        if found_modes:
+            report.layout = "MODE_AWARD" if True in found_modes else "AWARD_ONLY"
         if len(wrappers) > 1:
             report.problem("many_wrappers", ", ".join(sorted(w or "(ไม่มี)" for w in wrappers)))
         report.wrapper = next(iter(wrappers)) if len(wrappers) == 1 else None
@@ -204,22 +217,36 @@ def preflight_zip(zip_source, profile: CertificateProfile, batch_year: int | Non
     if not report.bundles and not report.problems:
         report.problem("no_pdf", "(ว่าง)")
     report.problems = {k: sorted(set(v)) for k, v in report.problems.items()}
-    report.bundles.sort(key=lambda b: (b.mode, catalog.get(b.award).order, b.source_file))
+    report.bundles.sort(key=lambda b: (b.mode or "", catalog.get(b.award).order, b.source_file))
 
     if report.problems:
         raise ZipLayoutError(_describe(report), report.to_dict())
     return report
 
 
-def _locate(name: str, level_subfolder: bool) -> tuple[str | None, str, str, str | None] | str:
-    """หาตำแหน่งโฟลเดอร์ online/onsite และโฟลเดอร์รางวัลของไฟล์นี้
+def _locate(
+    name: str, level_subfolder: bool, catalog: AwardCatalog
+) -> tuple[str | None, str | None, str, str | None] | str:
+    """หาตำแหน่งโฟลเดอร์โหมด (ถ้ามี) และโฟลเดอร์รางวัลของไฟล์นี้
 
     คืน (โฟลเดอร์ครอบ, รูปแบบ, โฟลเดอร์รางวัล, โฟลเดอร์ระดับชั้น) หรือชนิดปัญหาเป็นข้อความ
     """
     dirs = list(PurePosixPath(name).parts[:-1])
     positions = [i for i, d in enumerate(dirs) if folder_key(d) in MODES]
     if not positions:
-        return "no_mode"
+        if len(dirs) == 1:
+            return None, None, dirs[0], None
+        if len(dirs) == 2:
+            if level_subfolder and catalog.resolve_folder(dirs[0]):
+                if catalog.resolve_folder(dirs[1]):
+                    return "ambiguous_path"
+                return None, None, dirs[0], dirs[1]
+            return dirs[0], None, dirs[1], None
+        if len(dirs) == 3 and level_subfolder:
+            if catalog.resolve_folder(dirs[0]) and catalog.resolve_folder(dirs[1]):
+                return "ambiguous_path"
+            return dirs[0], None, dirs[1], dirs[2]
+        return "no_mode" if not dirs else "too_deep"
     if len(positions) > 1:
         return "mode_twice"
     index = positions[0]
@@ -259,7 +286,7 @@ def _describe(report: Preflight) -> str:
     if {"unknown_award", "award_not_in_round"} & report.problems.keys():
         lines.append(f"(โฟลเดอร์รางวัลที่รอบนี้รับ: {', '.join(report.accepted_folders)})")
     if {"no_mode", "no_award", "too_deep", "too_deep_wrapper"} & report.problems.keys():
-        lines.append("(โครงที่รองรับ: online/<รางวัล>/ไฟล์.pdf และ onsite/<รางวัล>/ไฟล์.pdf)")
+        lines.append("(โครงที่รองรับ: online/<รางวัล>/ไฟล์.pdf, onsite/<รางวัล>/ไฟล์.pdf หรือ <รางวัล>/ไฟล์.pdf)")
     return "\n".join(lines)
 
 

@@ -107,6 +107,8 @@ function IssueCard({
           <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             <Row label="ชื่อบนหน้า" value={page.extractedName ?? "อ่านไม่ได้"} />
             <Row label="เลขบนหน้า" value={page.certNo ?? "อ่านไม่ได้"} />
+            {page.modeSource === "ROSTER" && <Row label="โหมดที่แสดง" value="อ้างจากรายชื่อ" />}
+            {page.printedMode && <Row label="โหมดที่พิมพ์บนใบ" value={page.printedMode} />}
             {page.level && <Row label="ระดับชั้นบนหน้า" value={page.level} />}
             {page.schoolOnPage && <Row label="โรงเรียนบนหน้า" value={page.schoolOnPage} />}
             {page.countryOnPage && <Row label="ประเทศบนหน้า" value={page.countryOnPage} />}

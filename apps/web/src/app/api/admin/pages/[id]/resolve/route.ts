@@ -89,10 +89,15 @@ const ACTIONS: { [K in z.infer<typeof schema>["action"]]: Action<Extract<z.infer
     requireStatus(page, ["MODE_MISMATCH"], "หน้านี้ไม่ได้ติดเรื่องรูปแบบการสอบ");
     const entry = page.rosterEntryId && (await tx.rosterEntry.findUnique({ where: { id: page.rosterEntryId } }));
     if (!entry) throw new HttpError(409, "ไม่พบผู้เข้าสอบที่หน้านี้ผูกอยู่ กรุณาโหลดหน้าใหม่");
+    if (page.certNo !== entry.candidateNo || !page.extractedNameNormalized ||
+        ![entry.nameEnNormalized, entry.nameThNormalized].includes(page.extractedNameNormalized)) {
+      throw new HttpError(409, "ต้องให้เลขและชื่อบนใบตรงกับรายชื่อก่อน จึงจะยืนยันใช้รูปแบบตามรายชื่อได้");
+    }
+    const extra = (page.extra as Record<string, unknown>) ?? {};
     await save(tx, page, { modeConfirmedFor: entry.examMode, modeConfirmedAt: new Date() });
     return {
       audit: "MODE_MISMATCH_CONFIRMED",
-      before: { zipMode: page.examMode },
+      before: extra.modeSource === "ROSTER" ? { printedMode: extra.printedMode } : { zipMode: page.examMode },
       after: { rosterMode: entry.examMode, candidateNo: entry.candidateNo },
     };
   },
