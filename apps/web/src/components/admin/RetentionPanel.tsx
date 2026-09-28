@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { formatThaiLongDate } from "@/lib/thai-date";
 
 /**
  * อายุการเก็บของรอบนำเข้านี้
@@ -48,7 +49,7 @@ export function RetentionPanel({
   }
 
   const date = expiresAt
-    ? new Date(expiresAt).toLocaleDateString("th-TH", { dateStyle: "long" })
+    ? formatThaiLongDate(expiresAt)
     : null;
 
   return (

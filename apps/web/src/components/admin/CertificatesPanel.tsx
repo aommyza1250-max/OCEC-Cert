@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import type { AwardDef } from "@/lib/certificate-catalog";
 import type { BatchView, UploadRecord } from "@/lib/batch-view";
+import { formatThaiDateTime } from "@/lib/thai-date";
 import { postJson } from "./client-api";
 import { pageStatusLabel } from "./StatusBadge";
 import { UploadDropzone } from "./UploadDropzone";
@@ -69,7 +70,7 @@ export function CertificatesPanel({
                   {zipRunning ? "อัปโหลดแล้ว" : latestZip.status === "DONE" ? "นำเข้าแล้ว" : "ไม่ได้นำเข้า"}
                 </span>
               </div>
-              <p className="mt-1 text-ink-soft">อัปโหลดเมื่อ {new Date(latestZip.createdAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</p>
+              <p className="mt-1 text-ink-soft">อัปโหลดเมื่อ {formatThaiDateTime(latestZip.createdAt)}</p>
               {latestZip.status === "FAILED" && latestZip.error && (
                 <p className={`mt-2 rounded-xl px-3 py-2 ${latestZip.userError ? "bg-warn-bg text-warn-ink" : "bg-danger-bg text-danger-ink"}`}>{latestZip.error}</p>
               )}
@@ -257,7 +258,7 @@ function UploadCard({ upload, locked }: { upload: UploadRecord; locked: string |
           {title}
         </span>
         <span className="text-ink-soft">
-          {new Date(upload.createdAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
+          {formatThaiDateTime(upload.createdAt)}
           {" · "}
           {running ? "กำลังประมวลผล" : upload.status === "DONE" ? "นำเข้าแล้ว" : "ไม่ได้นำเข้า"}
         </span>

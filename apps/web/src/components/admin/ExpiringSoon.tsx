@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { formatThaiLongDate } from "@/lib/thai-date";
 
 export type ExpiringGroup = {
   batchId: string;
@@ -50,7 +51,7 @@ export function ExpiringSoon({ groups }: { groups: ExpiringGroup[] }) {
             </Link>{" "}
             <span className="text-ink-soft">
               {group.count} ใบ · ครบวันที่{" "}
-              {new Date(group.expiresAt).toLocaleDateString("th-TH", { dateStyle: "long" })}
+              {formatThaiLongDate(group.expiresAt)}
             </span>
           </li>
         ))}

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { AUDIT_LABELS } from "@/lib/audit";
 import { visibleAuditChanges } from "@/lib/audit-display";
+import { formatThaiDateTime } from "@/lib/thai-date";
 
 export type AuditRow = {
   id: string;
@@ -34,7 +35,7 @@ export function AuditTrail({
                 {event.subject && <p className="text-ink-soft">{event.subject}</p>}
               </div>
               <time className="text-ink-soft" dateTime={event.createdAt}>
-                {new Date(event.createdAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" })}
+                {formatThaiDateTime(event.createdAt)}
               </time>
             </div>
             {changes.length > 0 && (

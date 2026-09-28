@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { formatThaiDateTime } from "@/lib/thai-date";
 
 /**
  * สถานะไฟล์ต้นฉบับ (ZIP) ของรอบนำเข้านี้
@@ -52,7 +53,7 @@ export function SourcesPanel({
     return (
       <p className={compact ? "border-t border-hairline pt-3 text-sm text-ink-soft" : "rounded-2xl border border-hairline bg-card px-4 py-3 text-sm text-ink-soft"}>
         ไฟล์ต้นฉบับถูกเคลียร์แล้วเมื่อ{" "}
-        {new Date(clearedAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}{" "}
+        {formatThaiDateTime(clearedAt)}{" "}
         — เก็บไฟล์รายชื่อ (Excel) ไว้ ส่วนเกียรติบัตรและรูปตัวอย่างอยู่ครบเหมือนเดิม
       </p>
     );
