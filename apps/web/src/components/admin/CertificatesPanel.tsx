@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { AwardDef } from "@/lib/certificate-catalog";
 import type { BatchView, UploadRecord } from "@/lib/batch-view";
 import { postJson } from "./client-api";
@@ -23,7 +23,6 @@ export function CertificatesPanel({
   activeJob,
   hasRoster,
   locked,
-  children,
   footer,
 }: {
   batchId: string;
@@ -34,9 +33,10 @@ export function CertificatesPanel({
   activeJob: NonNullable<BatchView>["activeJob"];
   hasRoster: boolean;
   locked: string | null;
-  children?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const helpDialog = useRef<HTMLDialogElement>(null);
+  const helpTitleId = useId();
   const disabledReason = locked ?? (hasRoster ? null : "ต้องใช้รายชื่อผู้เข้าสอบก่อน จึงจะอัปเกียรติบัตรได้");
   const latestZip = uploads.find((upload) => upload.kind === "zip");
   const zipJob = activeJob?.type === "SPLIT" && uploads[0]?.kind === "zip" ? activeJob : null;
@@ -51,9 +51,12 @@ export function CertificatesPanel({
           <h2 className="text-xl font-semibold">ขั้นที่ 2 · อัปโหลด ZIP เกียรติบัตร</h2>
           <p className="mt-1 text-sm text-ink-soft">ระบบตรวจโครงสร้าง ZIP ก่อน แล้วแยกหน้าและจับคู่กับรายชื่อ</p>
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${zipRunning ? "border-brand-line bg-brand-soft text-brand" : "border-hairline bg-paper text-ink-soft"}`}>
-          {zipRunning ? "กำลังประมวลผล" : latestZip?.status === "DONE" ? "นำเข้าแล้ว" : latestZip?.status === "FAILED" ? "ตรวจไฟล์อีกครั้ง" : "รอไฟล์ ZIP"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${zipRunning ? "border-brand-line bg-brand-soft text-brand" : "border-hairline bg-paper text-ink-soft"}`}>
+            {zipRunning ? "กำลังประมวลผล" : latestZip?.status === "DONE" ? "นำเข้าแล้ว" : latestZip?.status === "FAILED" ? "ตรวจไฟล์อีกครั้ง" : "รอไฟล์ ZIP"}
+          </span>
+          <button type="button" aria-label="ดูโครงโฟลเดอร์ ZIP ที่รับ" title="โครงโฟลเดอร์ ZIP ที่รับ" onClick={() => helpDialog.current?.showModal()} className="flex size-11 cursor-pointer items-center justify-center rounded-full border border-hairline bg-card text-lg font-semibold text-brand transition duration-200 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">?</button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
@@ -103,10 +106,11 @@ export function CertificatesPanel({
         <ProcessingTimeline latestZip={latestZip} activeJob={timelineJob} preflight={preflight} />
       )}
 
-      {children && <div className="mt-6 border-t border-hairline pt-5">{children}</div>}
-
-      <details className="mt-5 rounded-xl bg-paper p-4 text-sm">
-        <summary className="cursor-pointer font-medium">โครงโฟลเดอร์ที่รับ ({profileKey})</summary>
+      <dialog ref={helpDialog} aria-labelledby={helpTitleId} className="m-auto max-h-[min(80vh,48rem)] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-hairline bg-card p-5 text-sm text-ink shadow-2xl backdrop:bg-black/50 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <h2 id={helpTitleId} className="text-lg font-semibold">โครงโฟลเดอร์ที่รับ ({profileKey})</h2>
+          <button type="button" aria-label="ปิดคำแนะนำโครงโฟลเดอร์" onClick={() => helpDialog.current?.close()} className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-hairline text-xl text-ink-soft transition hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">×</button>
+        </div>
         <pre className="mt-2 overflow-x-auto rounded bg-card p-3 text-xs leading-relaxed">
           {[
             "<รางวัล>/ไฟล์.pdf                         (ใช้โหมดจากรายชื่อ)",
@@ -133,18 +137,19 @@ export function CertificatesPanel({
             </li>
           ))}
         </ul>
-      </details>
+      </dialog>
 
-      {uploads.length > 0 && (
-        <details className="mt-5 rounded-xl border border-hairline p-4">
-          <summary className="cursor-pointer text-sm font-semibold">ประวัติการอัป ({uploads.length} ครั้ง)</summary>
-          <ul className="space-y-3">
+      <section className="mt-6 border-t border-hairline pt-5" aria-label="จัดการข้อมูล">
+        <h3 className="text-lg font-semibold">จัดการข้อมูล</h3>
+        <p className="mt-1 text-sm text-ink-soft">ประวัติการอัป ({uploads.length} ครั้ง)</p>
+        {uploads.length > 0 ? (
+          <ul className="mt-3 space-y-3">
             {uploads.map((upload) => (
               <UploadCard key={upload.jobId} upload={upload} locked={locked} />
             ))}
           </ul>
-        </details>
-      )}
+        ) : <p className="mt-3 rounded-xl bg-paper px-4 py-3 text-sm text-ink-soft">ยังไม่มีประวัติการอัป</p>}
+      </section>
       {footer && <div className="mt-5 border-t border-hairline pt-5">{footer}</div>}
     </section>
   );

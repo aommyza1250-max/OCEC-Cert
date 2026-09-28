@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { BatchView, IssuePage, MissingItem } from "@/lib/batch-view";
-import type { AwardDef } from "@/lib/certificate-catalog";
+import type { BatchView } from "@/lib/batch-view";
 import { CertificatesPanel } from "./CertificatesPanel";
 import { DangerZone } from "./DangerZone";
 import { IssueList } from "./IssueList";
@@ -13,7 +12,7 @@ import { PublishPanel } from "./PublishPanel";
 import { RosterPanel } from "./RosterPanel";
 import { RetentionPanel } from "./RetentionPanel";
 import { SourcesPanel } from "./SourcesPanel";
-import { StatusBadge, pageStatusLabel } from "./StatusBadge";
+import { StatusBadge } from "./StatusBadge";
 
 /** ชื่อขั้นตอนที่แอดมินเข้าใจ — แยกให้ชัดว่ากำลังทำอะไรอยู่ ไม่ใช่ "กำลังประมวลผล" ลอย ๆ */
 const STAGE_LABEL: Record<string, string> = {
@@ -37,7 +36,7 @@ type RetentionInfo = { expiresAt: string | null; deletedFiles: number };
 
 /**
  * หน้ารอบนำเข้าแบ่งเป็น 3 ขั้นเพื่อให้อ่านง่าย แต่คง component และ action เดิมไว้:
- *   1. รายชื่อ  2. ZIP / จับคู่ / แก้รายการ  3. ภาพรวมและจัดการรอบ
+ *   1. รายชื่อ  2. ZIP / จับคู่ / ประวัติการอัป  3. ภาพรวมและจัดการรอบ
  */
 export function BatchWorkflow({
   view,
@@ -59,6 +58,7 @@ export function BatchWorkflow({
   const running = view.processing || draftBusy || batch.status === "DELETING";
   const hasRoster = Boolean(roster.active);
   const [activeStep, setActiveStep] = useState<IntakeStep>(() => (published ? 3 : hasRoster ? 2 : 1));
+  const [reviewPanel, setReviewPanel] = useState<"issues" | "missing" | null>(null);
 
   // ระหว่าง worker ทำงานให้รีเฟรชหน้าเองทุก 3 วินาที แอดมินจะได้ไม่ต้องกด F5
   // รีเฟรชเฉพาะตอนที่แท็บเปิดอยู่จริง — ยิงรัวขณะสลับไปแอปอื่นบนเน็ตมือถือมีแต่จะล้มเป็นชุด
@@ -195,31 +195,8 @@ export function BatchWorkflow({
               activeJob={view.activeJob}
               hasRoster={hasRoster}
               locked={locked}
-              footer={
-                <div>
-                  <StepNavigation
-                    backLabel="← กลับไปขั้นรายชื่อ"
-                    onBack={() => setActiveStep(1)}
-                    label={view.issues.length + view.missing.length > 0 ? "ข้ามไปหน้าภาพรวม →" : "ไปภาพรวมรอบนี้ →"}
-                    onClick={() => setActiveStep(3)}
-                  />
-                  {view.issues.length + view.missing.length > 0 && (
-                    <p className="mt-2 text-right text-xs text-ink-soft">รายการที่ยังค้างจะแสดงในภาพรวมรอบนี้</p>
-                  )}
-                </div>
-              }
-            >
-              {hasRoster && (view.uploads.some((upload) => upload.status === "DONE") || view.activeJob?.type === "SPLIT") && (
-                <DecisionPreview
-                  batchId={batch.id}
-                  issues={view.issues}
-                  missing={view.missing}
-                  catalog={view.catalog}
-                  locked={editLocked}
-                  processing={view.processing}
-                />
-              )}
-            </CertificatesPanel>
+              footer={<StepNavigation backLabel="← กลับไปขั้นรายชื่อ" onBack={() => setActiveStep(1)} label="ไปภาพรวมรอบนี้ →" onClick={() => setActiveStep(3)} />}
+            />
           </section>
 
           <section id="intake-step-3" aria-label="ขั้นที่ 3 ภาพรวมรอบนี้" hidden={activeStep !== 3} className="rounded-[18px] border border-hairline bg-card p-5 shadow-sm sm:p-6">
@@ -257,11 +234,23 @@ export function BatchWorkflow({
                 ) : (
                   <div className="mt-3 space-y-3">
                     {view.issues.length > 0 && (
-                      <OverviewAction title="หน้าเกียรติบัตรที่ต้องตัดสิน" count={`${formatCount(view.issues.length)} หน้า`} hint="ตรวจชื่อและเลขผู้เข้าสอบก่อนยืนยันการจับคู่" actionLabel="เปิดรายการตรวจ" onClick={() => setActiveStep(2)} />
+                      <OverviewAction title="หน้าเกียรติบัตรที่ต้องตัดสิน" count={`${formatCount(view.issues.length)} หน้า`} hint="ตรวจชื่อและเลขผู้เข้าสอบก่อนยืนยันการจับคู่" actionLabel="เปิดรายการตรวจ" onClick={() => setReviewPanel("issues")} />
                     )}
                     {view.missing.length > 0 && (
-                      <OverviewAction title="ผู้เข้าสอบยังไม่มีเกียรติบัตร" count={`${formatCount(view.missing.length)} คน`} hint="เลือกรางวัลและเพิ่ม PDF หรือปล่อยค้างไว้ก่อน" actionLabel="ดูผู้เข้าสอบที่ขาดไฟล์" onClick={() => setActiveStep(2)} />
+                      <OverviewAction title="ผู้เข้าสอบยังไม่มีเกียรติบัตร" count={`${formatCount(view.missing.length)} คน`} hint="เลือกรางวัลและเพิ่ม PDF หรือปล่อยค้างไว้ก่อน" actionLabel="ดูผู้เข้าสอบที่ขาดไฟล์" onClick={() => setReviewPanel("missing")} />
                     )}
+                  </div>
+                )}
+                {!view.processing && reviewPanel === "issues" && view.issues.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-hairline p-4" aria-label="รายการหน้าเกียรติบัตรที่ต้องตัดสิน">
+                    <button type="button" onClick={() => setReviewPanel(null)} className="mb-4 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-brand">← ปิดรายการตรวจ</button>
+                    <IssueList batchId={batch.id} issues={view.issues} catalog={view.catalog} locked={editLocked} />
+                  </div>
+                )}
+                {!view.processing && reviewPanel === "missing" && view.missing.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-hairline p-4" aria-label="ผู้เข้าสอบที่ขาดไฟล์เกียรติบัตร">
+                    <button type="button" onClick={() => setReviewPanel(null)} className="mb-4 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-brand">← ปิดรายการผู้เข้าสอบ</button>
+                    <MissingList batchId={batch.id} items={view.missing} catalog={view.catalog} locked={editLocked} />
                   </div>
                 )}
                 <p className="mt-4 text-sm text-ink-soft">เผยแพร่ได้เฉพาะผู้เข้าสอบที่ข้อมูลครบ ส่วนรายการค้างจะยังไม่เผยแพร่</p>
@@ -381,69 +370,6 @@ function StepNavigation({
         </button>
       )}
     </div>
-  );
-}
-
-function DecisionPreview({ batchId, issues, missing, catalog, locked, processing }: {
-  batchId: string;
-  issues: IssuePage[];
-  missing: MissingItem[];
-  catalog: AwardDef[];
-  locked: string | null;
-  processing: boolean;
-}) {
-  const [selected, setSelected] = useState<{ kind: "issue" | "missing"; id: string } | null>(null);
-  const [showAll, setShowAll] = useState(false);
-  const selectedIssue = selected?.kind === "issue" ? issues.find((item) => item.id === selected.id) : null;
-  const selectedMissing = selected?.kind === "missing" ? missing.find((item) => item.id === selected.id) : null;
-  const preview = [
-    ...issues.slice(0, 2).map((item) => ({ kind: "issue" as const, id: item.id, title: pageStatusLabel(item.status), detail: `เลข ${item.entry?.candidateNo ?? item.certNo ?? "—"} · หน้า ${item.pageNumber} · ${item.awardLabel}`, action: "แก้รายการนี้" })),
-    ...missing.slice(0, 2).map((item) => ({ kind: "missing" as const, id: item.id, title: "มีชื่อในรายชื่อ แต่ยังไม่มีไฟล์เกียรติบัตร", detail: `เลข ${item.candidateNo} · ${item.examMode === "ONLINE" ? "Online" : "Onsite"} · ${item.name}`, action: "เพิ่มไฟล์ PDF" })),
-  ];
-  const pending = issues.length + missing.length;
-
-  return (
-    <section aria-label="รายการหลังจับคู่">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="font-semibold">รายการหลังจับคู่เสร็จ</h3>
-          <p className="mt-1 text-sm text-ink-soft">รายการที่ยังไม่แก้จะอยู่ในภาพรวมรอบนี้</p>
-        </div>
-        {!processing && pending > 0 && (
-          <span className="rounded-full border border-warn-line bg-warn-bg px-3 py-1 text-xs font-semibold text-warn-ink">ค้าง {formatCount(pending)} รายการ</span>
-        )}
-      </div>
-      {processing ? <div className="mt-3"><WaitNotice /></div> : pending === 0 ? (
-        <p className="mt-3 rounded-xl border border-hairline bg-paper px-4 py-3 text-sm text-ink-soft">ไม่มีรายการที่ต้องตัดสิน</p>
-      ) : selectedIssue || selectedMissing || showAll ? (
-        <div className="mt-4 space-y-4">
-        <button type="button" onClick={() => { setSelected(null); setShowAll(false); }} className="min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 transition duration-200 hover:text-brand-dark">← กลับไปดูรายการย่อ</button>
-          {(selectedIssue || showAll && issues.length > 0) && <IssueList batchId={batchId} issues={selectedIssue ? [selectedIssue] : issues} catalog={catalog} locked={locked} />}
-          {(selectedMissing || showAll && missing.length > 0) && <MissingList batchId={batchId} items={selectedMissing ? [selectedMissing] : missing} catalog={catalog} locked={locked} />}
-        </div>
-      ) : (
-        <>
-          <ul className="mt-3 space-y-2">
-            {preview.map((item) => (
-              <li key={`${item.kind}-${item.id}`} className="flex flex-col gap-3 rounded-xl border border-warn-line bg-warn-bg/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 text-sm">
-                  <strong className="block">{item.title}</strong>
-                  <span className="mt-0.5 block text-ink-soft">{item.detail}</span>
-                </div>
-                <button type="button" onClick={() => setSelected({ kind: item.kind, id: item.id })} className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-brand-line bg-card px-3 text-sm font-semibold text-brand transition duration-200 hover:bg-brand-soft">
-                  {item.action}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {pending > preview.length && (
-            <button type="button" onClick={() => setShowAll(true)} className="mt-3 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 transition duration-200 hover:text-brand-dark">
-              ดูรายการทั้งหมด {formatCount(pending)} รายการ
-            </button>
-          )}
-        </>
-      )}
-    </section>
   );
 }
 
