@@ -43,7 +43,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
         <p className="flex flex-wrap items-center gap-2">
           <StatusBadge status={batch.status} />
           <span>{batch.programName}</span>
-          <span>· สร้างเมื่อ {new Date(batch.createdAt).toLocaleDateString("th-TH")}</span>
+          <span>· สร้างเมื่อ {new Date(batch.createdAt).toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok" })}</span>
         </p>
       </div>
 
