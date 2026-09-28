@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { RosterConflict, RosterDraft } from "@/lib/batch-view";
 import { postJson } from "./client-api";
+import { useConfirmDialog, type ConfirmAction } from "./ConfirmDialog";
 import { UploadDropzone } from "./UploadDropzone";
 
 type Totals = { total: number; online: number; onsite: number; excel: number; manual: number };
@@ -28,18 +29,19 @@ export function RosterPanel({
   /** ข้อความเมื่อแก้ไม่ได้ (เผยแพร่อยู่ / ระบบเดิม) — null = แก้ได้ */
   locked: string | null;
 }) {
+  const { confirm, dialog } = useConfirmDialog();
+
   return (
     <section className="rounded-xl border border-hairline bg-card p-5">
+      {dialog}
       <StepHeader
-        step={1}
-        done={hasRoster}
         title="รายชื่อผู้เข้าสอบ"
         description="ไฟล์ Excel เดียวที่มีทั้งผู้เข้าสอบ online และ onsite — ต้องใช้รายชื่อก่อนจึงจะอัปเกียรติบัตรได้"
       />
 
       {hasRoster && <RosterTotals totals={totals} conflicts={draft?.conflicts.length ?? 0} />}
 
-      {draft && <DraftCard batchId={batchId} draft={draft} locked={locked} />}
+      {draft && <DraftCard batchId={batchId} draft={draft} locked={locked} confirm={confirm} />}
 
       <div className="mt-4">
         <UploadDropzone
@@ -61,29 +63,16 @@ export function RosterPanel({
 }
 
 export function StepHeader({
-  step,
-  done,
   title,
   description,
 }: {
-  step: number;
-  done: boolean;
   title: string;
   description: string;
 }) {
   return (
-    <div className="mb-3 flex items-start gap-3">
-      <span
-        className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-          done ? "bg-ok-ink text-white" : "bg-hairline text-ink-soft"
-        }`}
-      >
-        {done ? "✓" : step}
-      </span>
-      <div>
-        <h2 className="font-semibold">{title}</h2>
-        <p className="text-sm text-ink-soft">{description}</p>
-      </div>
+    <div className="mb-3">
+      <h2 className="font-semibold">{title}</h2>
+      <p className="text-sm text-ink-soft">{description}</p>
     </div>
   );
 }
@@ -113,7 +102,17 @@ function RosterTotals({ totals, conflicts }: { totals: Totals; conflicts: number
   );
 }
 
-function DraftCard({ batchId, draft, locked }: { batchId: string; draft: RosterDraft; locked: string | null }) {
+function DraftCard({
+  batchId,
+  draft,
+  locked,
+  confirm,
+}: {
+  batchId: string;
+  draft: RosterDraft;
+  locked: string | null;
+  confirm: ConfirmAction;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,8 +192,13 @@ function DraftCard({ batchId, draft, locked }: { batchId: string; draft: RosterD
         <button
           type="button"
           disabled={busy || unresolved > 0 || Boolean(locked)}
-          onClick={() => {
-            if (!confirm("ใช้รายชื่อชุดนี้แทนชุดเดิม? ระบบจะจับคู่เกียรติบัตรใหม่ทั้งรอบ")) return;
+          onClick={async () => {
+            if (
+              !(await confirm("ใช้รายชื่อชุดนี้แทนชุดเดิม? ระบบจะจับคู่เกียรติบัตรใหม่ทั้งรอบ", {
+                title: "ยืนยันการใช้รายชื่อ",
+                confirmLabel: "ใช้รายชื่อชุดนี้",
+              }))
+            ) return;
             call("activate", {
               importId: draft.id,
               resolutions: Object.entries(decisions).map(([conflictId, r]) => ({ conflictId, ...r })),

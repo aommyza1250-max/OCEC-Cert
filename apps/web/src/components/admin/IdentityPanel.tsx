@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { postJson } from "./client-api";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 export type StudentCandidate = {
   id: string;
@@ -35,9 +36,10 @@ export function IdentityPanel({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   async function call(path: string, body: object, confirmText: string) {
-    if (!confirm(confirmText)) return;
+    if (!(await confirm(confirmText))) return;
     setBusy(true);
     setError(null);
     const result = await postJson(`/api/admin/participants/${entryId}/${path}`, { version, ...body });
@@ -50,6 +52,7 @@ export function IdentityPanel({
 
   return (
     <section className="space-y-3 rounded-xl border border-hairline bg-card p-4 text-sm">
+      {dialog}
       <h2 className="font-semibold">ตัวคน (ที่ผู้ปกครองค้นเจอ)</h2>
       {linked ? (
         <>

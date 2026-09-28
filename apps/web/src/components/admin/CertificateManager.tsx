@@ -6,6 +6,7 @@ import type { AwardDef } from "@/lib/certificate-catalog";
 import { postJson, uploadFile, waitForJob } from "./client-api";
 import { Preview, Secondary } from "./IssueList";
 import { ModeBadge, PageStatusBadge } from "./StatusBadge";
+import { useConfirmDialog, type ConfirmAction } from "./ConfirmDialog";
 
 export type ParticipantPage = {
   id: string;
@@ -45,14 +46,16 @@ export function CertificateManager({
   const certificates = pages.filter((p) => p.hasCertificate);
   const others = pages.filter((p) => !p.hasCertificate);
   const taken = new Set(certificates.map((p) => p.award));
+  const { confirm, dialog } = useConfirmDialog();
 
   return (
     <section className="space-y-3 rounded-xl border border-hairline bg-card p-4 text-sm">
+      {dialog}
       <h2 className="font-semibold">เกียรติบัตร ({certificates.length} ใบ)</h2>
       {certificates.length === 0 && <p className="text-warn-ink">ยังไม่มีเกียรติบัตรที่ผ่านการตรวจ</p>}
       <ul className="space-y-3">
         {certificates.map((page) => (
-          <PageCard key={page.id} batchId={batchId} entryId={entryId} page={page} catalog={catalog} taken={taken} locked={locked} />
+          <PageCard key={page.id} batchId={batchId} entryId={entryId} page={page} catalog={catalog} taken={taken} locked={locked} confirm={confirm} />
         ))}
       </ul>
 
@@ -63,7 +66,7 @@ export function CertificateManager({
           <summary className="cursor-pointer font-medium">หน้าอื่นของคนนี้ ({others.length}) — ติดปัญหา ถูกทิ้ง หรือถูกแทนแล้ว</summary>
           <ul className="mt-3 space-y-3">
             {others.map((page) => (
-              <PageCard key={page.id} batchId={batchId} entryId={entryId} page={page} catalog={catalog} taken={taken} locked={locked} />
+            <PageCard key={page.id} batchId={batchId} entryId={entryId} page={page} catalog={catalog} taken={taken} locked={locked} confirm={confirm} />
             ))}
           </ul>
         </details>
@@ -79,6 +82,7 @@ function PageCard({
   catalog,
   taken,
   locked,
+  confirm,
 }: {
   batchId: string;
   entryId: string;
@@ -86,6 +90,7 @@ function PageCard({
   catalog: AwardDef[];
   taken: Set<string>;
   locked: string | null;
+  confirm: ConfirmAction;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -93,7 +98,13 @@ function PageCard({
   const [award, setAward] = useState("");
 
   async function resolve(body: Record<string, unknown>, confirmText?: string) {
-    if (confirmText && !confirm(confirmText)) return;
+    if (
+      confirmText &&
+      !(await confirm(
+        confirmText,
+        body.action === "DISCARD" ? { confirmLabel: "ทิ้ง", tone: "danger" } : undefined,
+      ))
+    ) return;
     setBusy(true);
     setError(null);
     const result = await postJson(`/api/admin/pages/${page.id}/resolve`, { version: page.version, ...body });

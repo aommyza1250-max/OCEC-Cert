@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Field } from "./AddParticipantForm";
 import { postJson } from "./client-api";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 export type EditableEntry = {
   id: string;
@@ -37,6 +38,7 @@ export function ParticipantEditor({ entry, locked }: { entry: EditableEntry; loc
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<number | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -58,7 +60,12 @@ export function ParticipantEditor({ entry, locked }: { entry: EditableEntry; loc
   }
 
   async function remove() {
-    if (!confirm(`ลบผู้เข้าสอบเลข ${entry.candidateNo} ออกจากรายชื่อ? หน้าที่ผูกกับคนนี้จะกลับไปรอจับคู่ใหม่`)) return;
+    if (
+      !(await confirm(
+        `ลบผู้เข้าสอบเลข ${entry.candidateNo} ออกจากรายชื่อ? หน้าที่ผูกกับคนนี้จะกลับไปรอจับคู่ใหม่`,
+        { title: "ยืนยันการลบผู้เข้าสอบ", confirmLabel: "ลบผู้เข้าสอบ", tone: "danger" },
+      ))
+    ) return;
     setBusy(true);
     const result = await postJson(`/api/admin/participants/${entry.id}`, { version: entry.version }, "DELETE");
     setBusy(false);
@@ -82,6 +89,7 @@ export function ParticipantEditor({ entry, locked }: { entry: EditableEntry; loc
       }}
       className="space-y-3 rounded-xl border border-hairline bg-card p-4"
     >
+      {dialog}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-semibold">ข้อมูลการสอบ</h2>
         <span className="text-sm text-ink-soft">

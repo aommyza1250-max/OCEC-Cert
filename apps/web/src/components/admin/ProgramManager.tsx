@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 export type Program = {
   id: string;
@@ -60,6 +61,7 @@ function ProgramRow({ program }: { program: Program }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
   async function send(method: "PATCH" | "DELETE", body?: object) {
     setBusy(true);
@@ -76,6 +78,7 @@ function ProgramRow({ program }: { program: Program }) {
 
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
+      {dialog}
       <code
         className={`rounded px-2 py-1 text-sm font-bold ${
           program.active ? "bg-brand-soft text-brand" : "bg-paper text-ink-soft"
@@ -98,8 +101,16 @@ function ProgramRow({ program }: { program: Program }) {
 
       {program.examCount === 0 && (
         <button
-          onClick={() => {
-            if (confirm(`ลบรายการสอบ ${program.code} ?`)) send("DELETE");
+          onClick={async () => {
+            if (
+              await confirm(`ลบรายการสอบ ${program.code} ?`, {
+                title: "ยืนยันการลบรายการสอบ",
+                confirmLabel: "ลบรายการสอบ",
+                tone: "danger",
+              })
+            ) {
+              await send("DELETE");
+            }
           }}
           disabled={busy}
           className="rounded border border-danger-line px-2.5 py-1 text-xs text-danger-ink transition hover:bg-danger-bg disabled:opacity-40"
