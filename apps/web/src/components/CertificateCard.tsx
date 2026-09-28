@@ -1,4 +1,4 @@
-import { ROUND_LABELS } from "@/lib/normalize";
+import { publicAwardLabel, publicRoundLabel } from "@/lib/public-labels";
 import type { CertificateItem } from "@/lib/search";
 import { AwardBadge } from "./AwardBadge";
 import { ImageIcon, PdfIcon } from "./icons";
@@ -19,7 +19,7 @@ export function CertificateCard({
   programCode: string;
   studentName: string;
 }) {
-  const roundLabel = ROUND_LABELS[cert.round] ?? cert.round;
+  const roundLabel = publicRoundLabel(cert.round);
 
   return (
     <div className="flex flex-col gap-2.5 rounded-2xl border border-hairline bg-card p-2.5 shadow-sm sm:gap-3 sm:p-3">
@@ -35,7 +35,7 @@ export function CertificateCard({
       )}
 
       <div className="flex-1 px-1">
-        <AwardBadge label={cert.awardLabel} labelTh={cert.awardLabelTh} badge={cert.badge} />
+        <AwardBadge label={publicAwardLabel(cert.award, cert.awardLabel)} badge={cert.badge} />
         {/* ระดับชั้นกับเลขที่ใบอยู่บรรทัดเดียวกันบนมือถือ ลดจำนวนบรรทัดต่อการ์ด
             เพราะหน้าผลลัพธ์อาจมีหลายใบเรียงกันยาว */}
         <p className="mt-1.5 text-sm text-ink-soft sm:mt-2 sm:text-base">
