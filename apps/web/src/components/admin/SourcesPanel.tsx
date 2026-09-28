@@ -52,9 +52,8 @@ export function SourcesPanel({
   if (clearedAt) {
     return (
       <p className={compact ? "border-t border-hairline pt-3 text-sm text-ink-soft" : "rounded-2xl border border-hairline bg-card px-4 py-3 text-sm text-ink-soft"}>
-        ไฟล์ต้นฉบับถูกเคลียร์แล้วเมื่อ{" "}
+        ไฟล์ ZIP ต้นฉบับถูกลบเมื่อ{" "}
         {formatThaiDateTime(clearedAt)}{" "}
-        — เก็บไฟล์รายชื่อ (Excel) ไว้ ส่วนเกียรติบัตรและรูปตัวอย่างอยู่ครบเหมือนเดิม
       </p>
     );
   }

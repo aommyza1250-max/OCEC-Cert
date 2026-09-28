@@ -23,15 +23,7 @@ export function ProgramManager({ programs }: { programs: Program[] }) {
     <section className="rounded-2xl border border-hairline bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="font-semibold">รายการสอบ ({programs.length})</h2>
-          <p className="text-sm text-ink-soft">
-            รหัสที่ตั้งไว้จะไปอยู่ในชื่อไฟล์ เช่น{" "}
-            <code className="rounded bg-paper px-1.5 py-0.5 text-xs">
-              SOMCHAI_JAIDEE_{programs[0]?.code ?? "HKIMO"}_FINAL_GOLD_2026.pdf
-            </code>
-            <br />
-            รายการสอบเดียวจัดได้ทั้งรอบ Heat และ Final — เลือกรอบตอนสร้างรอบนำเข้า
-          </p>
+          <h2 className="font-semibold">รายการสอบทั้งหมด ({programs.length})</h2>
         </div>
         <button
           onClick={() => setOpen((v) => !v)}
@@ -80,9 +72,8 @@ function ProgramRow({ program }: { program: Program }) {
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
       {dialog}
       <code
-        className={`rounded px-2 py-1 text-sm font-bold ${
-          program.active ? "bg-brand-soft text-brand" : "bg-paper text-ink-soft"
-        }`}
+        className={`rounded px-2 py-1 text-sm font-bold ${program.active ? "bg-brand-soft text-brand" : "bg-paper text-ink-soft"
+          }`}
       >
         {program.code}
       </code>
