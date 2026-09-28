@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import type { RosterConflict, RosterDraft } from "@/lib/batch-view";
+import type { BatchView, RosterConflict, RosterDraft } from "@/lib/batch-view";
 import { postJson } from "./client-api";
 import { useConfirmDialog, type ConfirmAction } from "./ConfirmDialog";
 import { UploadDropzone } from "./UploadDropzone";
@@ -18,81 +18,89 @@ type Totals = { total: number; online: number; onsite: number; excel: number; ma
 export function RosterPanel({
   batchId,
   hasRoster,
+  activeRoster,
   totals,
   draft,
   locked,
+  footer,
 }: {
   batchId: string;
   hasRoster: boolean;
+  activeRoster: NonNullable<BatchView>["roster"]["active"];
   totals: Totals;
   draft: RosterDraft | null;
   /** ข้อความเมื่อแก้ไม่ได้ (เผยแพร่อยู่ / ระบบเดิม) — null = แก้ได้ */
   locked: string | null;
+  footer?: React.ReactNode;
 }) {
   const { confirm, dialog } = useConfirmDialog();
 
   return (
-    <section className="rounded-xl border border-hairline bg-card p-5">
+    <section className="rounded-[18px] border border-hairline bg-card p-5 shadow-sm sm:p-6">
       {dialog}
-      <StepHeader
-        title="รายชื่อผู้เข้าสอบ"
-        description="ไฟล์ Excel เดียวที่มีทั้งผู้เข้าสอบ online และ onsite — ต้องใช้รายชื่อก่อนจึงจะอัปเกียรติบัตรได้"
-      />
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">ขั้นที่ 1 · อัปโหลดไฟล์รายชื่อ</h2>
+          <p className="mt-1 text-sm text-ink-soft">รอระบบตรวจไฟล์และสรุปยอด ก่อนกดใช้รายชื่อชุดนี้</p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${hasRoster ? "border-hairline bg-paper text-ink-soft" : "border-brand-line bg-brand-soft text-brand"}`}>
+          {hasRoster ? "ใช้รายชื่อแล้ว" : draft?.status === "READY" ? "รอกดใช้รายชื่อ" : draft?.status === "INVALID" ? "ไฟล์ใช้ไม่ได้" : draft ? "กำลังตรวจรายชื่อ" : "รอไฟล์รายชื่อ"}
+        </span>
+      </div>
 
-      {hasRoster && <RosterTotals totals={totals} conflicts={draft?.conflicts.length ?? 0} />}
-
-      {draft && <DraftCard batchId={batchId} draft={draft} locked={locked} confirm={confirm} />}
-
-      <div className="mt-4">
+      <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
         <UploadDropzone
           batchId={batchId}
           kind="roster"
           accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
-          label={hasRoster ? "อัปไฟล์รายชื่อชุดใหม่ (.xlsx)" : "เลือกไฟล์รายชื่อ (.xlsx)"}
+          label={hasRoster ? "เปลี่ยนไฟล์รายชื่อ" : "เลือกไฟล์รายชื่อ"}
+          helperText="รองรับ .xlsx · ต้องมี Candidate No, Candidate Name และ Exam Mode"
           disabled={Boolean(locked)}
           disabledReason={locked ?? undefined}
         />
-        <p className="mt-2 text-sm text-ink-soft">
-          ต้องมีคอลัมน์ <b>CANDIDATE NO</b>, <b>CANDIDATE NAME</b> และ <b>EXAM MODE</b> (ONLINE หรือ ONSITE)
-          · มี GRADE, AWARD, SCHOOL เพิ่มได้ · เลขผู้เข้าสอบห้ามซ้ำกันทั้งไฟล์
-          {hasRoster && " · รายการที่เพิ่มเองจะอยู่ต่อหลังอัปชุดใหม่"}
-        </p>
+        <div className="min-w-0 rounded-2xl border border-hairline p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <strong className="min-w-0 break-all text-sm">{activeRoster?.fileName ?? "ยังไม่มีรายชื่อที่ใช้งาน"}</strong>
+            <span className="rounded-full border border-hairline bg-paper px-2.5 py-1 text-xs text-ink-soft">
+              {hasRoster ? "ใช้แล้ว" : "รอใช้"}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-ink-soft">ผลตรวจรายชื่อชุดปัจจุบัน</p>
+          {hasRoster ? (
+            <RosterTotals totals={totals} conflicts={draft?.conflicts.length ?? 0} />
+          ) : (
+            <p className="mt-4 rounded-xl bg-paper px-4 py-5 text-sm text-ink-soft">ยอดทั้งหมด Online และ Onsite จะแสดงที่นี่หลังตรวจและใช้รายชื่อ</p>
+          )}
+        </div>
       </div>
-    </section>
-  );
-}
 
-export function StepHeader({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="mb-3">
-      <h2 className="font-semibold">{title}</h2>
-      <p className="text-sm text-ink-soft">{description}</p>
-    </div>
+      {draft && <DraftCard batchId={batchId} draft={draft} locked={locked} confirm={confirm} />}
+      <p className="mt-4 text-sm text-ink-soft">
+        เลขผู้เข้าสอบห้ามซ้ำกันทั้งไฟล์ · มี GRADE, AWARD, SCHOOL เพิ่มได้
+        {hasRoster && " · รายการที่เพิ่มเองจะอยู่ต่อหลังอัปชุดใหม่"}
+      </p>
+      {footer && <div className="mt-5 border-t border-hairline pt-5">{footer}</div>}
+    </section>
   );
 }
 
 function RosterTotals({ totals, conflicts }: { totals: Totals; conflicts: number }) {
   const items = [
-    { label: "ผู้เข้าสอบทั้งหมด", value: totals.total },
+    { label: "ทั้งหมด", value: totals.total, primary: true },
     { label: "Online", value: totals.online },
     { label: "Onsite", value: totals.onsite },
-    { label: "จาก Excel", value: totals.excel },
-    { label: "เพิ่มเอง", value: totals.manual },
   ];
   return (
-    <dl className="grid grid-cols-2 gap-3 rounded-lg bg-paper p-4 sm:grid-cols-5">
+    <dl className="mt-4 grid grid-cols-3 gap-2">
       {items.map((item) => (
-        <div key={item.label}>
-          <dt className="text-sm text-ink-soft">{item.label}</dt>
-          <dd className="text-xl font-semibold tabular-nums">{item.value}</dd>
+        <div key={item.label} className={`rounded-xl p-3 ${item.primary ? "bg-brand-soft" : "bg-paper"}`}>
+          <dt className="text-xs text-ink-soft">{item.label}</dt>
+          <dd className={`mt-1 whitespace-nowrap text-lg font-semibold tabular-nums sm:text-2xl ${item.primary ? "text-brand" : "text-ink"}`}>
+            {item.value.toLocaleString("en-US")} <small className="text-xs font-medium">คน</small>
+          </dd>
         </div>
       ))}
+      <p className="col-span-full text-xs text-ink-soft">จาก Excel {totals.excel.toLocaleString("en-US")} · เพิ่มเอง {totals.manual.toLocaleString("en-US")} คน</p>
       {conflicts > 0 && (
         <p className="col-span-full text-sm text-warn-ink">
           ร่างรายชื่อที่รอใช้มีรายการที่ชนกับผู้เข้าสอบที่เพิ่มเอง {conflicts} รายการ — ต้องตัดสินก่อนกดใช้

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { BatchView } from "@/lib/batch-view";
+import type { BatchView, IssuePage, MissingItem } from "@/lib/batch-view";
+import type { AwardDef } from "@/lib/certificate-catalog";
 import { CertificatesPanel } from "./CertificatesPanel";
 import { DangerZone } from "./DangerZone";
 import { IssueList } from "./IssueList";
@@ -12,6 +13,7 @@ import { PublishPanel } from "./PublishPanel";
 import { RosterPanel } from "./RosterPanel";
 import { RetentionPanel } from "./RetentionPanel";
 import { SourcesPanel } from "./SourcesPanel";
+import { StatusBadge, pageStatusLabel } from "./StatusBadge";
 
 /** ชื่อขั้นตอนที่แอดมินเข้าใจ — แยกให้ชัดว่ากำลังทำอะไรอยู่ ไม่ใช่ "กำลังประมวลผล" ลอย ๆ */
 const STAGE_LABEL: Record<string, string> = {
@@ -56,7 +58,7 @@ export function BatchWorkflow({
   const draftBusy = roster.draft?.status === "PENDING" || roster.draft?.status === "ACTIVATING";
   const running = view.processing || draftBusy || batch.status === "DELETING";
   const hasRoster = Boolean(roster.active);
-  const [activeStep, setActiveStep] = useState<IntakeStep>(() => (hasRoster ? 2 : 1));
+  const [activeStep, setActiveStep] = useState<IntakeStep>(() => (published ? 3 : hasRoster ? 2 : 1));
 
   // ระหว่าง worker ทำงานให้รีเฟรชหน้าเองทุก 3 วินาที แอดมินจะได้ไม่ต้องกด F5
   // รีเฟรชเฉพาะตอนที่แท็บเปิดอยู่จริง — ยิงรัวขณะสลับไปแอปอื่นบนเน็ตมือถือมีแต่จะล้มเป็นชุด
@@ -74,23 +76,27 @@ export function BatchWorkflow({
       ? "เผยแพร่อยู่ — ยกเลิกการเผยแพร่ก่อนจึงจะแก้ไขได้"
       : null;
   const editLocked = locked ?? (view.processing ? "รอให้ระบบประมวลผลเสร็จก่อน" : null);
+  const timelineShowsActiveJob = activeStep === 2 && (
+    view.activeJob?.type === "MATCH" && view.uploads.some((upload) => upload.kind === "zip") ||
+    view.activeJob?.type === "SPLIT" && view.uploads[0]?.kind === "zip"
+  );
   const steps = [
     {
       id: 1 as const,
-      title: "รายชื่อผู้เข้าสอบ",
-      detail: hasRoster ? `${formatCount(roster.totals.total)} คน` : "อัปโหลดและตรวจรายชื่อ",
+      title: "1 · รายชื่อ",
+      detail: hasRoster ? `ตรวจแล้ว ${formatCount(roster.totals.total)} คน` : "อัปโหลดและตรวจรายชื่อ",
       done: hasRoster,
     },
     {
       id: 2 as const,
-      title: "ZIP และจับคู่",
-      detail: "อัปโหลด · แยกหน้า · ตรวจรายการ",
+      title: "2 · เกียรติบัตร",
+      detail: "อัป ZIP และจับคู่",
       done: view.uploads.some((upload) => upload.status === "DONE"),
     },
     {
       id: 3 as const,
-      title: "ภาพรวมรอบนี้",
-      detail: "ตรวจยอดและจัดการรอบ",
+      title: "3 · ภาพรวมรอบนี้",
+      detail: "รายการค้างและเผยแพร่",
       done: published,
     },
   ];
@@ -111,7 +117,9 @@ export function BatchWorkflow({
         </p>
       )}
 
-      {running && <ProgressBanner job={view.activeJob} />}
+      {running && !timelineShowsActiveJob && (
+        <ProgressBanner job={view.activeJob} />
+      )}
       {view.systemFailure && !running && (
         <div className="rounded-xl border border-danger-line bg-danger-bg px-5 py-4 text-sm text-danger-ink">
           <p className="font-medium">ประมวลผลล้มเหลว</p>
@@ -132,7 +140,7 @@ export function BatchWorkflow({
         />
       ) : (
         <>
-          <nav aria-label="ขั้นตอนนำเข้า" className="grid gap-2 sm:grid-cols-3">
+          <nav aria-label="ขั้นตอนนำเข้า" className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             {steps.map((step) => {
               const current = activeStep === step.id;
               return (
@@ -142,9 +150,9 @@ export function BatchWorkflow({
                   aria-controls={`intake-step-${step.id}`}
                   aria-current={current ? "step" : undefined}
                   onClick={() => setActiveStep(step.id)}
-                  className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                  className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
                     current
-                      ? "border-brand bg-brand-soft text-brand"
+                      ? "border-2 border-brand bg-brand-soft text-brand"
                       : "border-hairline bg-card text-ink-soft hover:border-brand-line hover:text-ink"
                   }`}
                 >
@@ -153,7 +161,7 @@ export function BatchWorkflow({
                       current ? "bg-brand text-white" : "bg-paper text-ink-soft"
                     }`}
                   >
-                    {step.done ? "✓" : step.id}
+                    {current ? step.id : step.done ? "✓" : step.id}
                   </span>
                   <span className="min-w-0">
                     <span className="block font-semibold">{step.title}</span>
@@ -165,153 +173,122 @@ export function BatchWorkflow({
           </nav>
           <p className="-mt-4 text-xs text-ink-soft">เลือกขั้นตอนได้ตลอดเพื่อย้อนดูหรือไปต่อ — การเปลี่ยนหน้าไม่เริ่มประมวลผลซ้ำ</p>
 
-          <section id="intake-step-1" aria-label="ขั้นที่ 1 รายชื่อผู้เข้าสอบ" hidden={activeStep !== 1} className="space-y-4">
+          <section id="intake-step-1" aria-label="ขั้นที่ 1 รายชื่อผู้เข้าสอบ" hidden={activeStep !== 1}>
             <RosterPanel
               batchId={batch.id}
               hasRoster={hasRoster}
+              activeRoster={roster.active}
               totals={roster.totals}
               draft={roster.draft}
               locked={locked}
+              footer={<StepNavigation label="ไปอัปโหลด ZIP →" onClick={() => setActiveStep(2)} />}
             />
-            <StepNavigation label="ไปขั้น ZIP และจับคู่ →" onClick={() => setActiveStep(2)} />
           </section>
 
-          <section id="intake-step-2" aria-label="ขั้นที่ 2 ZIP และจับคู่" hidden={activeStep !== 2} className="space-y-6">
+          <section id="intake-step-2" aria-label="ขั้นที่ 2 ZIP และจับคู่" hidden={activeStep !== 2}>
             <CertificatesPanel
               batchId={batch.id}
               profileKey={batch.profileKey}
               catalog={view.catalog}
               levelSubfolder={levelSubfolder}
               uploads={view.uploads}
+              activeJob={view.activeJob}
               hasRoster={hasRoster}
               locked={locked}
-            />
-
-            {hasRoster && (
-              <>
-                <section>
-                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                    <h2 className="font-semibold">หน้าที่ต้องตัดสิน</h2>
-                    <Link
-                      href={`/admin/batches/${batch.id}/participants`}
-                      className="text-sm text-brand underline underline-offset-2"
-                    >
-                      ค้นหาและแก้ไขผู้เข้าสอบ →
-                    </Link>
-                  </div>
-                  {view.processing ? <WaitNotice /> : <IssueList batchId={batch.id} issues={view.issues} catalog={view.catalog} locked={editLocked} />}
-                </section>
-
-                <section>
-                  <h2 className="mb-2 font-semibold">ผู้เข้าสอบที่ยังไม่มีเกียรติบัตร</h2>
-                  {view.processing ? <WaitNotice /> : <MissingList batchId={batch.id} items={view.missing} catalog={view.catalog} locked={editLocked} />}
-                </section>
-              </>
-            )}
-
-            <StepNavigation
-              backLabel="← กลับไปขั้นรายชื่อ"
-              onBack={() => setActiveStep(1)}
-              label="ไปภาพรวมรอบนี้ →"
-              onClick={() => setActiveStep(3)}
-            />
+              footer={
+                <div>
+                  <StepNavigation
+                    backLabel="← กลับไปขั้นรายชื่อ"
+                    onBack={() => setActiveStep(1)}
+                    label={view.issues.length + view.missing.length > 0 ? "ข้ามไปหน้าภาพรวม →" : "ไปภาพรวมรอบนี้ →"}
+                    onClick={() => setActiveStep(3)}
+                  />
+                  {view.issues.length + view.missing.length > 0 && (
+                    <p className="mt-2 text-right text-xs text-ink-soft">รายการที่ยังค้างจะแสดงในภาพรวมรอบนี้</p>
+                  )}
+                </div>
+              }
+            >
+              {hasRoster && (view.uploads.some((upload) => upload.status === "DONE") || view.activeJob?.type === "SPLIT") && (
+                <DecisionPreview
+                  batchId={batch.id}
+                  issues={view.issues}
+                  missing={view.missing}
+                  catalog={view.catalog}
+                  locked={editLocked}
+                  processing={view.processing}
+                />
+              )}
+            </CertificatesPanel>
           </section>
 
-          <section id="intake-step-3" aria-label="ขั้นที่ 3 ภาพรวมรอบนี้" hidden={activeStep !== 3} className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <OverviewMetric
-                label="ผู้เข้าสอบทั้งหมด"
-                value={`${formatCount(roster.totals.total)} คน`}
-                detail={`Online ${formatCount(roster.totals.online)} · Onsite ${formatCount(roster.totals.onsite)}`}
-              />
-              <OverviewMetric
-                label="หน้าที่ต้องตัดสิน"
-                value={view.processing ? "กำลังประมวลผล" : `${formatCount(view.issues.length)} หน้า`}
-                detail={view.processing ? "ผลจะอัปเดตหลังงานเสร็จ" : "รายการที่ยังจับคู่หรือยืนยันไม่ได้"}
-              />
-              <OverviewMetric
-                label="ผู้เข้าสอบที่ยังไม่มีเกียรติบัตร"
-                value={view.processing ? "กำลังประมวลผล" : `${formatCount(view.missing.length)} คน`}
-                detail={view.processing ? "ผลจะอัปเดตหลังงานเสร็จ" : "ตรวจและเพิ่มไฟล์ได้ในขั้น ZIP"}
-              />
+          <section id="intake-step-3" aria-label="ขั้นที่ 3 ภาพรวมรอบนี้" hidden={activeStep !== 3} className="rounded-[18px] border border-hairline bg-card p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold">ภาพรวมรอบนี้</h2>
+                <p className="mt-1 text-sm text-ink-soft">
+                  {batch.programCode} · {batch.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ"} · {batch.year} · สรุปยอด รายการค้าง และการเผยแพร่ไว้หน้าเดียว
+                </p>
+              </div>
+              <StatusBadge status={batch.status} />
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
-              <div className="space-y-5">
-                {hasRoster && (
-                  <PublishPanel
-                    batchId={batch.id}
-                    published={published}
-                    legacy={false}
-                    processing={view.processing}
-                    policy={batch.multiAwardPolicy}
-                    needsDecision={view.publish.needsDecision}
-                    summary={view.publish.summary}
-                    certificateCount={view.publish.certificateCount}
-                    publishedCount={view.publish.publishedCount}
-                  />
-                )}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OverviewMetric tone="brand" label="ผู้เข้าสอบทั้งหมด" value={`${formatCount(roster.totals.total)} คน`} detail={`Online ${formatCount(roster.totals.online)} · Onsite ${formatCount(roster.totals.onsite)}`} />
+              <OverviewMetric tone="ok" label="เกียรติบัตรพร้อมเผยแพร่" value={view.processing ? "กำลังตรวจ" : `${formatCount(view.publish.summary.toPublish.certificates)} ใบ`} />
+              <OverviewMetric tone="warn" label="รอแอดมินตัดสิน" value={view.processing ? "กำลังตรวจ" : `${formatCount(view.issues.length + view.missing.length)} รายการ`} detail={view.processing ? "ผลจะอัปเดตหลังงานเสร็จ" : `หน้าเกียรติบัตร ${formatCount(view.issues.length)} · ผู้เข้าสอบขาดไฟล์ ${formatCount(view.missing.length)}`} />
+              <OverviewMetric label="เกียรติบัตรที่เผยแพร่แล้ว" value={`${formatCount(view.publish.publishedCount)} ใบ`} />
+            </div>
 
-                <section className="rounded-2xl border border-hairline bg-card p-5">
-                  <h2 className="font-semibold">รายการที่ต้องจัดการ</h2>
-                  {view.processing ? (
-                    <div className="mt-3"><WaitNotice /></div>
-                  ) : view.issues.length === 0 && view.missing.length === 0 ? (
-                    <p className="mt-3 rounded-xl border border-hairline bg-paper px-4 py-3 text-sm text-ink-soft">
-                      ไม่มีรายการค้างในตอนนี้
-                    </p>
-                  ) : (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {view.issues.length > 0 && (
-                        <OverviewAction
-                          title="หน้าที่ต้องตัดสิน"
-                          count={`${formatCount(view.issues.length)} หน้า`}
-                          hint="กลับไปดูข้อมูลบนใบและเลือกวิธีจับคู่"
-                          onClick={() => setActiveStep(2)}
-                        />
-                      )}
-                      {view.missing.length > 0 && (
-                        <OverviewAction
-                          title="ผู้เข้าสอบที่ยังไม่มีไฟล์"
-                          count={`${formatCount(view.missing.length)} คน`}
-                          hint="กลับไปเพิ่ม PDF หรือจัดการรายการที่ขาด"
-                          onClick={() => setActiveStep(2)}
-                        />
-                      )}
-                    </div>
+            <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+              <section>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-lg font-semibold">รายการที่ต้องจัดการ</h3>
+                  {!view.processing && view.issues.length + view.missing.length > 0 && (
+                    <span className="rounded-full border border-warn-line bg-warn-bg px-3 py-1 text-xs font-semibold text-warn-ink">
+                      {formatCount(view.issues.length + view.missing.length)} ค้าง
+                    </span>
                   )}
-                </section>
-              </div>
+                </div>
+                {view.processing ? (
+                  <div className="mt-3"><WaitNotice /></div>
+                ) : view.issues.length === 0 && view.missing.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-hairline bg-paper px-4 py-3 text-sm text-ink-soft">ไม่มีรายการค้างในตอนนี้</p>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {view.issues.length > 0 && (
+                      <OverviewAction title="หน้าเกียรติบัตรที่ต้องตัดสิน" count={`${formatCount(view.issues.length)} หน้า`} hint="ตรวจชื่อและเลขผู้เข้าสอบก่อนยืนยันการจับคู่" actionLabel="เปิดรายการตรวจ" onClick={() => setActiveStep(2)} />
+                    )}
+                    {view.missing.length > 0 && (
+                      <OverviewAction title="ผู้เข้าสอบยังไม่มีเกียรติบัตร" count={`${formatCount(view.missing.length)} คน`} hint="เลือกรางวัลและเพิ่ม PDF หรือปล่อยค้างไว้ก่อน" actionLabel="ดูผู้เข้าสอบที่ขาดไฟล์" onClick={() => setActiveStep(2)} />
+                    )}
+                  </div>
+                )}
+                <p className="mt-4 text-sm text-ink-soft">เผยแพร่ได้เฉพาะผู้เข้าสอบที่ข้อมูลครบ ส่วนรายการค้างจะยังไม่เผยแพร่</p>
+              </section>
 
-              <aside className="space-y-4">
-                <section className="rounded-2xl border border-hairline bg-card p-5">
-                  <h2 className="font-semibold">ไปยังหน้าอื่น</h2>
+              <aside className="space-y-3">
+                <section className="rounded-2xl border border-hairline p-4">
+                  <h3 className="mb-3 text-lg font-semibold">จัดการรอบนี้</h3>
+                  <div className="space-y-3">
+                    {hasRoster && (
+                      <PublishPanel batchId={batch.id} published={published} legacy={false} processing={view.processing} policy={batch.multiAwardPolicy} needsDecision={view.publish.needsDecision} summary={view.publish.summary} certificateCount={view.publish.certificateCount} publishedCount={view.publish.publishedCount} compact />
+                    )}
+                    <RetentionPanel batchId={batch.id} expiresAt={retention.expiresAt} certificates={view.publish.certificateCount} deletedFiles={retention.deletedFiles} compact />
+                    <SourcesPanel batchId={batch.id} clearedAt={batch.sourcesClearedAt} blockers={blockers} compact />
+                    <DangerZone batchId={batch.id} confirmPhrase={deleteInfo.confirmPhrase} published={published} counts={deleteInfo.counts} siblingBatches={deleteInfo.siblingBatches} compact />
+                  </div>
+                </section>
+                <section className="rounded-2xl border border-hairline p-4">
+                  <h3 className="text-lg font-semibold">ไปยังหน้าอื่น</h3>
                   <OverviewLinks batchId={batch.id} />
-                </section>
-                <section className="space-y-2 rounded-2xl border border-hairline bg-card p-5">
-                  <h2 className="font-semibold">อายุการเก็บ</h2>
-                  <RetentionPanel
-                    batchId={batch.id}
-                    expiresAt={retention.expiresAt}
-                    certificates={view.publish.certificateCount}
-                    deletedFiles={retention.deletedFiles}
-                  />
-                </section>
-                <section className="space-y-2 rounded-2xl border border-hairline bg-card p-5">
-                  <h2 className="font-semibold">ไฟล์ต้นฉบับ</h2>
-                  <SourcesPanel batchId={batch.id} clearedAt={batch.sourcesClearedAt} blockers={blockers} />
                 </section>
               </aside>
             </div>
-
-            <DangerZone
-              batchId={batch.id}
-              confirmPhrase={deleteInfo.confirmPhrase}
-              published={published}
-              counts={deleteInfo.counts}
-              siblingBatches={deleteInfo.siblingBatches}
-            />
-            <StepNavigation backLabel="← กลับไปขั้น ZIP และจับคู่" onBack={() => setActiveStep(2)} />
+            <div className="mt-5 border-t border-hairline pt-5">
+              <StepNavigation backLabel="← กลับไปขั้นอัปโหลด ZIP" onBack={() => setActiveStep(2)} />
+              <p className="mt-2 text-xs text-ink-soft">ย้อนดูได้โดยไม่เปลี่ยนสถานะการเผยแพร่</p>
+            </div>
           </section>
         </>
       )}
@@ -407,12 +384,76 @@ function StepNavigation({
   );
 }
 
-function OverviewMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+function DecisionPreview({ batchId, issues, missing, catalog, locked, processing }: {
+  batchId: string;
+  issues: IssuePage[];
+  missing: MissingItem[];
+  catalog: AwardDef[];
+  locked: string | null;
+  processing: boolean;
+}) {
+  const [selected, setSelected] = useState<{ kind: "issue" | "missing"; id: string } | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const selectedIssue = selected?.kind === "issue" ? issues.find((item) => item.id === selected.id) : null;
+  const selectedMissing = selected?.kind === "missing" ? missing.find((item) => item.id === selected.id) : null;
+  const preview = [
+    ...issues.slice(0, 2).map((item) => ({ kind: "issue" as const, id: item.id, title: pageStatusLabel(item.status), detail: `เลข ${item.entry?.candidateNo ?? item.certNo ?? "—"} · หน้า ${item.pageNumber} · ${item.awardLabel}`, action: "แก้รายการนี้" })),
+    ...missing.slice(0, 2).map((item) => ({ kind: "missing" as const, id: item.id, title: "มีชื่อในรายชื่อ แต่ยังไม่มีไฟล์เกียรติบัตร", detail: `เลข ${item.candidateNo} · ${item.examMode === "ONLINE" ? "Online" : "Onsite"} · ${item.name}`, action: "เพิ่มไฟล์ PDF" })),
+  ];
+  const pending = issues.length + missing.length;
+
   return (
-    <div className="rounded-xl border border-hairline bg-card p-4">
+    <section aria-label="รายการหลังจับคู่">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="font-semibold">รายการหลังจับคู่เสร็จ</h3>
+          <p className="mt-1 text-sm text-ink-soft">รายการที่ยังไม่แก้จะอยู่ในภาพรวมรอบนี้</p>
+        </div>
+        {!processing && pending > 0 && (
+          <span className="rounded-full border border-warn-line bg-warn-bg px-3 py-1 text-xs font-semibold text-warn-ink">ค้าง {formatCount(pending)} รายการ</span>
+        )}
+      </div>
+      {processing ? <div className="mt-3"><WaitNotice /></div> : pending === 0 ? (
+        <p className="mt-3 rounded-xl border border-hairline bg-paper px-4 py-3 text-sm text-ink-soft">ไม่มีรายการที่ต้องตัดสิน</p>
+      ) : selectedIssue || selectedMissing || showAll ? (
+        <div className="mt-4 space-y-4">
+        <button type="button" onClick={() => { setSelected(null); setShowAll(false); }} className="min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 transition duration-200 hover:text-brand-dark">← กลับไปดูรายการย่อ</button>
+          {(selectedIssue || showAll && issues.length > 0) && <IssueList batchId={batchId} issues={selectedIssue ? [selectedIssue] : issues} catalog={catalog} locked={locked} />}
+          {(selectedMissing || showAll && missing.length > 0) && <MissingList batchId={batchId} items={selectedMissing ? [selectedMissing] : missing} catalog={catalog} locked={locked} />}
+        </div>
+      ) : (
+        <>
+          <ul className="mt-3 space-y-2">
+            {preview.map((item) => (
+              <li key={`${item.kind}-${item.id}`} className="flex flex-col gap-3 rounded-xl border border-warn-line bg-warn-bg/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 text-sm">
+                  <strong className="block">{item.title}</strong>
+                  <span className="mt-0.5 block text-ink-soft">{item.detail}</span>
+                </div>
+                <button type="button" onClick={() => setSelected({ kind: item.kind, id: item.id })} className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-brand-line bg-card px-3 text-sm font-semibold text-brand transition duration-200 hover:bg-brand-soft">
+                  {item.action}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {pending > preview.length && (
+            <button type="button" onClick={() => setShowAll(true)} className="mt-3 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 transition duration-200 hover:text-brand-dark">
+              ดูรายการทั้งหมด {formatCount(pending)} รายการ
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function OverviewMetric({ label, value, detail, tone }: { label: string; value: string; detail?: string; tone?: "brand" | "ok" | "warn" }) {
+  const colors = tone === "brand" ? "border-brand-line bg-brand-soft text-brand" : tone === "ok" ? "border-ok-line bg-ok-bg text-ok-ink" : tone === "warn" ? "border-warn-line bg-warn-bg text-warn-ink" : "border-hairline bg-card text-ink";
+  return (
+    <div className={`rounded-2xl border p-4 ${colors}`}>
       <p className="text-sm text-ink-soft">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{value}</p>
-      <p className="mt-1 text-xs text-ink-soft">{detail}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+      {detail && <p className="mt-2 text-xs text-ink-soft">{detail}</p>}
     </div>
   );
 }
@@ -421,24 +462,27 @@ function OverviewAction({
   title,
   count,
   hint,
+  actionLabel,
   onClick,
 }: {
   title: string;
   count: string;
   hint: string;
+  actionLabel: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="min-h-24 cursor-pointer rounded-xl border border-warn-line bg-warn-bg p-4 text-left transition hover:border-brand-line hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      className="block w-full cursor-pointer rounded-2xl border border-warn-line bg-warn-bg/30 p-4 text-left transition duration-200 hover:border-brand-line hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
     >
       <span className="flex items-baseline justify-between gap-2">
         <span className="font-medium text-ink">{title}</span>
         <span className="shrink-0 text-sm font-semibold text-warn-ink">{count}</span>
       </span>
       <span className="mt-1 block text-sm text-ink-soft">{hint}</span>
+      <span className="mt-3 inline-block rounded-xl border border-brand-line bg-card px-3 py-2 text-sm font-semibold text-brand">{actionLabel}</span>
     </button>
   );
 }

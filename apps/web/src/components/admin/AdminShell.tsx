@@ -15,6 +15,7 @@ export function AdminShell({
   description,
   back,
   wide = false,
+  intakeWidth = false,
   children,
 }: {
   title: string;
@@ -22,6 +23,7 @@ export function AdminShell({
   /** ลิงก์ย้อนกลับ (หน้ารายละเอียดรอบนำเข้าใช้) */
   back?: { href: string; label: string };
   wide?: boolean;
+  intakeWidth?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -33,7 +35,7 @@ export function AdminShell({
           <div className="flex-1 bg-flag-red" />
           <div className="flex-1 bg-flag-yellow" />
         </div>
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className={`mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${intakeWidth ? "max-w-[72rem]" : "max-w-5xl"}`}>
           <Link
             href="/admin"
             className="-mx-2 flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1
@@ -57,7 +59,7 @@ export function AdminShell({
         </div>
       </header>
 
-      <main className={`mx-auto w-full px-4 py-6 sm:py-8 ${wide ? "max-w-[90rem]" : "max-w-5xl"}`}>
+      <main className={`mx-auto w-full px-4 py-6 sm:py-8 ${wide ? "max-w-[90rem]" : intakeWidth ? "max-w-[72rem]" : "max-w-5xl"}`}>
         {back && (
           <Link
             href={back.href}

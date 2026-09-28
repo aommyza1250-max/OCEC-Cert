@@ -16,6 +16,7 @@ export function DangerZone({
   published,
   counts,
   siblingBatches,
+  compact = false,
 }: {
   batchId: string;
   confirmPhrase: string;
@@ -23,6 +24,7 @@ export function DangerZone({
   counts: { certificates: number; pages: number; students: number };
   /** จำนวนรอบนำเข้าอื่นของรอบการสอบเดียวกันที่จะยังเหลืออยู่หลังลบอันนี้ */
   siblingBatches: number;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -53,19 +55,18 @@ export function DangerZone({
   }
 
   return (
-    <section className="mt-10 rounded-xl border-2 border-danger-line bg-danger-bg p-4">
-      <h2 className="font-semibold text-danger-ink">โซนอันตราย</h2>
+    <section className={compact ? "border-t border-hairline pt-3" : "mt-10 rounded-xl border-2 border-danger-line bg-danger-bg p-4"}>
+      <h2 className={compact ? "sr-only" : "font-semibold text-danger-ink"}>โซนอันตราย</h2>
 
       {!open ? (
         <>
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className={compact ? "sr-only" : "mt-1 text-sm text-ink-soft"}>
             ลบรอบการนำเข้านี้ทั้งรอบ ทั้งไฟล์เกียรติบัตร รูปตัวอย่าง และข้อมูลที่จับคู่ไว้
           </p>
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="mt-3 cursor-pointer rounded-lg border border-danger-line px-4 py-2 text-sm
-                       font-medium text-danger-ink transition hover:bg-danger-bg"
+            className={`min-h-10 cursor-pointer rounded-xl border border-danger-line px-4 py-2 text-sm font-medium text-danger-ink transition hover:bg-danger-bg ${compact ? "w-full text-left" : "mt-3"}`}
           >
             ลบรอบการนำเข้านี้
           </button>
