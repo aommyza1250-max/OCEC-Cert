@@ -7,6 +7,7 @@ import type { AwardDef } from "@/lib/certificate-catalog";
 import type { IssuePage } from "@/lib/batch-view";
 import { postJson } from "./client-api";
 import { ModeBadge, PageStatusBadge, pageStatusLabel } from "./StatusBadge";
+import { useConfirmDialog, type ConfirmAction } from "./ConfirmDialog";
 
 /**
  * หน้าที่ระบบไม่ยอมเดาให้ — แต่ละแบบมีทางแก้ของตัวเอง
@@ -25,6 +26,7 @@ export function IssueList({
   catalog: AwardDef[];
   locked: string | null;
 }) {
+  const { confirm, dialog } = useConfirmDialog();
   if (issues.length === 0) {
     return (
       <p className="rounded-xl border border-ok-line bg-ok-bg px-5 py-4 text-sm text-ok-ink">
@@ -38,6 +40,7 @@ export function IssueList({
 
   return (
     <div className="space-y-4">
+      {dialog}
       {[...groups.entries()].map(([status, pages]) => (
         <details key={status} open={pages.length <= 20} className="rounded-xl border border-warn-line bg-card">
           <summary className="cursor-pointer px-4 py-3 font-medium">
@@ -46,7 +49,7 @@ export function IssueList({
           </summary>
           <ul className="space-y-3 border-t border-hairline p-3">
             {pages.map((page) => (
-              <IssueCard key={page.id} batchId={batchId} page={page} catalog={catalog} locked={locked} />
+              <IssueCard key={page.id} batchId={batchId} page={page} catalog={catalog} locked={locked} confirm={confirm} />
             ))}
           </ul>
         </details>
@@ -70,18 +73,26 @@ function IssueCard({
   page,
   catalog,
   locked,
+  confirm,
 }: {
   batchId: string;
   page: IssuePage;
   catalog: AwardDef[];
   locked: string | null;
+  confirm: ConfirmAction;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function resolve(body: Record<string, unknown>, confirmText?: string) {
-    if (confirmText && !confirm(confirmText)) return;
+    if (
+      confirmText &&
+      !(await confirm(
+        confirmText,
+        body.action === "DISCARD" ? { confirmLabel: "ทิ้งหน้านี้", tone: "danger" } : undefined,
+      ))
+    ) return;
     setBusy(true);
     setError(null);
     const result = await postJson(`/api/admin/pages/${page.id}/resolve`, { version: page.version, ...body });

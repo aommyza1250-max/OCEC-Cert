@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { MultiAwardPolicy, PublishSummary } from "@/lib/publish";
 import { postJson } from "./client-api";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /**
  * เผยแพร่ / ยกเลิกการเผยแพร่
@@ -35,9 +36,15 @@ export function PublishPanel({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
 
-  async function call(path: string, body: object, confirmText?: string) {
-    if (confirmText && !confirm(confirmText)) return;
+  async function call(
+    path: string,
+    body: object,
+    confirmText?: string,
+    confirmOptions?: Parameters<typeof confirm>[1],
+  ) {
+    if (confirmText && !(await confirm(confirmText, confirmOptions))) return;
     setBusy(true);
     setError(null);
     const result = await postJson(`/api/admin/batches/${batchId}/${path}`, body);
@@ -50,6 +57,7 @@ export function PublishPanel({
 
   return (
     <section className="space-y-4 rounded-2xl border border-hairline bg-card p-5">
+      {dialog}
       <div>
         <h2 className="font-semibold">เผยแพร่ให้ค้นหาได้</h2>
         <p className="mt-1 text-sm text-ink-soft">
@@ -86,6 +94,7 @@ export function PublishPanel({
                 legacy
                   ? "รอบนี้มาจากระบบเดิม ยกเลิกแล้วจะเผยแพร่กลับไม่ได้ ต้องนำเข้าใหม่ทั้งรอบ — ยืนยัน?"
                   : "ยกเลิกการเผยแพร่ทั้งรอบ? ผู้ปกครองจะค้นไม่เจอจนกว่าจะกดเผยแพร่อีกครั้ง",
+                { title: "ยืนยันยกเลิกการเผยแพร่", confirmLabel: "ยกเลิกการเผยแพร่", tone: "danger" },
               )
             }
             disabled={busy}
@@ -103,6 +112,7 @@ export function PublishPanel({
                   { published: true },
                   `เผยแพร่ ${summary.toPublish.certificates} ใบ ของผู้เข้าสอบ ${summary.toPublish.participants} คน?` +
                     (summary.held.participants ? ` (ค้างไว้ ${summary.held.participants} คน)` : ""),
+                  { title: "ยืนยันการเผยแพร่", confirmLabel: "เผยแพร่", tone: "brand" },
                 )
               }
               disabled={busy || blocked || processing || summary.toPublish.certificates === 0}

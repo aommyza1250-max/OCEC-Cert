@@ -1,11 +1,7 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { BatchWorkflow } from "@/components/admin/BatchWorkflow";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { DangerZone } from "@/components/admin/DangerZone";
-import { RetentionPanel } from "@/components/admin/RetentionPanel";
-import { SourcesPanel } from "@/components/admin/SourcesPanel";
 import { isAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { batchConfirmPhrase } from "@/lib/batch-delete";
@@ -62,36 +58,19 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
         </p>
       </div>
 
-      <Link
-        href={`/admin/batches/${id}/history`}
-        className="mb-6 inline-flex min-h-10 items-center rounded-xl border border-hairline bg-card px-4 text-sm font-medium text-brand transition hover:bg-brand-soft"
-      >
-        ดูประวัติการแก้ไขของรอบนี้ →
-      </Link>
-
-      <BatchWorkflow view={view} levelSubfolder={allowsLevelSubfolder(batch.programCode, batch.round)} />
-
-      <section className="mt-10">
-        <h2 className="mb-2 font-semibold">อายุการเก็บ</h2>
-        <RetentionPanel
-          batchId={id}
-          expiresAt={retention.expiresAt?.toISOString() ?? null}
-          certificates={view.publish.certificateCount}
-          deletedFiles={retention.deletedFiles}
-        />
-      </section>
-
-      <section className="mt-10">
-        <h2 className="mb-2 font-semibold">ไฟล์ต้นฉบับ</h2>
-        <SourcesPanel batchId={id} clearedAt={batch.sourcesClearedAt} blockers={blockers} />
-      </section>
-
-      <DangerZone
-        batchId={id}
-        confirmPhrase={batchConfirmPhrase(batch.programCode, batch.round, batch.year)}
-        published={batch.status === "PUBLISHED"}
-        counts={deleteInfo.counts}
-        siblingBatches={deleteInfo.siblingBatches}
+      <BatchWorkflow
+        view={view}
+        levelSubfolder={allowsLevelSubfolder(batch.programCode, batch.round)}
+        deleteInfo={{
+          confirmPhrase: batchConfirmPhrase(batch.programCode, batch.round, batch.year),
+          counts: deleteInfo.counts,
+          siblingBatches: deleteInfo.siblingBatches,
+        }}
+        retention={{
+          expiresAt: retention.expiresAt?.toISOString() ?? null,
+          deletedFiles: retention.deletedFiles,
+        }}
+        blockers={blockers}
       />
     </AdminShell>
   );

@@ -37,8 +37,6 @@ export function CertificatesPanel({
   return (
     <section className="rounded-xl border border-hairline bg-card p-5">
       <StepHeader
-        step={2}
-        done={uploads.some((u) => u.kind === "zip" && u.status === "DONE")}
         title="ไฟล์ ZIP เกียรติบัตร"
         description="อัปซ้ำได้เรื่อย ๆ — ใบที่รับไปแล้วไม่ถูกแตะ หน้าเดิมที่อัปซ้ำไม่เกิดรายการตรวจซ้ำ"
       />
