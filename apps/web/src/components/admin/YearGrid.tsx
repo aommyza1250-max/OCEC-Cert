@@ -73,8 +73,8 @@ export function YearGrid({ year, rows }: { year: number; rows: GridRow[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-hairline bg-card">
-      <table className="w-full border-collapse text-left">
+    <div className="overflow-x-auto rounded-2xl border border-hairline bg-card">
+      <table className="w-full min-w-[44rem] border-collapse text-left">
         <thead>
           <tr className="border-b border-hairline bg-paper text-sm text-ink-soft">
             <th className="px-4 py-2 font-medium">รายการสอบ</th>
@@ -136,13 +136,10 @@ export function YearGrid({ year, rows }: { year: number; rows: GridRow[] }) {
                       className="block rounded-xl border border-hairline px-3 py-2 transition
                                  duration-200 hover:border-brand hover:bg-brand-soft/40"
                     >
-                      <StatusBadge status={cell.status ?? ""} />
-                      <span className="mt-1 block text-sm text-ink-soft">
-                        {cell.certificates} ใบ
-                        {cell.extras > 0 && (
-                          <span className="ml-1 text-warn-ink">· อีก {cell.extras} รอบนำเข้า</span>
-                        )}
-                      </span>
+                      <StatusBadge status={cell.status ?? ""} count={cell.certificates} />
+                      {cell.extras > 0 && (
+                        <span className="mt-1 block text-sm text-warn-ink">อีก {cell.extras} รอบนำเข้า</span>
+                      )}
                     </a>
                   </td>
                 );

@@ -14,12 +14,14 @@ export function AdminShell({
   title,
   description,
   back,
+  wide = false,
   children,
 }: {
   title: string;
   description?: string;
   /** ลิงก์ย้อนกลับ (หน้ารายละเอียดรอบนำเข้าใช้) */
   back?: { href: string; label: string };
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -55,7 +57,7 @@ export function AdminShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-8">
+      <main className={`mx-auto w-full px-4 py-6 sm:py-8 ${wide ? "max-w-[90rem]" : "max-w-5xl"}`}>
         {back && (
           <Link
             href={back.href}

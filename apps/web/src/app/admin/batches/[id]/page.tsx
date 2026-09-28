@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { BatchWorkflow } from "@/components/admin/BatchWorkflow";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -60,6 +61,13 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           </code>
         </p>
       </div>
+
+      <Link
+        href={`/admin/batches/${id}/history`}
+        className="mb-6 inline-flex min-h-10 items-center rounded-xl border border-hairline bg-card px-4 text-sm font-medium text-brand transition hover:bg-brand-soft"
+      >
+        ดูประวัติการแก้ไขของรอบนี้ →
+      </Link>
 
       <BatchWorkflow view={view} levelSubfolder={allowsLevelSubfolder(batch.programCode, batch.round)} />
 

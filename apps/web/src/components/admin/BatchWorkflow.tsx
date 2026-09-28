@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { BatchView } from "@/lib/batch-view";
-import { AuditTrail } from "./AuditTrail";
 import { CertificatesPanel } from "./CertificatesPanel";
 import { IssueList } from "./IssueList";
 import { MissingList } from "./MissingList";
@@ -140,12 +139,6 @@ export function BatchWorkflow({ view, levelSubfolder }: { view: NonNullable<Batc
         />
       )}
 
-      {view.audit.length > 0 && (
-        <section>
-          <h2 className="mb-2 font-semibold">การแก้ไขล่าสุด</h2>
-          <AuditTrail events={view.audit} />
-        </section>
-      )}
     </div>
   );
 }

@@ -44,7 +44,7 @@ export default async function ParticipantPage({ params }: { params: Promise<{ id
   ]);
 
   const audit = await prisma.auditEvent.findMany({
-    where: { entityId: { in: [entry.id, ...pages.map((p) => p.id)] } },
+    where: { batchId: id, entityId: { in: [entry.id, ...pages.map((p) => p.id)] } },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -137,12 +137,10 @@ export default async function ParticipantPage({ params }: { params: Promise<{ id
         <section>
           <h2 className="mb-2 font-semibold">ประวัติการแก้ไขของคนนี้</h2>
           <AuditTrail
+            programCode={programCode}
             events={audit.map((e) => ({
               id: e.id,
               action: e.action,
-              entityType: e.entityType,
-              entityId: e.entityId,
-              sessionId: e.sessionId,
               createdAt: e.createdAt.toISOString(),
               before: e.before,
               after: e.after,
