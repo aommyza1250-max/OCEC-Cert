@@ -34,27 +34,16 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
   return (
     <AdminShell
-      title={`${batch.programCode} ${roundLabel} ${batch.year}`}
+      title="นำเข้าเกียรติบัตร"
+      description={`${batch.programCode} · ${roundLabel} · ${batch.year} — ตรวจข้อมูลก่อนเผยแพร่ให้ผู้ปกครองค้นหา`}
       back={{ href: "/admin", label: "กลับหน้ารวม" }}
+      intakeWidth
     >
-      <div className="-mt-4 mb-6 space-y-1 text-sm text-ink-soft">
+      <div className="-mt-4 mb-6 text-sm text-ink-soft">
         <p className="flex flex-wrap items-center gap-2">
           <StatusBadge status={batch.status} />
           <span>{batch.programName}</span>
           <span>· สร้างเมื่อ {new Date(batch.createdAt).toLocaleDateString("th-TH")}</span>
-          {batch.profileKey && (
-            <span>
-              · โปรไฟล์ <code className="rounded bg-paper px-1.5 py-0.5 text-xs">{batch.profileKey}</code>
-            </span>
-          )}
-        </p>
-        <p>
-          ไฟล์ที่ตัดได้จะชื่อ{" "}
-          <code className="rounded bg-paper px-1.5 py-0.5 text-xs">
-            {"{FNAME}_{LNAME}_"}
-            {batch.programCode}_{batch.round}_{"{AWARD}_"}
-            {batch.year}.pdf
-          </code>
         </p>
       </div>
 

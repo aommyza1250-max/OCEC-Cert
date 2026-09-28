@@ -14,11 +14,13 @@ export function SourcesPanel({
   batchId,
   clearedAt,
   blockers,
+  compact = false,
 }: {
   batchId: string;
   clearedAt: string | null;
   /** เหตุผลที่ยังเคลียร์ไม่ได้ จากการตรวจครั้งล่าสุดของ worker — null = ยังไม่เคยตรวจ */
   blockers: string[] | null;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [working, setWorking] = useState(false);
@@ -48,7 +50,7 @@ export function SourcesPanel({
 
   if (clearedAt) {
     return (
-      <p className="rounded-2xl border border-hairline bg-card px-4 py-3 text-sm text-ink-soft">
+      <p className={compact ? "border-t border-hairline pt-3 text-sm text-ink-soft" : "rounded-2xl border border-hairline bg-card px-4 py-3 text-sm text-ink-soft"}>
         ไฟล์ต้นฉบับถูกเคลียร์แล้วเมื่อ{" "}
         {new Date(clearedAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}{" "}
         — เก็บไฟล์รายชื่อ (Excel) ไว้ ส่วนเกียรติบัตรและรูปตัวอย่างอยู่ครบเหมือนเดิม
@@ -57,7 +59,7 @@ export function SourcesPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-card px-4 py-3 text-sm">
+    <div className={compact ? "border-t border-hairline pt-3 text-sm" : "rounded-2xl border border-hairline bg-card px-4 py-3 text-sm"}>
       <p className="font-medium text-ink">ไฟล์ต้นฉบับ (ZIP) ยังอยู่</p>
       {blockers === null ? (
         <p className="mt-1 text-ink-soft">
@@ -81,7 +83,7 @@ export function SourcesPanel({
         type="button"
         onClick={clearNow}
         disabled={working}
-        className="mt-2 min-h-10 cursor-pointer rounded-xl border px-3 text-sm transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 border-hairline hover:bg-paper"
+        className={`mt-2 min-h-10 cursor-pointer rounded-xl border border-brand-line px-3 text-sm font-medium text-brand transition duration-200 hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50 ${compact ? "w-full text-left" : ""}`}
       >
         {working ? "กำลังสั่ง..." : "ตรวจและเคลียร์เดี๋ยวนี้"}
       </button>

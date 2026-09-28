@@ -22,6 +22,7 @@ export function PublishPanel({
   summary,
   certificateCount,
   publishedCount,
+  compact = false,
 }: {
   batchId: string;
   published: boolean;
@@ -32,6 +33,7 @@ export function PublishPanel({
   summary: PublishSummary;
   certificateCount: number;
   publishedCount: number;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -56,10 +58,10 @@ export function PublishPanel({
   const blocked = needsDecision && policy === "UNDECIDED";
 
   return (
-    <section className="space-y-4 rounded-2xl border border-hairline bg-card p-5">
+    <section className={compact ? "space-y-3" : "space-y-4 rounded-2xl border border-hairline bg-card p-5"}>
       {dialog}
       <div>
-        <h2 className="font-semibold">เผยแพร่ให้ค้นหาได้</h2>
+        <h2 className={compact ? "sr-only" : "font-semibold"}>เผยแพร่ให้ค้นหาได้</h2>
         <p className="mt-1 text-sm text-ink-soft">
           {published
             ? `เผยแพร่อยู่ ${publishedCount} ใบ จากทั้งหมด ${certificateCount} ใบ — ต้องยกเลิกการเผยแพร่ก่อนจึงจะอัปโหลดหรือแก้ไขได้`
@@ -75,7 +77,7 @@ export function PublishPanel({
       ) : (
         !published && (
           <>
-            <Preview summary={summary} />
+            {!compact && <Preview summary={summary} />}
             {needsDecision && (
               <PolicyChooser policy={policy} busy={busy} onPick={(p) => call("policy", { policy: p })} />
             )}
@@ -98,7 +100,7 @@ export function PublishPanel({
               )
             }
             disabled={busy}
-            className="min-h-11 cursor-pointer rounded-xl bg-ink-soft px-5 font-semibold text-white transition duration-200 disabled:opacity-40"
+            className={`min-h-11 cursor-pointer rounded-xl bg-ink-soft px-5 font-semibold text-white transition duration-200 disabled:opacity-40 ${compact ? "w-full text-left" : ""}`}
           >
             {busy ? "กำลังบันทึก..." : "ยกเลิกการเผยแพร่"}
           </button>
@@ -116,8 +118,7 @@ export function PublishPanel({
                 )
               }
               disabled={busy || blocked || processing || summary.toPublish.certificates === 0}
-              className="min-h-11 cursor-pointer rounded-xl bg-ok-ink px-5 font-semibold text-white transition duration-200
-                         hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              className={`min-h-11 cursor-pointer rounded-xl bg-ok-ink px-5 font-semibold text-white transition duration-200 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 ${compact ? "w-full text-left" : ""}`}
             >
               {busy ? "กำลังบันทึก..." : `เผยแพร่ ${summary.toPublish.certificates} ใบ`}
             </button>

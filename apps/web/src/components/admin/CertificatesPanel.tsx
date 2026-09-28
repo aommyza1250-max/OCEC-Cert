@@ -3,9 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AwardDef } from "@/lib/certificate-catalog";
-import type { UploadRecord } from "@/lib/batch-view";
+import type { BatchView, UploadRecord } from "@/lib/batch-view";
 import { postJson } from "./client-api";
-import { StepHeader } from "./RosterPanel";
 import { pageStatusLabel } from "./StatusBadge";
 import { UploadDropzone } from "./UploadDropzone";
 
@@ -21,27 +20,92 @@ export function CertificatesPanel({
   catalog,
   levelSubfolder,
   uploads,
+  activeJob,
   hasRoster,
   locked,
+  children,
+  footer,
 }: {
   batchId: string;
   profileKey: string | null;
   catalog: AwardDef[];
   levelSubfolder: boolean;
   uploads: UploadRecord[];
+  activeJob: NonNullable<BatchView>["activeJob"];
   hasRoster: boolean;
   locked: string | null;
+  children?: React.ReactNode;
+  footer?: React.ReactNode;
 }) {
   const disabledReason = locked ?? (hasRoster ? null : "ต้องใช้รายชื่อผู้เข้าสอบก่อน จึงจะอัปเกียรติบัตรได้");
+  const latestZip = uploads.find((upload) => upload.kind === "zip");
+  const zipJob = activeJob?.type === "SPLIT" && uploads[0]?.kind === "zip" ? activeJob : null;
+  const timelineJob = zipJob ?? (activeJob?.type === "MATCH" ? activeJob : null);
+  const preflight = (zipJob?.progress?.preflight ?? latestZip?.progress.preflight) as Preflight | undefined;
+  const zipRunning = latestZip?.status === "QUEUED" || latestZip?.status === "RUNNING";
 
   return (
-    <section className="rounded-xl border border-hairline bg-card p-5">
-      <StepHeader
-        title="ไฟล์ ZIP เกียรติบัตร"
-        description="อัปซ้ำได้เรื่อย ๆ — ใบที่รับไปแล้วไม่ถูกแตะ หน้าเดิมที่อัปซ้ำไม่เกิดรายการตรวจซ้ำ"
-      />
+    <section className="rounded-[18px] border border-hairline bg-card p-5 shadow-sm sm:p-6">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">ขั้นที่ 2 · อัปโหลด ZIP เกียรติบัตร</h2>
+          <p className="mt-1 text-sm text-ink-soft">ระบบตรวจโครงสร้าง ZIP ก่อน แล้วแยกหน้าและจับคู่กับรายชื่อ</p>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${zipRunning ? "border-brand-line bg-brand-soft text-brand" : "border-hairline bg-paper text-ink-soft"}`}>
+          {zipRunning ? "กำลังประมวลผล" : latestZip?.status === "DONE" ? "นำเข้าแล้ว" : latestZip?.status === "FAILED" ? "ตรวจไฟล์อีกครั้ง" : "รอไฟล์ ZIP"}
+        </span>
+      </div>
 
-      <details className="mb-4 rounded-lg bg-paper p-4 text-sm" open={!hasRoster || uploads.length === 0}>
+      <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+        <div>
+          {latestZip ? (
+            <div className="h-full rounded-2xl border border-hairline p-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong className="min-w-0 break-all">{latestZip.fileName ?? "ไฟล์ ZIP"}</strong>
+                <span className="rounded-full border border-hairline bg-paper px-2.5 py-1 text-xs text-ink-soft">
+                  {zipRunning ? "อัปโหลดแล้ว" : latestZip.status === "DONE" ? "นำเข้าแล้ว" : "ไม่ได้นำเข้า"}
+                </span>
+              </div>
+              <p className="mt-1 text-ink-soft">อัปโหลดเมื่อ {new Date(latestZip.createdAt).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</p>
+              {latestZip.status === "FAILED" && latestZip.error && (
+                <p className={`mt-2 rounded-xl px-3 py-2 ${latestZip.userError ? "bg-warn-bg text-warn-ink" : "bg-danger-bg text-danger-ink"}`}>{latestZip.error}</p>
+              )}
+              <UploadDropzone batchId={batchId} kind="zip" accept="application/zip,.zip" label="เลือก ZIP ใหม่" variant="button" disabled={Boolean(disabledReason)} disabledReason={disabledReason ?? undefined} />
+            </div>
+          ) : (
+            <UploadDropzone batchId={batchId} kind="zip" accept="application/zip,.zip" label="เลือกไฟล์ ZIP เกียรติบัตร" helperText="รองรับ .zip · อัปซ้ำเพื่อเติมใบที่ยังไม่มีได้" disabled={Boolean(disabledReason)} disabledReason={disabledReason ?? undefined} />
+          )}
+        </div>
+        <div className="rounded-2xl border border-hairline p-4 text-sm">
+          <h3 className="font-semibold">ผลจาก ZIP</h3>
+          <p className="mt-1 text-ink-soft">ตรวจโฟลเดอร์รางวัลและรูปแบบการสอบ</p>
+          {preflight ? (
+            <>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-full border border-hairline bg-paper px-2.5 py-1 text-xs text-ink-soft">
+                  {Object.values(preflight.problemCounts ?? {}).some((count) => count > 0) ? "โครงสร้างมีปัญหา" : "โครงสร้างถูกต้อง"}
+                </span>
+                {preflight.awards && (
+                  <span className="rounded-full border border-hairline bg-paper px-2.5 py-1 text-xs text-ink-soft">
+                    {Object.keys(preflight.awards).length} โฟลเดอร์รางวัล
+                  </span>
+                )}
+              </div>
+              <PreflightSummary preflight={preflight} />
+            </>
+          ) : (
+            <p className="mt-4 rounded-xl bg-paper px-4 py-5 text-ink-soft">ผลตรวจจะแสดงที่นี่หลังอัปโหลด ZIP</p>
+          )}
+        </div>
+      </div>
+
+      {latestZip && (
+        <ProcessingTimeline latestZip={latestZip} activeJob={timelineJob} preflight={preflight} />
+      )}
+
+      {children && <div className="mt-6 border-t border-hairline pt-5">{children}</div>}
+
+      <details className="mt-5 rounded-xl bg-paper p-4 text-sm">
         <summary className="cursor-pointer font-medium">โครงโฟลเดอร์ที่รับ ({profileKey})</summary>
         <pre className="mt-2 overflow-x-auto rounded bg-card p-3 text-xs leading-relaxed">
           {[
@@ -71,27 +135,93 @@ export function CertificatesPanel({
         </ul>
       </details>
 
-      <UploadDropzone
-        batchId={batchId}
-        kind="zip"
-        accept="application/zip,.zip"
-        label="เลือกไฟล์ ZIP เกียรติบัตร"
-        disabled={Boolean(disabledReason)}
-        disabledReason={disabledReason ?? undefined}
-      />
-
       {uploads.length > 0 && (
-        <div className="mt-5">
-          <h3 className="mb-2 text-sm font-semibold">ประวัติการอัป</h3>
+        <details className="mt-5 rounded-xl border border-hairline p-4">
+          <summary className="cursor-pointer text-sm font-semibold">ประวัติการอัป ({uploads.length} ครั้ง)</summary>
           <ul className="space-y-3">
             {uploads.map((upload) => (
               <UploadCard key={upload.jobId} upload={upload} locked={locked} />
             ))}
           </ul>
-        </div>
+        </details>
       )}
+      {footer && <div className="mt-5 border-t border-hairline pt-5">{footer}</div>}
     </section>
   );
+}
+
+function ProcessingTimeline({
+  latestZip,
+  activeJob,
+  preflight,
+}: {
+  latestZip: UploadRecord | undefined;
+  activeJob: NonNullable<BatchView>["activeJob"];
+  preflight: Preflight | undefined;
+}) {
+  const jobStage = activeJob?.type === "SPLIT" ? activeJob.progress?.stage : latestZip?.progress.stage;
+  const matching = Boolean(activeJob) && (jobStage === "match" || activeJob?.type === "MATCH");
+  const splitDone = latestZip?.status === "DONE" || jobStage === "match" || activeJob?.type === "MATCH";
+  const splitError = latestZip?.status === "FAILED" && jobStage === "split";
+  const matchError = latestZip?.status === "FAILED" && jobStage === "match";
+  const zipDone = latestZip?.status === "DONE" || Boolean(preflight) && !Object.values(preflight?.problemCounts ?? {}).some((count) => count > 0);
+  const splitTotal = numberValue(preflight?.pages) ?? (jobStage === "split" ? numberValue(activeJob?.progress?.total) : null);
+  const splitRead = splitDone ? splitTotal : jobStage === "split" ? numberValue(activeJob?.progress?.done ?? latestZip?.progress.done) : null;
+  const matchTotal = matching || matchError ? numberValue(activeJob?.progress?.total ?? latestZip?.progress.total) : null;
+  const matchRead = matching || matchError ? numberValue(activeJob?.progress?.done ?? latestZip?.progress.done) : null;
+
+  return (
+    <div className="mt-6">
+      <h3 className="mb-3 font-semibold">กำลังทำอะไรอยู่</h3>
+      <div className="space-y-3">
+        <TimelineRow number={1} title="ตรวจ ZIP และโฟลเดอร์" detail="ตรวจชื่อโฟลเดอร์รางวัลและโครงสร้าง ZIP" state={zipDone ? "done" : latestZip?.status === "FAILED" ? "error" : latestZip?.status === "QUEUED" ? "pending" : "current"} statusText={latestZip?.status === "QUEUED" ? "รอคิว" : undefined} />
+        <TimelineRow number={2} title="แยกหน้าเกียรติบัตร" detail="อ่าน PDF ทีละไฟล์" state={splitDone ? "done" : splitError ? "error" : jobStage === "split" ? "current" : "pending"} done={splitRead} total={splitTotal} />
+        <TimelineRow number={3} title="จับคู่ชื่อกับรายชื่อ" detail="ตรวจเลขผู้เข้าสอบ ชื่อ และรูปแบบสอบ" state={matchError ? "error" : matching ? "current" : latestZip?.status === "DONE" ? "done" : "pending"} done={matchRead} total={matchTotal} />
+      </div>
+      {(latestZip?.status === "RUNNING" || matching) && (
+        <p className="mt-4 rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand">ระบบกำลังทำงานอยู่ ปิดหน้านี้แล้วกลับมาดูผลภายหลังได้</p>
+      )}
+    </div>
+  );
+}
+
+function TimelineRow({ number, title, detail, state, done, total, statusText }: {
+  number: number;
+  title: string;
+  detail: string;
+  state: "pending" | "current" | "done" | "error";
+  done?: number | null;
+  total?: number | null;
+  statusText?: string;
+}) {
+  const percent = total && done !== null && done !== undefined ? Math.min(100, Math.round((done / total) * 100)) : null;
+  return (
+    <div className={`rounded-2xl border p-4 ${state === "current" ? "border-brand-line bg-brand-soft/30" : state === "error" ? "border-danger-line bg-danger-bg/30" : "border-hairline bg-card"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3 font-semibold">
+          <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold ${state === "current" ? "bg-brand text-white" : state === "error" ? "bg-danger-bg text-danger-ink" : "bg-paper text-ink-soft"}`}>
+            {state === "done" ? "✓" : number}
+          </span>
+          {title}
+        </div>
+        <span className={`text-sm font-semibold tabular-nums ${state === "error" ? "text-danger-ink" : "text-ink-soft"}`}>
+          {statusText ?? (total !== null && total !== undefined && done !== null && done !== undefined
+            ? `${done.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} ใบ`
+            : state === "done" ? "เสร็จแล้ว" : state === "error" ? "ตรวจไม่ผ่าน" : state === "current" ? "กำลังตรวจ" : "รอขั้นก่อนหน้า")}
+        </span>
+      </div>
+      {percent !== null && state === "current" && (
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-line" role="progressbar" aria-label={title} aria-valuenow={done ?? 0} aria-valuemin={0} aria-valuemax={total ?? 0}>
+          <div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} />
+        </div>
+      )}
+      <p className="mt-2 text-xs text-ink-soft">{detail}</p>
+    </div>
+  );
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 const STAT_LABELS: [string, string][] = [
