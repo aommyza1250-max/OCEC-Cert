@@ -123,7 +123,7 @@ export async function loadBatchView(batchId: string) {
   const catalog = awardCatalog(programCode, round);
   const guarded = { id: batch.id, programCode, round };
 
-  const [entryCounts, drafts, uploads, pendingJobs, runningJob, latestFailure, certificateCount, publishedCount, audit] =
+  const [entryCounts, drafts, uploads, pendingJobs, runningJob, latestFailure, certificateCount, publishedCount] =
     await Promise.all([
       prisma.rosterEntry.groupBy({ by: ["examMode", "source"], where: { batchId }, _count: true }),
       prisma.rosterImport.findMany({
@@ -143,7 +143,6 @@ export async function loadBatchView(batchId: string) {
       }),
       prisma.certificate.count({ where: { batchId } }),
       prisma.certificate.count({ where: { batchId, published: { not: null } } }),
-      prisma.auditEvent.findMany({ where: { batchId }, orderBy: { createdAt: "desc" }, take: 15 }),
     ]);
 
   const count = (mode?: Mode, source?: "EXCEL" | "MANUAL") =>
@@ -204,16 +203,6 @@ export async function loadBatchView(batchId: string) {
       certificateCount,
       publishedCount,
     },
-    audit: audit.map((e) => ({
-      id: e.id,
-      action: e.action,
-      entityType: e.entityType,
-      entityId: e.entityId,
-      sessionId: e.sessionId,
-      createdAt: e.createdAt.toISOString(),
-      before: e.before,
-      after: e.after,
-    })),
   };
 }
 

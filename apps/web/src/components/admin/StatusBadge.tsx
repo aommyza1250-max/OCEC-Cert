@@ -1,3 +1,5 @@
+import * as React from "react";
+
 /**
  * ป้ายสถานะของหลังบ้าน — ที่เดียวสำหรับทั้งระบบ (ทั้งสถานะรอบนำเข้า และสถานะของหน้าเกียรติบัตร)
  *
@@ -26,9 +28,9 @@ export function statusLabel(status: string): string {
   return STATUS[status]?.text ?? status;
 }
 
-export function StatusBadge({ status, className = "" }: { status: string; className?: string }) {
+export function StatusBadge({ status, className = "", count }: { status: string; className?: string; count?: number }) {
   const tone = STATUS[status] ?? { text: status, className: NEUTRAL };
-  return <Badge text={tone.text} tone={tone.className} className={className} />;
+  return <Badge text={count === undefined ? tone.text : `${tone.text} ${count.toLocaleString("th-TH")} ใบ`} tone={tone.className} className={className} />;
 }
 
 /** สถานะของหน้าเกียรติบัตร 1 หน้า */
@@ -63,7 +65,7 @@ export function ModeBadge({ mode, className = "" }: { mode: string | null; class
 
 function Badge({ text, tone, className }: { text: string; tone: string; className: string }) {
   return (
-    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone} ${className}`}>
+    <span className={`inline-block whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone} ${className}`}>
       {text}
     </span>
   );

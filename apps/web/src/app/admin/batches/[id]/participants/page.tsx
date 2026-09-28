@@ -5,6 +5,7 @@ import { AddParticipantForm, type ParticipantDraft } from "@/components/admin/Ad
 import { AdminShell } from "@/components/admin/AdminShell";
 import { ModeBadge, PageStatusBadge, pageStatusLabel } from "@/components/admin/StatusBadge";
 import { isAuthenticated } from "@/lib/auth";
+import { adminPageWindow } from "@/lib/admin-pagination";
 import { awardCatalog, awardDisplay } from "@/lib/certificate-catalog";
 import { prisma } from "@/lib/db";
 import { ISSUE_STATUSES } from "@/lib/batch-view";
@@ -12,7 +13,8 @@ import { normalizeName } from "@/lib/normalize";
 
 export const dynamic = "force-dynamic";
 
-const LIMIT = 200;
+const LIMIT = 100;
+const PAGE_LINKS = 10;
 
 type Search = {
   q?: string;
@@ -21,6 +23,7 @@ type Search = {
   issue?: string;
   source?: string;
   cert?: string;
+  page?: string;
   add?: string;
   fromPage?: string;
 };
@@ -62,18 +65,27 @@ export default async function ParticipantsPage({
           : null;
 
   const where = buildWhere(id, search);
-  const [entries, total] = await Promise.all([
-    prisma.rosterEntry.findMany({
-      where,
-      include: {
-        certificates: { select: { award: true, awardLabel: true } },
-        stagingPages: { where: { matchStatus: { in: ISSUE_STATUSES } }, select: { matchStatus: true } },
-      },
-      orderBy: [{ examMode: "asc" }, { candidateNo: "asc" }],
-      take: LIMIT,
-    }),
-    prisma.rosterEntry.count({ where }),
-  ]);
+  const total = await prisma.rosterEntry.count({ where });
+  const { page, lastPage, firstLink, pageNumbers, from, to } = adminPageWindow(total, search.page, LIMIT, PAGE_LINKS);
+  const entries = await prisma.rosterEntry.findMany({
+    where,
+    include: {
+      certificates: { select: { award: true, awardLabel: true } },
+      stagingPages: { where: { matchStatus: { in: ISSUE_STATUSES } }, select: { matchStatus: true } },
+    },
+    orderBy: [{ examMode: "asc" }, { candidateNo: "asc" }],
+    skip: (page - 1) * LIMIT,
+    take: LIMIT,
+  });
+
+  const pageHref = (target: number) => {
+    const params = new URLSearchParams();
+    for (const key of ["q", "mode", "award", "issue", "source", "cert"] as const) {
+      if (search[key]) params.set(key, search[key]);
+    }
+    params.set("page", String(target));
+    return `/admin/batches/${id}/participants?${params}`;
+  };
 
   const draft = search.add ? await draftFromPage(id, search.fromPage) : undefined;
   const roundLabel = batch.exam.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ";
@@ -82,6 +94,7 @@ export default async function ParticipantsPage({
     <AdminShell
       title={`ผู้เข้าสอบ ${programCode} ${roundLabel} ${batch.exam.year}`}
       back={{ href: `/admin/batches/${id}`, label: "กลับหน้ารอบนำเข้า" }}
+      wide
     >
       <form className="mb-4 grid gap-2 rounded-xl border border-hairline bg-card p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
         <input
@@ -117,7 +130,7 @@ export default async function ParticipantsPage({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-ink-soft">
-          พบ {total} คน{total > LIMIT && ` (แสดง ${LIMIT} คนแรก — ค้นให้แคบลงเพื่อดูที่เหลือ)`}
+          พบ {total} คน{total > 0 && ` · แสดง ${from.toLocaleString("th-TH")}–${to.toLocaleString("th-TH")}`}
         </p>
         {!search.add && (
           <Link
@@ -135,37 +148,37 @@ export default async function ParticipantsPage({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-hairline bg-card">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-hairline bg-card" role="region" aria-label="ตารางผู้เข้าสอบ เลื่อนซ้ายขวาเพื่อดูข้อมูลทั้งหมด" tabIndex={0}>
+        <table className="w-full min-w-[80rem] text-left text-sm">
           <thead className="border-b border-hairline bg-paper text-ink-soft">
             <tr>
-              <th className="px-3 py-2 font-medium">เลข</th>
-              <th className="px-3 py-2 font-medium">ชื่อ</th>
-              <th className="px-3 py-2 font-medium">รูปแบบ</th>
-              <th className="px-3 py-2 font-medium">ระดับชั้น / โรงเรียน</th>
-              <th className="px-3 py-2 font-medium">เกียรติบัตร</th>
-              <th className="px-3 py-2 font-medium">ที่ต้องตัดสิน</th>
+              <th className="min-w-28 whitespace-nowrap px-3 py-2 font-medium">เลข</th>
+              <th className="min-w-64 px-3 py-2 font-medium">ชื่อ</th>
+              <th className="min-w-28 whitespace-nowrap px-3 py-2 font-medium">รูปแบบ</th>
+              <th className="min-w-72 whitespace-nowrap px-3 py-2 font-medium">ระดับชั้น / โรงเรียน</th>
+              <th className="min-w-36 whitespace-nowrap px-3 py-2 font-medium">เกียรติบัตร</th>
+              <th className="min-w-36 whitespace-nowrap px-3 py-2 font-medium">ที่ต้องตัดสิน</th>
             </tr>
           </thead>
           <tbody>
             {entries.map((e) => (
               <tr key={e.id} className="border-b border-hairline last:border-0 hover:bg-paper">
-                <td className="px-3 py-2 tabular-nums">
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                   <Link href={`/admin/batches/${id}/participants/${e.id}`} className="text-brand underline-offset-2 hover:underline">
                     {e.candidateNo}
                   </Link>
                 </td>
-                <td className="px-3 py-2">
+                <td className="min-w-64 px-3 py-2">
                   <Link href={`/admin/batches/${id}/participants/${e.id}`} className="hover:underline">
                     {e.nameEn ?? e.nameTh}
                   </Link>
                   {e.nameEn && e.nameTh && <span className="block text-ink-soft">{e.nameTh}</span>}
                   {e.source === "MANUAL" && <span className="block text-xs text-brand">เพิ่มเอง</span>}
                 </td>
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap px-3 py-2">
                   <ModeBadge mode={e.examMode} />
                 </td>
-                <td className="px-3 py-2 text-ink-soft">
+                <td className="min-w-72 px-3 py-2 text-ink-soft">
                   {[e.level, e.school].filter(Boolean).join(" · ") || "—"}
                 </td>
                 <td className="px-3 py-2">
@@ -194,6 +207,25 @@ export default async function ParticipantsPage({
           </tbody>
         </table>
       </div>
+
+      {lastPage > 1 && (
+        <nav className="mt-5 flex flex-wrap items-center justify-center gap-1.5 text-sm" aria-label="หน้ารายชื่อผู้เข้าสอบ">
+          {page > 1 && <Link href={pageHref(page - 1)} className="rounded-lg border border-hairline bg-card px-3 py-2 text-brand hover:bg-brand-soft">← ก่อนหน้า</Link>}
+          {firstLink > 1 && <span className="px-1 text-ink-soft" aria-hidden="true">…</span>}
+          {pageNumbers.map((number) => (
+            <Link
+              key={number}
+              href={pageHref(number)}
+              aria-current={number === page ? "page" : undefined}
+              className={`min-w-10 rounded-lg border px-3 py-2 text-center font-medium ${number === page ? "border-brand bg-brand text-white" : "border-hairline bg-card text-brand hover:bg-brand-soft"}`}
+            >
+              {number}
+            </Link>
+          ))}
+          {firstLink + PAGE_LINKS <= lastPage && <span className="px-1 text-ink-soft" aria-hidden="true">…</span>}
+          {page < lastPage && <Link href={pageHref(page + 1)} className="rounded-lg border border-hairline bg-card px-3 py-2 text-brand hover:bg-brand-soft">ถัดไป →</Link>}
+        </nav>
+      )}
     </AdminShell>
   );
 }

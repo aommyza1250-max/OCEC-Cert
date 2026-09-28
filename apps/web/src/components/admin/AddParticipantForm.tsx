@@ -54,6 +54,10 @@ export function AddParticipantForm({
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-hairline bg-card p-4">
       <p className="font-medium">เพิ่มผู้เข้าสอบที่ตกหล่นจาก Excel</p>
+      <p className="text-sm text-ink-soft">
+        ขั้นที่ 1 บันทึกข้อมูลผู้เข้าสอบก่อน ระบบจะลองจับคู่กับไฟล์ที่อัปไว้แล้ว
+        จากนั้นไปหน้าของคนนี้เพื่อเพิ่มไฟล์เกียรติบัตรในขั้นที่ 2 (ถ้าระบบกำลังประมวลผล ให้รอจนเสร็จก่อน)
+      </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="เลขผู้เข้าสอบ *" value={form.candidateNo} onChange={set("candidateNo")} inputMode="numeric" />
         <fieldset className="text-sm">
@@ -89,7 +93,7 @@ export function AddParticipantForm({
         className="min-h-11 cursor-pointer rounded-xl bg-brand px-4 text-sm font-semibold text-white transition duration-200
                    hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {busy ? "กำลังบันทึก..." : locked ?? "เพิ่มผู้เข้าสอบ"}
+        {busy ? "กำลังบันทึก..." : locked ?? "บันทึกและไปหน้าผู้เข้าสอบ"}
       </button>
     </form>
   );
