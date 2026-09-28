@@ -405,13 +405,16 @@ function LineContactButton({ className = "" }: { className?: string }) {
 function SiteFooter() {
   return (
     <footer className="border-t border-hairline bg-card">
-      <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
+      <div className="mx-auto max-w-5xl px-4 py-5 text-center sm:py-6">
         <div className="text-sm text-ink-soft">
-          <p>ไฟล์ที่ได้เป็น PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง</p>
-          <p className="mt-1">
+          <p>
             หากมีข้อสงสัยหรือติดปัญหา กรุณาติดต่อผ่านทาง Line Official Account
           </p>
-          <LineContactButton className="mt-1" />
+          <LineContactButton className="mt-2" />
+        </div>
+        <div className="mt-5 border-t border-hairline pt-4 text-sm leading-relaxed text-ink-soft">
+          <p>Copyright © 2026 OCEC TH. All rights reserved.</p>
+          <p className="mt-1">DEV by Saimon-X7</p>
         </div>
       </div>
     </footer>
