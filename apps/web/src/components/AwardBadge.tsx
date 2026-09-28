@@ -6,7 +6,7 @@ import { MedalIcon } from "./icons";
  *  แต่ **ต้องมีทั้งข้อความและไอคอนกำกับเสมอ** ห้ามสื่อความหมายด้วยสีอย่างเดียว
  *  คนตาบอดสีและคนที่พิมพ์หน้าเว็บออกมาขาวดำต้องอ่านออกเหมือนกัน
  *
- *  ชื่อรางวัลเป็นของรายการนั้นจริง ๆ (เช่น BBB เป็น "รางวัลที่ 1" ไม่ใช่เหรียญทอง)
+ *  ชื่อรางวัลเป็นภาษาอังกฤษตามชนิดของใบจริง (เช่น BBB ใช้ 1ST PRIZE AWARD ไม่ใช่ GOLD AWARD)
  *  สีมาจากแคตตาล็อกรางวัล (shared/certificate-profiles/*.json ช่อง badge) */
 const TONES: Record<string, string> = {
   gold: "bg-gold-bg text-gold-ink border-gold-line",
@@ -20,12 +20,10 @@ const TONES: Record<string, string> = {
 
 export function AwardBadge({
   label,
-  labelTh,
   badge,
   className = "",
 }: {
   label: string;
-  labelTh?: string | null;
   badge: string;
   className?: string;
 }) {
@@ -37,7 +35,7 @@ export function AwardBadge({
       title={label}
     >
       <MedalIcon className="h-4 w-4 shrink-0" />
-      {labelTh ?? label}
+      {label}
     </span>
   );
 }

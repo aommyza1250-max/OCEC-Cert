@@ -4,7 +4,7 @@ import { CertificateCard } from "@/components/CertificateCard";
 import { ChatIcon, InfoIcon, PersonIcon, SchoolIcon, SearchIcon } from "@/components/icons";
 import { SearchBox } from "@/components/SearchBox";
 import { MIN_QUERY_LENGTH } from "@/lib/constants";
-import { ROUND_LABELS } from "@/lib/normalize";
+import { publicRoundLabel } from "@/lib/public-labels";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { RETENTION_MONTHS } from "@/lib/publish";
 import { searchStudents, type SearchResult } from "@/lib/search";
@@ -252,7 +252,7 @@ function StudentBlock({ student }: { student: SearchResult }) {
               {program.sessions.map((session) => (
                 <div key={`${session.year}-${session.round}`}>
                   <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
-                    ปี {session.year} · {ROUND_LABELS[session.round] ?? session.round}
+                    ปี {session.year} · {publicRoundLabel(session.round)}
                   </h4>
                   <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                     {session.certificates.map((cert) => (
