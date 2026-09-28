@@ -111,7 +111,7 @@ export default async function AdminDashboard({
   return (
     <AdminShell
       title="รอบการนำเข้า"
-      description="อัปโหลดไฟล์รวมเล่ม ตัดแยกหน้า จับคู่รายชื่อ แล้วเผยแพร่"
+      description="ระบบนำเข้า และจัดการเกียรติบัตร"
     >
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -121,11 +121,10 @@ export default async function AdminDashboard({
               <Link
                 key={y}
                 href={`/admin?year=${y}`}
-                className={`rounded-lg px-3 py-1 text-sm transition ${
-                  y === selectedYear
+                className={`rounded-lg px-3 py-1 text-sm transition ${y === selectedYear
                     ? "bg-brand font-medium text-white"
                     : "border border-hairline bg-card text-ink-soft hover:border-brand"
-                }`}
+                  }`}
               >
                 {y}
               </Link>

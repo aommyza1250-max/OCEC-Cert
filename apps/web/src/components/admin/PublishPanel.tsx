@@ -65,7 +65,7 @@ export function PublishPanel({
         <p className="mt-1 text-sm text-ink-soft">
           {published
             ? `เผยแพร่อยู่ ${publishedCount} ใบ จากทั้งหมด ${certificateCount} ใบ — ต้องยกเลิกการเผยแพร่ก่อนจึงจะอัปโหลดหรือแก้ไขได้`
-            : "เผยแพร่ทีละคน คนที่ข้อมูลครบออกไปก่อน คนที่ยังมีปัญหาค้างไว้จนกว่าจะแก้เสร็จแล้วกดเผยแพร่อีกครั้ง"}
+            : "เผยแพร่เฉพาะคนที่มีข้อมูลครบ แล้วเท่านั้น"}
         </p>
       </div>
 
@@ -113,7 +113,7 @@ export function PublishPanel({
                   "publish",
                   { published: true },
                   `เผยแพร่ ${summary.toPublish.certificates} ใบ ของผู้เข้าสอบ ${summary.toPublish.participants} คน?` +
-                    (summary.held.participants ? ` (ค้างไว้ ${summary.held.participants} คน)` : ""),
+                  (summary.held.participants ? ` (ค้างไว้ ${summary.held.participants} คน)` : ""),
                   { title: "ยืนยันการเผยแพร่", confirmLabel: "เผยแพร่", tone: "brand" },
                 )
               }
@@ -194,9 +194,8 @@ function PolicyChooser({
         {options.map((o) => (
           <label
             key={o.value}
-            className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 ${
-              policy === o.value ? "border-brand" : "border-hairline"
-            }`}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 ${policy === o.value ? "border-brand" : "border-hairline"
+              }`}
           >
             <input
               type="radio"

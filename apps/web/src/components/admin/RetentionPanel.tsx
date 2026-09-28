@@ -60,7 +60,7 @@ export function RetentionPanel({
         </p>
       ) : date ? (
         <p className="text-ink">
-          เกียรติบัตร {certificates} ใบของรอบนี้จะถูกลบไฟล์วันที่ <b>{date}</b>
+          เกียรติบัตรจำนวน {certificates} ใบจะถูกลบวันที่ <b>{date}</b>
         </p>
       ) : (
         <p className="text-ink-soft">ยังไม่ได้เผยแพร่ จึงยังไม่เริ่มนับอายุการเก็บ</p>

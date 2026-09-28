@@ -150,16 +150,14 @@ export function BatchWorkflow({
                   aria-controls={`intake-step-${step.id}`}
                   aria-current={current ? "step" : undefined}
                   onClick={() => setActiveStep(step.id)}
-                  className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                    current
-                      ? "border-2 border-brand bg-brand-soft text-brand"
-                      : "border-hairline bg-card text-ink-soft hover:border-brand-line hover:text-ink"
-                  }`}
+                  className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${current
+                    ? "border-2 border-brand bg-brand-soft text-brand"
+                    : "border-hairline bg-card text-ink-soft hover:border-brand-line hover:text-ink"
+                    }`}
                 >
                   <span
-                    className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      current ? "bg-brand text-white" : "bg-paper text-ink-soft"
-                    }`}
+                    className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${current ? "bg-brand text-white" : "bg-paper text-ink-soft"
+                      }`}
                   >
                     {current ? step.id : step.done ? "✓" : step.id}
                   </span>
@@ -171,7 +169,6 @@ export function BatchWorkflow({
               );
             })}
           </nav>
-          <p className="-mt-4 text-xs text-ink-soft">เลือกขั้นตอนได้ตลอดเพื่อย้อนดูหรือไปต่อ — การเปลี่ยนหน้าไม่เริ่มประมวลผลซ้ำ</p>
 
           <section id="intake-step-1" aria-label="ขั้นที่ 1 รายชื่อผู้เข้าสอบ" hidden={activeStep !== 1}>
             <RosterPanel
@@ -204,7 +201,7 @@ export function BatchWorkflow({
               <div>
                 <h2 className="text-xl font-semibold">ภาพรวมรอบนี้</h2>
                 <p className="mt-1 text-sm text-ink-soft">
-                  {batch.programCode} · {batch.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ"} · {batch.year} · สรุปยอด รายการค้าง และการเผยแพร่ไว้หน้าเดียว
+                  {batch.programCode} · {batch.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ"} · {batch.year} · สรุปยอด รายการค้าง และการเผยแพร่
                 </p>
               </div>
               <StatusBadge status={batch.status} />
@@ -276,7 +273,6 @@ export function BatchWorkflow({
             </div>
             <div className="mt-5 border-t border-hairline pt-5">
               <StepNavigation backLabel="← กลับไปขั้นอัปโหลด ZIP" onBack={() => setActiveStep(2)} />
-              <p className="mt-2 text-xs text-ink-soft">ย้อนดูได้โดยไม่เปลี่ยนสถานะการเผยแพร่</p>
             </div>
           </section>
         </>
