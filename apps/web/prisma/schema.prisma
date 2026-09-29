@@ -389,6 +389,16 @@ model AuditEvent {
   @@map("audit_events")
 }
 
+/// สวิตช์ทั้งเว็บไซต์สำหรับช่วงอัปเดตข้อมูลบน production
+/// มีแถวเดียว id=1; ถ้าแถวยังไม่มี ให้ถือว่าเปิดเว็บตามปกติ
+model SiteSetting {
+  id                 Int      @id @default(1)
+  maintenanceEnabled Boolean  @default(false) @map("maintenance_enabled")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
 /// 1 หน้าที่ตัดออกมาจาก PDF รวมเล่ม — ยังไม่ผูกกับผู้เข้าสอบจนกว่าจะ match สำเร็จ
 model StagingPage {
   id      String @id @default(uuid()) @db.Uuid

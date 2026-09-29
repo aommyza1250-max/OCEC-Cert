@@ -20,6 +20,7 @@ const EXEMPT: Record<string, string> = {
   "programs/route.ts": "จัดการรายการสอบ ไม่ใช่รอบนำเข้า",
   "programs/[id]/route.ts": "จัดการรายการสอบ ไม่ใช่รอบนำเข้า",
   "retention/route.ts": "งานกวาดอายุของทั้งระบบ",
+  "maintenance/route.ts": "สวิตช์หน้าค้นหาทั้งเว็บไซต์ ไม่ได้แก้ข้อมูลของรอบนำเข้า",
   "batches/route.ts": "สร้างรอบนำเข้าใหม่ (ยังไม่มีข้อมูลให้แก้)",
   "batches/[id]/delete/route.ts": "ลบทั้งรอบ มีการยืนยันด้วยการพิมพ์ชื่อรอบของตัวเอง",
   "batches/[id]/extend/route.ts": "ต่ออายุการเก็บ ไม่ได้แก้ข้อมูลเกียรติบัตร",
