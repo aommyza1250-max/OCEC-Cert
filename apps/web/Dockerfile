@@ -7,10 +7,13 @@ RUN pnpm install --frozen-lockfile
 
 # ---------- build ----------
 FROM node:22-alpine AS builder
-WORKDIR /app
+# วางโครงเหมือนใน repo (apps/web + shared) เพราะเว็บอ่านแคตตาล็อกรางวัลจาก shared/certificate-profiles
+# ชุดเดียวกับที่ worker ใช้ — path แบบ ../../shared ต้องชี้ไปที่เดียวกันทั้งในเครื่องและใน image
+WORKDIR /repo/apps/web
 RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/web/ ./
+COPY shared/ /repo/shared/
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
@@ -22,12 +25,12 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # output: "standalone" ใน next.config.ts ทำให้ image เล็กลงหลายร้อย MB
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+COPY --from=builder /repo/apps/web/.next/standalone ./
+COPY --from=builder /repo/apps/web/.next/static ./.next/static
+COPY --from=builder /repo/apps/web/public ./public
 # ต้องมี prisma client + migration ติดมาด้วย เพื่อให้ deploy แล้ว migrate ได้
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /repo/apps/web/prisma ./prisma
+COPY --from=builder /repo/apps/web/node_modules ./node_modules
 
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0

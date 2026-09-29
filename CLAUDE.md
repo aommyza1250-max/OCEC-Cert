@@ -10,7 +10,7 @@
 | `apps/web` | Next.js 15 (App Router) + Tailwind 4 + Prisma — หน้าค้นหาสาธารณะและหน้าแอดมิน |
 | `apps/worker` | Python 3.12 + FastAPI + PyMuPDF — ตัด PDF, สร้าง preview, จับคู่ Excel |
 | `shared/` | ไฟล์ที่ทั้งสองภาษาใช้ร่วมกัน (ตอนนี้มีเคสทดสอบ normalize) |
-| `docs/` | สเปกและคู่มือ — `admin-guide.md` สำหรับคนใช้งาน, `data-intake-spec.md` สำหรับคนแก้โค้ด |
+| `docs/` | สเปกและคู่มือ — `admin-guide.md` สำหรับคนใช้งาน, `data-intake-spec.md` และ `certificate-profiles.md` สำหรับคนแก้โค้ด |
 | `infra/` | ไฟล์ตั้งค่า Railway และ CORS ของ R2 |
 
 ## กฎที่ห้ามพลาด
@@ -58,14 +58,17 @@
 ```bash
 ./scripts/dev.sh                                   # ยกทุกอย่างขึ้น
 cd apps/web && pnpm dev                            # เว็บ http://localhost:3000
-cd apps/web && pnpm test                           # เทส normalize ฝั่ง TS
+cd apps/web && pnpm test                           # เทสฝั่ง TS (normalize, แคตตาล็อกรางวัล, กติกาเผยแพร่)
+./scripts/test-db.sh                               # สร้างฐานข้อมูลทดสอบ ocec_test (ครั้งแรก / หลังแก้ schema)
+cd apps/web && TEST_DATABASE_URL=postgresql://ocec:ocec@localhost:5432/ocec_test pnpm test:int  # เทส API กับฐานข้อมูลจริง
 cd apps/web && pnpm db:seed                        # ใส่ข้อมูลตัวอย่าง
-docker compose exec worker python -m pytest -q     # เทสฝั่ง Python
+docker compose exec worker python -m pytest -q     # เทสฝั่ง Python (ตั้ง TEST_DATABASE_URL เพื่อรันเทสที่ใช้ฐานข้อมูลด้วย)
 docker compose exec worker python scripts/e2e_demo.py       # ทดสอบทั้งสายงานด้วยไฟล์สังเคราะห์
 docker compose exec worker python scripts/check_real_files.py  # ตรวจตัวอ่านกับไฟล์จริงใน apps/worker/tmp/
 docker compose exec worker python scripts/verify_cleanup_and_delete.py  # ตรวจการเคลียร์ ZIP และการลบรอบนำเข้า
 docker compose exec worker python scripts/verify_expire.py     # ตรวจการลบเกียรติบัตรที่ครบอายุ 2 ปี
 docker compose exec worker python scripts/rerender_previews.py --all --dry-run  # สร้างรูปตัวอย่างใหม่ตามค่า DPI ปัจจุบัน
+docker compose exec worker python scripts/backup_batch.py --list  # สำรองรอบนำเข้าก่อนล้าง/นำเข้าใหม่ (อ่านอย่างเดียว ผลมีข้อมูลส่วนบุคคล)
 docker compose logs -f worker                      # ดู log worker
 ```
 

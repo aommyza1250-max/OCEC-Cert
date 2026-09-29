@@ -1,35 +1,30 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { applyPublish } from "@/lib/publish";
+import { recordAudit } from "@/lib/audit";
+import { withBatchMutation } from "@/lib/batch-guard";
+import { adminHandler, parseBody } from "@/lib/http";
 
 const schema = z.object({ policy: z.enum(["ALL", "MEDAL_ONLY"]) });
 
 /**
  * บันทึกว่าฮ่องกงส่งเกียรติบัตรฉบับจริงแบบไหนสำหรับรอบนี้
  *
- * ถ้ารอบนี้เผยแพร่ไปแล้ว จะลงมือปรับให้ทันที เพราะการเปลี่ยนตัวเลือกคือการตั้งใจ
- * เปลี่ยนสิ่งที่ผู้ปกครองเห็น ไม่ควรต้องไปกดปุ่มเผยแพร่ซ้ำอีกทีให้ลืม
+ * เปลี่ยนได้เฉพาะตอนยังไม่เผยแพร่ — เป็นการเปลี่ยนสิ่งที่ผู้ปกครองเห็น
+ * จึงต้องผ่านขั้นยกเลิก -> เปลี่ยน -> เผยแพร่ใหม่ เหมือนการแก้ไขอื่น ๆ
  */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    await requireAdmin();
-  } catch (response) {
-    return response as Response;
-  }
-
-  const { id } = await params;
-  const parsed = schema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "ข้อมูลไม่ถูกต้อง" }, { status: 400 });
-  }
-
-  const batch = await prisma.batch.update({
-    where: { id },
-    data: { multiAwardPolicy: parsed.data.policy },
+export const POST = adminHandler<{ id: string }>(async (request, { params, session }) => {
+  const { policy } = await parseBody(request, schema);
+  await withBatchMutation(params.id, async (tx, batch) => {
+    const before = await tx.batch.findUniqueOrThrow({ where: { id: batch.id }, select: { multiAwardPolicy: true } });
+    await tx.batch.update({ where: { id: batch.id }, data: { multiAwardPolicy: policy } });
+    await recordAudit(tx, batch, {
+      entityType: "BATCH",
+      entityId: batch.id,
+      action: "POLICY_CHANGED",
+      before: { policy: before.multiAwardPolicy },
+      after: { policy },
+      sessionId: session.sessionId,
+    });
   });
-
-  const applied = batch.status === "PUBLISHED" ? await applyPublish(id, true) : null;
-  return NextResponse.json({ ok: true, applied });
-}
+  return NextResponse.json({ ok: true });
+});

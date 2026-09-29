@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:int": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://ocec:ocec@localhost:5432/ocec_test} vitest run"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

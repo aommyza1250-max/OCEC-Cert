@@ -6,7 +6,8 @@
  *
  * ⚠️ ชื่อทั้งหมดในไฟล์นี้เป็นชื่อสมมติ ห้ามใส่ข้อมูลผู้เข้าสอบจริงลงไฟล์ที่ commit ขึ้น git
  */
-import { PrismaClient, BatchStatus, ExamRound, MatchStatus } from "@prisma/client";
+import { PrismaClient, BatchStatus, ExamMode, ExamRound, MatchStatus } from "@prisma/client";
+import { awardDisplay, profileKeyFor } from "../src/lib/certificate-catalog";
 import { nameSortKey, normalizeName, normalizeSchool } from "../src/lib/normalize";
 import { makePdf, makePreviewSvg, upload } from "./fake-files";
 
@@ -47,9 +48,13 @@ const LEVELS = ["KINDERGARTEN GROUP", "PRIMARY 3", "PRIMARY 5", "SECONDARY 1", "
 
 async function main() {
   console.log("ล้างข้อมูล seed เดิม...");
-  // ลบตามลำดับ FK: certificates -> staging_pages -> jobs -> batches -> students -> exams -> programs
+  // ลบตามลำดับ FK: certificates -> staging_pages -> รายชื่อ -> jobs -> batches -> students -> exams -> programs
+  await prisma.auditEvent.deleteMany();
   await prisma.certificate.deleteMany();
   await prisma.stagingPage.deleteMany();
+  await prisma.rosterEntry.deleteMany();
+  await prisma.batch.updateMany({ data: { activeRosterImportId: null } });
+  await prisma.rosterImport.deleteMany();
   await prisma.job.deleteMany();
   await prisma.batch.deleteMany();
   await prisma.student.deleteMany();
@@ -71,8 +76,20 @@ async function main() {
           status: BatchStatus.PUBLISHED,
           note: "ข้อมูลตัวอย่างจาก seed",
           stats: { seeded: true },
+          profileKey: profileKeyFor(p.code, e.round),
         },
       });
+      // รายชื่อที่ใช้อยู่ของรอบนี้ — ขั้นตอนใหม่ต้องมีรายชื่อก่อนเสมอ
+      const roster = await prisma.rosterImport.create({
+        data: {
+          batchId: batch.id,
+          status: "ACTIVE",
+          sourceKey: `sources/${batch.id}/roster-seed.xlsx`,
+          fileName: "roster-seed.xlsx",
+          activatedAt: new Date(),
+        },
+      });
+      await prisma.batch.update({ where: { id: batch.id }, data: { activeRosterImportId: roster.id } });
       exams.push({ id: exam.id, batchId: batch.id, code: p.code, round: e.round, year: e.year });
     }
   }
@@ -100,13 +117,33 @@ async function main() {
     for (let i = 0; i < examCount; i++) {
       const exam = exams[i];
       const award = AWARDS[(index + i) % AWARDS.length];
-      await issue(student.id, exam, award, LEVELS[page % LEVELS.length], ++page);
+      const level = LEVELS[page % LEVELS.length];
+      // สลับ online/onsite ให้มีทั้งสองแบบในทุกรอบ — ใช้ในหลังบ้านเท่านั้น หน้าค้นหาไม่แสดง
+      const entry = await prisma.rosterEntry.create({
+        data: {
+          batchId: exam.batchId,
+          candidateNo: String(203000 + page + 1),
+          nameEn: s.nameEn,
+          nameTh: s.nameTh,
+          nameEnNormalized: normalizeName(s.nameEn),
+          nameThNormalized: normalizeName(s.nameTh),
+          nameEnSortKey: nameSortKey(s.nameEn),
+          examMode: index % 2 === 0 ? ExamMode.ONLINE : ExamMode.ONSITE,
+          source: "EXCEL",
+          school: s.school,
+          schoolNormalized: normalizeSchool(s.school),
+          level,
+          rawAward: index < 3 && i === 0 ? "PERFECT SCORER" : `${award} AWARD`,
+          studentId: student.id,
+        },
+      });
+      await issue(student.id, entry, exam, award, level, ++page);
       certCount += 1;
 
       // 3 คนแรกในรอบแรกได้ Perfect Score เพิ่มอีกใบ — ของจริงเป็นแบบนี้
       // (ผู้ที่ทำคะแนนเต็มจะได้ทั้งใบเหรียญและใบ Perfect Score)
       if (index < 3 && i === 0) {
-        await issue(student.id, exam, "PERFECT_SCORE", LEVELS[page % LEVELS.length], ++page);
+        await issue(student.id, entry, exam, "PERFECT_SCORE", level, ++page);
         certCount += 1;
       }
     }
@@ -121,13 +158,15 @@ async function main() {
 /** สร้างเกียรติบัตร 1 ใบ พร้อมไฟล์ตัวอย่างบน MinIO */
 async function issue(
   studentId: string,
+  entry: { id: string; candidateNo: string; examMode: ExamMode },
   exam: { id: string; batchId: string; code: string; round: ExamRound; year: number },
   award: string,
   level: string,
   pageNumber: number,
 ) {
   const student = await prisma.student.findUniqueOrThrow({ where: { id: studentId } });
-  const certNo = String(203000 + pageNumber);
+  const certNo = entry.candidateNo;
+  const shown = awardDisplay(exam.code, award);
 
   // ชื่อไฟล์รูปแบบเดียวกับที่ worker ตัดจริง
   const stem = [
@@ -169,11 +208,15 @@ async function issue(
       awardOnPage: award === "PERFECT_SCORE" ? null : award,
       certYear: exam.year,
       roundOnPage: exam.round,
-      sourceFile: `${exam.code}/${award}/THAILAND_${award}.pdf`,
+      sourceFile: `${entry.examMode.toLowerCase()}/${award}/THAILAND_${award}.pdf`,
       pdfKey,
       previewKey,
       matchStatus: MatchStatus.MATCHED,
       matchedStudentId: studentId,
+      examMode: entry.examMode,
+      rosterEntryId: entry.id,
+      awardLabel: shown.label,
+      sourceKind: "ZIP",
     },
   });
 
@@ -187,6 +230,9 @@ async function issue(
       previewKey,
       pageNumber,
       award,
+      awardLabel: shown.label,
+      awardLabelTh: shown.labelTh,
+      rosterEntryId: entry.id,
       certNo,
       candidateNo: certNo,
       level,

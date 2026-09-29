@@ -4,10 +4,11 @@ import { CertificateCard } from "@/components/CertificateCard";
 import { ChatIcon, InfoIcon, PersonIcon, SchoolIcon, SearchIcon } from "@/components/icons";
 import { SearchBox } from "@/components/SearchBox";
 import { MIN_QUERY_LENGTH } from "@/lib/constants";
-import { ROUND_LABELS } from "@/lib/normalize";
+import { isMaintenanceEnabled } from "@/lib/maintenance";
+import { publicRoundLabel } from "@/lib/public-labels";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { RETENTION_MONTHS } from "@/lib/publish";
-import { searchStudents, type SearchResult } from "@/lib/search";
+import { searchStudents, type ExamSession, type SearchResult } from "@/lib/search";
 
 // ผลค้นหาเปลี่ยนตามฐานข้อมูล ห้าม cache
 export const dynamic = "force-dynamic";
@@ -19,11 +20,41 @@ const RETENTION_YEARS = Math.round(RETENTION_MONTHS / 12);
 const LINE_URL = "https://lin.ee/3hzFg1z";
 const LINE_NAME = "OCEC_Thailand";
 
+/** จัดรอบของปีเดียวกันให้อยู่แถวเดียวกันบนจอใหญ่ โดยไม่เปลี่ยนข้อมูลผลค้นหา */
+function sessionsByYear(sessions: ExamSession[]): ExamSession[][] {
+  const years = new Map<number, ExamSession[]>();
+  for (const session of sessions) {
+    const group = years.get(session.year) ?? [];
+    group.push(session);
+    years.set(session.year, group);
+  }
+  return [...years.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([, group]) => group);
+}
+
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
+  if (await isMaintenanceEnabled()) {
+    return (
+      <>
+        <SiteHeader />
+        <main id="main" className="mx-auto flex min-h-[60dvh] w-full max-w-5xl items-center justify-center px-4 py-12">
+          <section role="status" className="w-full max-w-2xl rounded-2xl border border-brand-line bg-card px-6 py-10 text-center shadow-sm sm:px-10 sm:py-14">
+            <h1 className="text-2xl font-bold text-brand sm:text-3xl">ระบบปิดปรับปรุงชั่วคราว</h1>
+            <p className="mt-4 leading-7 text-ink-soft">
+              ขณะนี้ยังไม่สามารถค้นหาหรือดาวน์โหลดเกียรติบัตรได้ กรุณากลับมาใหม่ภายหลัง
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">ทีมงานกำลังอัปเดตระบบและข้อมูลเกียรติบัตร</p>
+          </section>
+        </main>
+        <SiteFooter />
+      </>
+    );
+  }
   const { q = "" } = await searchParams;
   const query = q.trim();
   // ชื่อบนเกียรติบัตรและในชีทรายชื่อเป็นอังกฤษล้วน พิมพ์ไทยมาจึงไม่มีทางเจอ
@@ -249,21 +280,31 @@ function StudentBlock({ student }: { student: SearchResult }) {
                 แต่ต้องเขียนรอบให้เห็นชัด เพราะใบรอบคัดเลือกกับรอบชิงชนะเลิศของปีเดียวกัน
                 หน้าตาเกือบเหมือนกัน ถ้าไม่บอกให้ชัด ผู้ปกครองจะกดผิดใบ */}
             <div className="mt-3 space-y-5 sm:mt-4 sm:space-y-6">
-              {program.sessions.map((session) => (
-                <div key={`${session.year}-${session.round}`}>
-                  <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
-                    ปี {session.year} · {ROUND_LABELS[session.round] ?? session.round}
-                  </h4>
-                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                    {session.certificates.map((cert) => (
-                      <CertificateCard
-                        key={cert.id}
-                        cert={cert}
-                        programCode={program.code}
-                        studentName={displayName}
-                      />
-                    ))}
-                  </div>
+              {sessionsByYear(program.sessions).map((yearSessions) => (
+                <div
+                  key={yearSessions[0].year}
+                  className="space-y-5 sm:space-y-6 md:grid md:grid-cols-2 md:gap-4 md:space-y-0"
+                >
+                  {yearSessions.map((session) => (
+                    <div
+                      key={`${session.year}-${session.round}`}
+                      className={`min-w-0 ${session.round === "HEAT" ? "md:order-first" : ""}`}
+                    >
+                      <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
+                        ปี {session.year} · {publicRoundLabel(session.round)}
+                      </h4>
+                      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-1 lg:grid-cols-2 lg:gap-3">
+                        {session.certificates.map((cert) => (
+                          <CertificateCard
+                            key={cert.id}
+                            cert={cert}
+                            programCode={program.code}
+                            studentName={displayName}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -405,13 +446,16 @@ function LineContactButton({ className = "" }: { className?: string }) {
 function SiteFooter() {
   return (
     <footer className="border-t border-hairline bg-card">
-      <div className="mx-auto max-w-5xl px-4 py-5 sm:py-6">
+      <div className="mx-auto max-w-5xl px-4 py-5 text-center sm:py-6">
         <div className="text-sm text-ink-soft">
-          <p>ไฟล์ที่ได้เป็น PDF เปิดและสั่งพิมพ์ได้ทุกเครื่อง</p>
-          <p className="mt-1">
+          <p>
             หากมีข้อสงสัยหรือติดปัญหา กรุณาติดต่อผ่านทาง Line Official Account
           </p>
-          <LineContactButton className="mt-1" />
+          <LineContactButton className="mt-2" />
+        </div>
+        <div className="mt-5 border-t border-hairline pt-4 text-xs leading-relaxed text-ink-soft">
+          <p>Copyright © 2026 OCEC TH. All rights reserved.</p>
+          <p className="mt-1 text-[0.625rem]">DEV by Saimon-X7</p>
         </div>
       </div>
     </footer>

@@ -2,11 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { ExpiringSoon, type ExpiringGroup } from "@/components/admin/ExpiringSoon";
+import { MaintenancePanel } from "@/components/admin/MaintenancePanel";
 import { ProgramManager } from "@/components/admin/ProgramManager";
 import { statusLabel } from "@/components/admin/StatusBadge";
 import { YearGrid, type GridRow } from "@/components/admin/YearGrid";
 import { isAuthenticated } from "@/lib/auth";
+import { profileKeyFor } from "@/lib/certificate-catalog";
 import { prisma } from "@/lib/db";
+import { isMaintenanceEnabled } from "@/lib/maintenance";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,15 @@ export default async function AdminDashboard({
   const thisYear = new Date().getFullYear();
   const { year } = await searchParams;
   const selectedYear = Number(year) || thisYear;
+  const [maintenanceEnabled, maintenanceHistory] = await Promise.all([
+    isMaintenanceEnabled(),
+    prisma.auditEvent.findMany({
+      where: { entityType: "SITE", entityId: "maintenance" },
+      select: { action: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+  ]);
 
   // ดึงรอบนำเข้าทั้งหมด แต่เอาเฉพาะคอลัมน์ที่ใช้จริง
   // (เดิมดึงแบบ take: 50 ซึ่งพอถึงปีที่ 5 รอบเก่าจะหายจากหน้าจอโดยไม่มีอะไรบอก)
@@ -64,6 +76,8 @@ export default async function AdminDashboard({
         const first = matches[0];
         return {
           batchId: first?.id ?? null,
+          // รายการ/รอบที่ยังไม่มีโปรไฟล์ เริ่มนำเข้าไม่ได้ — ไม่มีโปรไฟล์กลางให้ถอยไปใช้
+          profileKey: profileKeyFor(program.code, round),
           status: first?.status ?? null,
           certificates: first ? (certificatesOf.get(first.id) ?? 0) : 0,
           extras: Math.max(0, matches.length - 1),
@@ -108,8 +122,12 @@ export default async function AdminDashboard({
   return (
     <AdminShell
       title="รอบการนำเข้า"
-      description="อัปโหลดไฟล์รวมเล่ม ตัดแยกหน้า จับคู่รายชื่อ แล้วเผยแพร่"
+      description="ระบบนำเข้า และจัดการเกียรติบัตร"
     >
+      <MaintenancePanel
+        initialEnabled={maintenanceEnabled}
+        history={maintenanceHistory.map((event) => ({ action: event.action, createdAt: event.createdAt.toISOString() }))}
+      />
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -118,11 +136,10 @@ export default async function AdminDashboard({
               <Link
                 key={y}
                 href={`/admin?year=${y}`}
-                className={`rounded-lg px-3 py-1 text-sm transition ${
-                  y === selectedYear
+                className={`rounded-lg px-3 py-1 text-sm transition ${y === selectedYear
                     ? "bg-brand font-medium text-white"
                     : "border border-hairline bg-card text-ink-soft hover:border-brand"
-                }`}
+                  }`}
               >
                 {y}
               </Link>

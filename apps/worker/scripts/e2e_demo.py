@@ -1,12 +1,12 @@
-"""ทดสอบทั้งสายงานด้วยไฟล์สังเคราะห์ที่เลียนโครงไฟล์จริง (ใช้ตอน dev เท่านั้น)
+"""ทดสอบทั้งสายงานผ่านคิวงานจริง ด้วยไฟล์สังเคราะห์ที่เลียนโครงไฟล์จริง (ใช้ตอน dev เท่านั้น)
 
-รันในคอนเทนเนอร์ worker:
+รันในคอนเทนเนอร์ worker (ต้องมี worker ทำงานอยู่ เพราะงานทั้งหมดเข้าคิวแล้วรอ worker หยิบไปทำ):
     docker compose exec worker python scripts/e2e_demo.py
 
 ทำตามลำดับเดียวกับที่แอดมินทำจริงทุกขั้น:
-  สร้างรอบนำเข้า -> อัปโหลด ZIP -> ตั้งงาน SPLIT -> รอ
-  -> อัปโหลด Excel -> ตั้งงาน MATCH -> รอ -> ตรวจผล
+  สร้างรอบนำเข้า -> อัปรายชื่อ (ตรวจ) -> กดใช้รายชื่อ -> อัป ZIP (ตัดหน้า + จับคู่) -> ตรวจผล
 
+สร้างรอบนำเข้าใต้รายการ HKIMO ด้วยปีทดสอบ (2090 ขึ้นไป) แล้วล้างทิ้งทั้งหมดเมื่อจบ
 ถ้าอยากตรวจกับไฟล์จริง ใช้ scripts/check_real_files.py แทน
 """
 
@@ -17,333 +17,189 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _intake import XLSX_MIME, TestBatch, cleanup, create_batch  # noqa: E402
 from app.db import connection, new_id  # noqa: E402
 from app.storage import upload_bytes  # noqa: E402
-from tests.fixtures.builders import (  # noqa: E402
-    make_award_zip,
-    make_bundle_pdf,
-    make_roster_xlsx,
-)
+from tests.fixtures.builders import make_bundle_pdf, make_roster_xlsx, make_zip  # noqa: E402
 
-XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+HEADERS = {"cert_no": "CANDIDATE NO", "level": "GRADE", "name_en": "CANDIDATE NAME", "award": "AWARD",
+           "mode": "EXAM MODE", "school": "SCHOOL"}
 
-DOMESTIC = [
-    {"name": "ALPHA TESTONE", "level": "Primary 5", "cert_no": "90001"},
-    {"name": "BETA TESTTWO", "level": "Primary 6", "cert_no": "90002"},
-    {"name": "GAMMA TESTTHREE", "level": "Secondary 1", "cert_no": "90003"},
-]
-INTERNATIONAL = [
-    {"name": "ALPHA TESTONE", "country": "THAILAND", "level": "Primary 5", "cert_no": "91001"},
-    {"name": "TARO YAMADA", "country": "JAPAN", "level": "Primary 5", "cert_no": "91002"},
-    {"name": "BETA TESTTWO", "country": "THAILAND", "level": "Primary 6", "cert_no": "91003"},
-    {"name": "JOHN SMITH", "country": "UNITED STATES", "level": "Primary 6", "cert_no": "91004"},
-]
-# ชื่อเหมือนกันเป๊ะ — ใช้ทดสอบทั้งกรณี "คนละโรงเรียน" และ "โรงเรียนเดียวกัน"
-DUPLICATE_NAMES = [
-    {"name": "ALPHA TESTONE", "level": "Primary 5", "cert_no": "92001"},
-    {"name": "ALPHA TESTONE", "level": "Secondary 2", "cert_no": "92002"},
-]
+failures: list[str] = []
 
-HEADERS_WITH_SCHOOL = {
-    "name_en": "Name",
-    "school": "โรงเรียน",
-    "cert_no": "เลขเกียรติบัตร",
-    "award": "Award",
-}
+
+def check(label: str, actual, expected) -> None:
+    ok = actual == expected
+    print(f"  {'✓' if ok else '✗'} {label}: ได้ {actual} คาดหวัง {expected}")
+    if not ok:
+        failures.append(label)
 
 
 def main() -> int:
-    # ทุกรอบใช้รหัสของตัวเอง ไม่งั้นข้อมูลจากรอบก่อนจะกลายเป็นผู้เข้าสอบชื่อพ้องที่ทำให้ผลเพี้ยน
-    run = int(time.time()) % 100000
-    ok = True
-
-    ok &= run_case(
-        "รอบ Heat — ตัดแยกทุกหน้า ไม่กรองสัญชาติ",
-        code=f"E2EHEAT{run}",
-        exam_round="HEAT",
-        bundles={
-            "Gold": [
-                {"name": "ALPHA TESTONE", "level": "PRIMARY 5", "cert_no": "70001",
-                 "award": "Gold", "round": "Heat"},
-                {"name": "BETA TESTTWO", "level": "PRIMARY 6", "cert_no": "70002",
-                 "award": "Gold", "round": "Heat"},
-            ],
-            "Merit": [
-                {"name": "GAMMA TESTTHREE", "level": "SECONDARY 1", "cert_no": "70003",
-                 "award": "Merit", "round": "Heat"},
-            ],
-        },
-        roster=[
-            {"cert_no": 70001, "level": "PRIMARY 5", "name_en": "ALPHA TESTONE", "award": "GOLD AWARD"},
-            {"cert_no": 70002, "level": "PRIMARY 6", "name_en": "BETA TESTTWO", "award": "GOLD AWARD"},
-            {"cert_no": 70003, "level": "SECONDARY 1", "name_en": "GAMMA TESTTHREE", "award": "MERIT AWARD"},
-        ],
-        expect_split=3,
-        expect_skipped=0,
-        expect_certificates=3,
-    )
-
-    ok &= run_case(
-        "รอบ Final — ต้องข้ามหน้าของคนต่างชาติ",
-        code=f"E2EFINAL{run}",
-        exam_round="FINAL",
-        bundles={
-            "Silver": [
-                {"name": "ALPHA TESTONE", "country": "THAILAND", "level": "PRIMARY 5",
-                 "cert_no": "71001", "award": "Silver"},
-                {"name": "TARO YAMADA", "country": "JAPAN", "level": "PRIMARY 5",
-                 "cert_no": "71002", "award": "Silver"},
-                {"name": "JOHN SMITH", "country": "UNITED STATES", "level": "PRIMARY 6",
-                 "cert_no": "71003", "award": "Silver"},
-            ],
-            "Bronze": [
-                {"name": "BETA TESTTWO", "country": "THAILAND", "level": "PRIMARY 6",
-                 "cert_no": "71004", "award": "Bronze"},
-            ],
-        },
-        roster=[
-            {"cert_no": 71001, "level": "PRIMARY 5", "name_en": "ALPHA TESTONE", "award": "SILVER AWARD"},
-            {"cert_no": 71004, "level": "PRIMARY 6", "name_en": "BETA TESTTWO", "award": "BRONZE AWARD"},
-        ],
-        expect_split=2,
-        expect_skipped=2,
-        expect_certificates=2,
-    )
-
-    ok &= run_case(
-        "Perfect Scorer — คนเดียวได้ 2 ใบ ทั้งที่ Excel มีแถวเดียว",
-        code=f"E2EPS{run}",
-        exam_round="FINAL",
-        bundles={
-            "Gold": [
-                {"name": "SOMCHAI JAIDEE", "country": "THAILAND", "level": "PRIMARY 3",
-                 "cert_no": "72001", "award": "Gold"},
-                {"name": "ANAN SUKSAWAT", "country": "THAILAND", "level": "PRIMARY 3",
-                 "cert_no": "72002", "award": "Gold"},
-            ],
-            # หน้า Perfect Score ของจริงไม่มีบรรทัดรางวัล และใช้เลขเดียวกับใบ Gold ของคนเดียวกัน
-            "Perfect_Score": [
-                {"name": "SOMCHAI JAIDEE", "country": "THAILAND", "level": "PRIMARY 3",
-                 "cert_no": "72001"},
-            ],
-        },
-        roster=[
-            # Excel บันทึกรางวัลสูงสุดแค่แถวเดียวต่อคน
-            {"cert_no": 72001, "level": "PRIMARY 3", "name_en": "SOMCHAI JAIDEE",
-             "award": "PERFECT SCORER"},
-            {"cert_no": 72002, "level": "PRIMARY 3", "name_en": "ANAN SUKSAWAT",
-             "award": "GOLD AWARD"},
-        ],
-        expect_split=3,
-        expect_skipped=0,
-        # 3 ใบ: Gold 2 ใบ + Perfect Score 1 ใบ โดย SOMCHAI ได้ 2 ใบจากแถว Excel แถวเดียว
-        expect_certificates=3,
-        expect_students=2,
-    )
-
-    # เคสนี้ต้องมีคนชื่อพ้องอยู่ในระบบก่อน ไม่พึ่งข้อมูล seed เพราะฐานข้อมูลอาจถูกล้างมา
-    seed_same_name_students("SOMCHAI JAIDEE")
-    ok &= run_case(
-        "ชื่อพ้องกับผู้เข้าสอบที่มีในระบบหลายคน — ต้องส่งให้แอดมิน ไม่ใช่สร้างคนใหม่",
-        code=f"E2EDUP{run}",
-        exam_round="HEAT",
-        bundles={
-            "Gold": [
-                # seed มีคนชื่อนี้อยู่ 2 คน (คนละโรงเรียน) ระบบจึงแยกไม่ออกว่าเป็นคนไหน
-                {"name": "SOMCHAI JAIDEE", "level": "PRIMARY 5", "cert_no": "73001",
-                 "award": "Gold", "round": "Heat"},
-            ],
-        },
-        roster=[
-            {"cert_no": 73001, "level": "PRIMARY 5", "name_en": "SOMCHAI JAIDEE",
-             "award": "GOLD AWARD"},
-        ],
-        expect_split=1,
-        expect_skipped=0,
-        expect_certificates=0,
-        expect_matched_by_cert=0,
-        expect_ambiguous=1,
-    )
-
-    print("\n" + ("ผ่านทั้งหมด ✓" if ok else "มีเคสที่ไม่ผ่าน ✗"))
-    return 0 if ok else 1
+    created: list[TestBatch] = []
+    try:
+        heat_case(created)
+        final_case(created)
+        mode_case(created)
+        same_name_case(created)
+    finally:
+        cleanup(created, "TESTDEMO")
+    print("\n" + ("ผ่านทั้งหมด ✓" if not failures else f"มีเคสที่ไม่ผ่าน ✗ {failures}"))
+    return 0 if not failures else 1
 
 
-def run_case(
-    title: str,
-    code: str,
-    exam_round: str,
-    bundles: dict,
-    roster: list[dict],
-    expect_split: int,
-    expect_skipped: int,
-    expect_certificates: int,
-    expect_students: int | None = None,
-    expect_matched_by_cert: int | None = None,
-    expect_ambiguous: int = 0,
-) -> bool:
-    print(f"\n{'=' * 72}\n{title}\n{'=' * 72}")
-    batch_id = create_batch(code, exam_round, title)
-
-    zip_bytes = make_award_zip({k: make_bundle_pdf(v) for k, v in bundles.items()})
-    upload_bytes(f"sources/{batch_id}/bundle.zip", zip_bytes, "application/zip")
-    set_source(batch_id, "source_zip_key", f"sources/{batch_id}/bundle.zip")
-    wait_for(enqueue(batch_id, "SPLIT"), "ตัดแยกหน้า")
-
-    upload_bytes(f"sources/{batch_id}/roster.xlsx", make_roster_xlsx(roster), XLSX_MIME)
-    set_source(batch_id, "source_excel_key", f"sources/{batch_id}/roster.xlsx")
-    wait_for(enqueue(batch_id, "MATCH"), "จับคู่รายชื่อ")
-
-    # จับคู่ซ้ำอีกรอบ — แอดมินอัปโหลด Excel ใหม่ทับได้บ่อย ต้องไม่สร้างข้อมูลซ้ำซ้อน
-    students_before = count_students()
-    wait_for(enqueue(batch_id, "MATCH"), "จับคู่รายชื่อรอบสอง")
-    students_after = count_students()
-
-    stats = fetch_stats(batch_id)
-    counts = fetch_page_counts(batch_id)
-    certificates = fetch_certificates(batch_id)
-
-    print(f"  stats: {json.dumps(stats, ensure_ascii=False)}")
-    print(f"  หน้าแยกตามสถานะ: {counts}")
-    for name, award, cert_no, level, pdf_key in certificates:
-        print(f"  ออกเกียรติบัตร: {name} — {award} (No. {cert_no}, {level})")
-        print(f"    ชื่อไฟล์: {pdf_key.rsplit('/', 1)[-1]}")
-
-    naming_ok = all(
-        f"_{code}_{exam_round}_" in pdf_key.rsplit("/", 1)[-1] for *_, pdf_key in certificates
-    )
-    distinct_students = len({name for name, *_ in certificates})
-
-    checks = [
-        ("จำนวนหน้าที่ตัดแยก", stats.get("pagesSplit"), expect_split),
-        ("จำนวนหน้าที่ข้าม", stats.get("foreignSkipped"), expect_skipped),
-        ("จำนวนเกียรติบัตรที่ออก", len(certificates), expect_certificates),
-        ("ชื่อไฟล์มีรายการสอบและรอบครบ", naming_ok, True),
-        ("จับคู่ด้วยเลขผู้เข้าสอบ", stats.get("matchedByCertNo"),
-         expect_certificates if expect_matched_by_cert is None else expect_matched_by_cert),
-        ("หน้าที่ส่งให้แอดมินตัดสิน", counts.get("AMBIGUOUS", 0), expect_ambiguous),
-        ("รางวัลบนหน้าตรงกับโฟลเดอร์", stats.get("awardMismatch"), 0),
-        ("จับคู่ซ้ำแล้วไม่เกิดผู้เข้าสอบเพิ่ม", students_after, students_before),
+def heat_case(created: list[TestBatch]) -> None:
+    print(f"\n{'=' * 72}\nรอบ Heat — รับทุกหน้า เก็บโรงเรียนบนหน้า และรางวัลเข้าร่วม\n{'=' * 72}")
+    target = create_batch("HEAT")
+    created.append(target)
+    people = [
+        person("ALPHA TESTDEMO", "70001", "ONLINE", school="SAMPLE SCHOOL"),
+        person("BETA TESTDEMO", "70002", "ONSITE", school="SAMPLE SCHOOL"),
     ]
-    if expect_students is not None:
-        checks.append(("จำนวนผู้เข้าสอบที่ได้ใบ", distinct_students, expect_students))
+    use_roster(target, people)
+    page = lambda p: {**page_of(p, target), "school": "SAMPLE SCHOOL", "round": "Heat", "award": None}  # noqa: E731
+    stats = upload(target, {
+        "online/Gold/a.pdf": make_bundle_pdf([page(people[0])]),
+        "onsite/Participation/b.pdf": make_bundle_pdf([page(people[1])]),
+    })
+    check("หน้าที่ตัดแยก", stats["pagesSplit"], 2)
+    check("สถานะหน้า", page_statuses(target), {"MATCHED": 2})
+    check("รางวัลของใบ", sorted(c["award"] for c in certificates(target)), ["GOLD", "PARTICIPATION"])
 
-    passed = True
-    for label, actual, expected in checks:
-        mark = "✓" if actual == expected else "✗"
-        if actual != expected:
-            passed = False
-        print(f"  {mark} {label}: ได้ {actual} คาดหวัง {expected}")
-    return passed
+
+def final_case(created: list[TestBatch]) -> None:
+    print(f"\n{'=' * 72}\nรอบ Final — ข้ามต่างชาติ ส่งหน้าที่ไม่มีหลักฐานสัญชาติให้แอดมิน\n{'=' * 72}")
+    target = create_batch("FINAL")
+    created.append(target)
+    alpha = person("ALPHA TESTDEMO", "71001", "ONLINE", award="PERFECT SCORER")
+    people = [alpha, person("GAMMA TESTDEMO", "71002", "ONLINE")]
+    use_roster(target, people)
+    stats = upload(target, {
+        "online/Gold/a.pdf": make_bundle_pdf([
+            page_of(alpha, target),
+            {"name": "TARO YAMADA", "cert_no": "71009", "country": "JAPAN", "award": "Gold", "year": target.year},
+            {**page_of(people[1], target), "country": None},
+        ]),
+        # หน้า Perfect Score ของจริงไม่มีบรรทัดรางวัล และใช้เลขเดียวกับใบ Gold ของคนเดียวกัน
+        "online/Perfect Score/b.pdf": make_bundle_pdf([{**page_of(alpha, target), "award": None}]),
+    })
+    check("ข้ามหน้าต่างชาติ", stats["foreignSkipped"], 1)
+    check("หน้าที่ไม่มีหลักฐานสัญชาติ", stats["nationalityUnverified"], 1)
+    check("คนเดียวได้ 2 ใบจากแถว Excel แถวเดียว",
+          sorted(c["award"] for c in certificates(target)), ["GOLD", "PERFECT_SCORE"])
+
+    again = upload(target, {"online/Gold/a.pdf": make_bundle_pdf([page_of(alpha, target)])})
+    check("อัปหน้าเดิมซ้ำ ไม่เกิดหน้าใหม่", again["newPages"], 0)
+
+
+def mode_case(created: list[TestBatch]) -> None:
+    print(f"\n{'=' * 72}\nจัดไฟล์ผิดโฟลเดอร์ online/onsite แล้วอัปฉบับแก้มาแทน\n{'=' * 72}")
+    target = create_batch("FINAL")
+    created.append(target)
+    delta = person("DELTA TESTDEMO", "72001", "ONSITE")
+    use_roster(target, [delta])
+    page_pdf = make_bundle_pdf([page_of(delta, target)])
+    upload(target, {"online/Silver/a.pdf": page_pdf})
+    check("อยู่ผิดโฟลเดอร์ = รูปแบบไม่ตรง", page_statuses(target), {"MODE_MISMATCH": 1})
+    upload(target, {"onsite/Silver/a.pdf": page_pdf})
+    check("ฉบับแก้มาแทนหน้าที่ติดปัญหา", page_statuses(target), {"MATCHED": 1, "SUPERSEDED": 1})
+
+
+def same_name_case(created: list[TestBatch]) -> None:
+    print(f"\n{'=' * 72}\nชื่อพ้องสองคนในรอบเดียวกับคนเดิมในระบบ — ต้องส่งให้แอดมิน ไม่สร้างคนใหม่\n{'=' * 72}")
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO students (id, name_en, name_en_normalized) VALUES (%s, %s, %s)",
+            (new_id(), "ECHO TESTDEMO", "ECHO TESTDEMO"),
+        )
+    target = create_batch("FINAL")
+    created.append(target)
+    twins = [person("ECHO TESTDEMO", "73001", "ONLINE"), person("ECHO TESTDEMO", "73002", "ONLINE")]
+    use_roster(target, twins)
+    before = count_students()
+    upload(target, {"online/Gold/a.pdf": make_bundle_pdf([page_of(p, target) for p in twins])})
+    check("ส่งให้แอดมินตัดสิน", page_statuses(target), {"AMBIGUOUS": 2})
+    check("ไม่สร้างผู้เข้าสอบใหม่", count_students(), before)
 
 
 # ------------------------------------------------------------------ helpers
 
-def seed_same_name_students(name: str) -> None:
-    """ทำให้มีผู้เข้าสอบชื่อเดียวกัน 2 คน (คนละโรงเรียน) อยู่ในระบบ
 
-    เคสทดสอบ "ชื่อพ้องแล้วแยกไม่ออก" ต้องมีเงื่อนไขนี้ก่อน
-    ถ้าไปอาศัยข้อมูล seed เทสจะพังทันทีที่ใครล้างฐานข้อมูล
-    """
+def person(name: str, cert_no: str, mode: str, award: str = "GOLD", school: str = "") -> dict:
+    return {"name": name, "cert_no": cert_no, "mode": mode, "award": award, "level": "PRIMARY 5",
+            "school": school}
+
+
+def page_of(p: dict, target: TestBatch) -> dict:
+    return {"name": p["name"], "cert_no": p["cert_no"], "country": "THAILAND", "level": p["level"],
+            "award": "Gold", "year": target.year, "round": target.round.title()}
+
+
+def use_roster(target: TestBatch, people: list[dict]) -> None:
+    key = f"sources/{target.batch_id}/roster-{new_id()}.xlsx"
+    rows = [{"cert_no": p["cert_no"], "level": p["level"], "name_en": p["name"], "award": p["award"],
+             "mode": p["mode"], "school": p["school"]} for p in people]
+    upload_bytes(key, make_roster_xlsx(rows, headers=HEADERS), XLSX_MIME)
+    import_id = new_id()
     with connection() as conn:
-        existing = conn.execute(
-            "SELECT COUNT(*) AS n FROM students WHERE name_en_normalized = %s", (name,)
-        ).fetchone()["n"]
-        for i in range(2 - int(existing)):
-            conn.execute(
-                """
-                INSERT INTO students
-                  (id, name_en, name_en_normalized, name_en_sort_key, school, school_normalized)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (new_id(), name, name, " ".join(sorted(name.split())),
-                 f"โรงเรียนทดสอบ{i}", f"ทดสอบ{i}"),
-            )
-
-
-def create_batch(code: str, exam_round: str, title: str) -> str:
-    program_id, exam_id, batch_id = new_id(), new_id(), new_id()
+        conn.execute("INSERT INTO roster_imports (id, batch_id, source_key) VALUES (%s, %s, %s)",
+                     (import_id, target.batch_id, key))
+    wait_for(enqueue(target.batch_id, "ROSTER_VALIDATE", {"importId": import_id}), "ตรวจรายชื่อ")
     with connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO exam_programs (id, code, name, updated_at)
-            VALUES (%s, %s, %s, NOW())
-            """,
-            (program_id, code, f"[E2E] {title}"),
-        )
-        conn.execute(
-            "INSERT INTO exams (id, program_id, round, year) VALUES (%s, %s, %s, %s)",
-            (exam_id, program_id, exam_round, 2026),
-        )
-        conn.execute(
-            "INSERT INTO batches (id, exam_id, status, updated_at) VALUES (%s, %s, 'DRAFT', NOW())",
-            (batch_id, exam_id),
-        )
-    return batch_id
+        conn.execute("UPDATE roster_imports SET status = 'ACTIVATING' WHERE id = %s", (import_id,))
+    wait_for(enqueue(target.batch_id, "ROSTER_ACTIVATE", {"importId": import_id, "sessionId": "e2e"}),
+             "ใช้รายชื่อ")
 
 
-def set_source(batch_id: str, column: str, key: str) -> None:
+def upload(target: TestBatch, files: dict[str, bytes]) -> dict:
+    key = f"sources/{target.batch_id}/bundle-{new_id()}.zip"
+    upload_bytes(key, make_zip(files), "application/zip")
+    job = enqueue(target.batch_id, "SPLIT", {"kind": "zip", "zipKey": key, "fileName": "demo.zip"})
+    wait_for(job, "ตัดหน้าและจับคู่")
     with connection() as conn:
-        conn.execute(f"UPDATE batches SET {column} = %s WHERE id = %s", (key, batch_id))
+        return conn.execute("SELECT progress FROM jobs WHERE id = %s", (job,)).fetchone()["progress"]
 
 
-def enqueue(batch_id: str, job_type: str) -> str:
+def enqueue(batch_id: str, job_type: str, payload: dict) -> str:
     job_id = new_id()
     with connection() as conn:
-        conn.execute(
-            "INSERT INTO jobs (id, type, batch_id) VALUES (%s, %s, %s)",
-            (job_id, job_type, batch_id),
-        )
+        conn.execute("INSERT INTO jobs (id, type, batch_id, payload) VALUES (%s, %s, %s, %s)",
+                     (job_id, job_type, batch_id, json.dumps(payload)))
     return job_id
 
 
-def wait_for(job_id: str, label: str, timeout: float = 120.0) -> None:
+def wait_for(job_id: str, label: str, timeout: float = 180.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         with connection() as conn:
-            row = conn.execute(
-                "SELECT status, error FROM jobs WHERE id = %s", (job_id,)
-            ).fetchone()
+            row = conn.execute("SELECT status::text AS status, error FROM jobs WHERE id = %s", (job_id,)).fetchone()
         if row["status"] == "DONE":
             print(f"  {label}: เสร็จแล้ว")
             return
         if row["status"] == "FAILED":
             raise RuntimeError(f"{label} ล้มเหลว: {row['error']}")
-        time.sleep(1)
-    raise TimeoutError(f"{label} ใช้เวลานานเกิน {timeout} วินาที")
+        time.sleep(0.5)
+    raise TimeoutError(f"{label} ใช้เวลานานเกิน {timeout} วินาที — worker ทำงานอยู่หรือไม่")
+
+
+def page_statuses(target: TestBatch) -> dict[str, int]:
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT match_status::text AS s, COUNT(*) AS n FROM staging_pages WHERE batch_id = %s GROUP BY 1",
+            (target.batch_id,),
+        ).fetchall()
+    return {r["s"]: r["n"] for r in rows if r["s"] not in ("SKIPPED_FOREIGN", "NATIONALITY_UNVERIFIED")}
+
+
+def certificates(target: TestBatch) -> list[dict]:
+    with connection() as conn:
+        return conn.execute("SELECT award, candidate_no FROM certificates WHERE batch_id = %s",
+                            (target.batch_id,)).fetchall()
 
 
 def count_students() -> int:
     with connection() as conn:
-        return int(conn.execute("SELECT COUNT(*) AS n FROM students").fetchone()["n"])
-
-
-def fetch_stats(batch_id: str) -> dict:
-    with connection() as conn:
-        row = conn.execute("SELECT stats FROM batches WHERE id = %s", (batch_id,)).fetchone()
-    return {k: v for k, v in row["stats"].items() if k != "unmatchedRows"}
-
-
-def fetch_page_counts(batch_id: str) -> dict:
-    with connection() as conn:
-        rows = conn.execute(
-            "SELECT match_status, COUNT(*) AS n FROM staging_pages WHERE batch_id = %s GROUP BY 1",
-            (batch_id,),
-        ).fetchall()
-    return {r["match_status"]: r["n"] for r in rows}
-
-
-def fetch_certificates(batch_id: str) -> list[tuple[str, str, str, str, str]]:
-    with connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT s.name_en, c.award, c.cert_no, c.level, c.pdf_key
-            FROM certificates c JOIN students s ON s.id = c.student_id
-            WHERE c.batch_id = %s ORDER BY c.page_number
-            """,
-            (batch_id,),
-        ).fetchall()
-    return [(r["name_en"], r["award"], r["cert_no"], r["level"], r["pdf_key"]) for r in rows]
+        return conn.execute("SELECT COUNT(*) AS n FROM students").fetchone()["n"]
 
 
 if __name__ == "__main__":

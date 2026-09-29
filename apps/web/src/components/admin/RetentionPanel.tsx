@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { formatThaiLongDate } from "@/lib/thai-date";
 
 /**
  * อายุการเก็บของรอบนำเข้านี้
@@ -14,6 +15,7 @@ export function RetentionPanel({
   expiresAt,
   certificates,
   deletedFiles,
+  compact = false,
 }: {
   batchId: string;
   /** วันหมดอายุที่เร็วที่สุดของรอบนี้ — null = ยังไม่เผยแพร่ จึงยังไม่เริ่มนับ */
@@ -21,6 +23,7 @@ export function RetentionPanel({
   certificates: number;
   /** จำนวนใบที่ไฟล์ถูกลบไปแล้วเพราะครบอายุ */
   deletedFiles: number;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [working, setWorking] = useState(false);
@@ -46,18 +49,18 @@ export function RetentionPanel({
   }
 
   const date = expiresAt
-    ? new Date(expiresAt).toLocaleDateString("th-TH", { dateStyle: "long" })
+    ? formatThaiLongDate(expiresAt)
     : null;
 
   return (
-    <div className="rounded-2xl border border-hairline bg-card px-4 py-3 text-sm">
+    <div className={compact ? "border-t border-hairline pt-3 text-sm" : "rounded-2xl border border-hairline bg-card px-4 py-3 text-sm"}>
       {deletedFiles > 0 ? (
         <p className="text-ink">
           ครบอายุการเก็บแล้ว — ลบไฟล์ไป {deletedFiles} ใบ ข้อมูลยังอยู่ในระบบแต่ผู้ปกครองค้นไม่เจอ
         </p>
       ) : date ? (
         <p className="text-ink">
-          เกียรติบัตร {certificates} ใบของรอบนี้จะถูกลบไฟล์วันที่ <b>{date}</b>
+          เกียรติบัตรจำนวน {certificates} ใบจะถูกลบวันที่ <b>{date}</b>
         </p>
       ) : (
         <p className="text-ink-soft">ยังไม่ได้เผยแพร่ จึงยังไม่เริ่มนับอายุการเก็บ</p>
@@ -68,7 +71,7 @@ export function RetentionPanel({
           type="button"
           onClick={extend}
           disabled={working}
-          className="mt-2 min-h-10 cursor-pointer rounded-xl border px-3 text-sm transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 border-hairline hover:bg-paper"
+          className={`mt-2 min-h-10 cursor-pointer rounded-xl border border-brand-line px-3 text-sm font-medium text-brand transition duration-200 hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50 ${compact ? "w-full text-left" : ""}`}
         >
           {working ? "กำลังต่ออายุ..." : "ต่ออายุอีก 1 ปี"}
         </button>

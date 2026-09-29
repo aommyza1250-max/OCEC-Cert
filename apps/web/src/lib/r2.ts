@@ -64,14 +64,18 @@ export async function presignedUploadUrl(key: string, contentType: string, expir
 
 /** ตั้งชื่อ key ให้เป็นระเบียบ เดาไม่ได้ และรู้ว่าไฟล์ของ batch ไหน
  *  ส่วนของเกียรติบัตรรายคน worker เป็นคนตั้งชื่อ (ดู apps/worker/app/storage.py)
- *  รูปแบบคือ {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี} ตาม docs/data-intake-spec.md */
+ *  รูปแบบคือ {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี} ตาม docs/data-intake-spec.md
+ *
+ *  ต้นฉบับทุกชนิดได้ชื่อใหม่ทุกครั้งที่อัป ไม่เขียนทับของเดิม — รอบนำเข้าหนึ่งอัปได้หลายครั้ง
+ *  และต้องย้อนกลับไปดูได้ว่าใบไหนมาจากไฟล์ไหน รายชื่อที่ตรวจไม่ผ่านก็ต้องไม่ทับไฟล์ของชุดที่ใช้อยู่ */
 export const keys = {
-  /** ZIP แต่ละครั้งเก็บแยกไฟล์ ไม่เขียนทับของเดิม เพราะรอบนำเข้าหนึ่งอาจมีหลายครั้ง
-   *  (ไฟล์ตกหล่นแล้วตามมาทีหลัง) และต้องย้อนกลับไปดูต้นทางได้ว่าใบไหนมาจากไฟล์ไหน */
   sourceZip: (batchId: string, stamp: string) => `sources/${batchId}/bundle-${stamp}.zip`,
-  sourceExcel: (batchId: string) => `sources/${batchId}/roster.xlsx`,
-  /** ไฟล์ของคนที่ตกหล่น อัปทีละใบเข้าไปในบล็อกของคนนั้น */
-  missingPdf: (batchId: string, stamp: string) => `sources/${batchId}/missing-${stamp}.pdf`,
-  certificatePdf: (batchId: string, stem: string) => `certificates/${batchId}/${stem}.pdf`,
-  preview: (batchId: string, stem: string) => `previews/${batchId}/${stem}.webp`,
+  roster: (batchId: string, stamp: string) => `sources/${batchId}/roster-${stamp}.xlsx`,
+  /** PDF ที่แอดมินอัปให้ผู้เข้าสอบคนใดคนหนึ่ง (เพิ่มใบที่ขาด หรือเปลี่ยนไฟล์) */
+  certificatePdfSource: (batchId: string, stamp: string) => `sources/${batchId}/pdf-${stamp}.pdf`,
 };
+
+/** key ของไฟล์ต้นฉบับต้องอยู่ใต้โฟลเดอร์ของรอบนำเข้านั้นเท่านั้น — กันไม่ให้ชี้ไปไฟล์ของรอบอื่น */
+export function isSourceKeyOf(batchId: string, key: string) {
+  return key.startsWith(`sources/${batchId}/`) && !key.includes("..");
+}

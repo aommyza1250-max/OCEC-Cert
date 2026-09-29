@@ -28,11 +28,18 @@ def make_bundle_pdf(entries: list[dict]) -> bytes:
       country  สัญชาติ — ใส่แล้วจะเกิดบรรทัด "from <country>"
       level    ระดับชั้น เช่น "PRIMARY 3"
       cert_no  เลขบนหน้า — ใส่แล้วจะเกิดบรรทัด "Cert No: <cert_no>"
+      mode_line  ข้อความรูปแบบการสอบที่พิมพ์บนใบ เช่น "Exam Mode: ONLINE"
+      school   โรงเรียน — ใส่แล้วจะเกิดบรรทัด "from <school>" (แบบรอบ Heat)
       award    ข้อความรางวัล เช่น "Gold" -> พิมพ์เป็น "Gold Award"
                ไม่ใส่ = ไม่มีบรรทัดรางวัล (เลียนแบบหน้า Perfect Score ของจริง)
+      award_line  บรรทัดรางวัลแบบกำหนดเองทั้งบรรทัด เช่น "Certificate of Participation"
       round    "Final" หรือ "Heat" (ปริยาย Final)
-      year     ปี ค.ศ. (ปริยาย 2026)
-      anchor   ใส่ False เพื่อไม่พิมพ์บรรทัด "This is awarded to"
+      year     ปี ค.ศ. หรือช่วงปี เช่น "2025 - 2026" (ปริยาย 2026)
+      anchor   ใส่ False เพื่อไม่พิมพ์บรรทัด "This is awarded to" (แบบ BBB)
+      achievement  ใส่แล้วบรรทัดระดับชั้นเป็น "achieved <achievement> in <level>,"
+               แบบใบรางวัลพิเศษของ HKISO/HKICO
+      event    ใส่แล้วบรรทัดชื่องานเป็น "... <event> <year>," แทน "... <round> Round <year>,"
+      title    ชื่องานบนบรรทัดรอบ (ปริยาย Hong Kong International Mathematical Olympiad)
     """
     doc = pymupdf.open()
     for entry in entries:
@@ -49,22 +56,33 @@ def make_bundle_pdf(entries: list[dict]) -> bytes:
         # ของจริงเรียงแนวนอนบนหน้ากระดาษ (จัดระยะตัวอักษร) แต่ออกมาเป็นคนละบรรทัด
         write_inline_chars(DECORATIVE_TITLE)
 
-        if entry.get("award"):
+        if entry.get("award_line"):
+            write(entry["award_line"], 20)
+        elif entry.get("award"):
             write(f"{entry['award']} Award", 20)
         if entry.get("anchor", True):
             write("This is awarded to", 14)
-        write(entry["name"], 26)
-        if entry.get("country"):
-            write(f"from {entry['country']}", 13)
-        if entry.get("level"):
+        if entry.get("name"):
+            write(entry["name"], 26)
+        if entry.get("country") or entry.get("school"):
+            write(f"from {entry.get('country') or entry.get('school')}", 13)
+        if entry.get("level") and entry.get("achievement"):
+            write(f"achieved {entry['achievement']} in {entry['level']},", 12)
+        elif entry.get("level"):
             write(f"for outstanding achievement in {entry['level']},", 12)
 
         round_name = entry.get("round", "Final")
         year = entry.get("year", 2026)
-        write(f"Hong Kong International Mathematical Olympiad {round_name} Round {year},", 11)
+        title = entry.get("title", "Hong Kong International Mathematical Olympiad")
+        if entry.get("event"):
+            write(f"{title} {entry['event']} {year},", 11)
+        else:
+            write(f"{title} {round_name} Round {year},", 11)
         write(f"22nd - 23rd August {year}, Hong Kong & worldwide", 11)
         if entry.get("cert_no"):
             write(f"Cert No: {entry['cert_no']}", 10)
+        if entry.get("mode_line"):
+            write(entry["mode_line"], 10)
         write(f"23rd Aug {year}", 10)
 
     data = doc.tobytes()
@@ -92,6 +110,15 @@ def _writer(page):
             x += size
 
     return write, write_inline_chars
+
+
+def make_zip(files: dict[str, bytes]) -> bytes:
+    """บีบไฟล์ตาม path ที่กำหนดเป็น ZIP — ใช้สร้างโครงแบบใหม่ online/<รางวัล>/*.pdf"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path, data in files.items():
+            zf.writestr(path, data)
+    return buffer.getvalue()
 
 
 def make_award_zip(bundles: dict[str, bytes], extra_files: dict[str, bytes] | None = None) -> bytes:
@@ -125,6 +152,7 @@ def make_roster_xlsx(
         "level": "GRADE",
         "name_en": "CANDIDATE NAME",
         "award": "AWARD",
+        "mode": "EXAM MODE",
     }
     workbook = Workbook()
     sheet = workbook.active

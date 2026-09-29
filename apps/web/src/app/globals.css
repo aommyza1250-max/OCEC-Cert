@@ -64,6 +64,15 @@
   --color-perfect-ink: #b91c1c;  /* 6.1:1 */
   --color-perfect-line: #fecaca;
 
+  /* รางวัลเข้าร่วม (มีเฉพาะรอบคัดเลือก) และรางวัลพิเศษ */
+  --color-participation-bg: #ecfdf5;
+  --color-participation-ink: #047857; /* 5.2:1 บนพื้น participation-bg */
+  --color-participation-line: #a7f3d0;
+
+  --color-special-bg: #f5f3ff;
+  --color-special-ink: #6d28d9;  /* 6.5:1 */
+  --color-special-line: #ddd6fe;
+
   /* ระยะห่างแบบ standard density (16–64px) */
   --spacing-section: 2.5rem;
 }

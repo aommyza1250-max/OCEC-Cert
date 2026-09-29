@@ -1,11 +1,12 @@
 """สร้างไฟล์รายชื่อ Excel จากไฟล์เกียรติบัตร สำหรับตอนที่ต้นทางไม่ได้ส่งชีทรายชื่อมาให้
 
-    docker compose exec worker python scripts/roster_from_certificates.py tmp/HKIMO
-    docker compose exec worker python scripts/roster_from_certificates.py tmp/bundle.zip -o tmp/roster.xlsx
-    docker compose exec worker python scripts/roster_from_certificates.py tmp/HKIMO --include-foreign
+    docker compose exec worker python scripts/roster_from_certificates.py tmp/HKIMO --program HKIMO --round FINAL
+    docker compose exec worker python scripts/roster_from_certificates.py tmp/bundle.zip --program HKIMO --round HEAT -o tmp/roster.xlsx
+    docker compose exec worker python scripts/roster_from_certificates.py tmp/HKIMO --program HKIMO --round FINAL --mode ONSITE
 
-รับได้ทั้งโฟลเดอร์ที่แยกรางวัลไว้แล้ว และไฟล์ ZIP แบบเดียวกับที่อัปเข้าระบบ
-ได้ไฟล์ .xlsx หัวตารางเหมือนของจริง: CANDIDATE NO / GRADE / CANDIDATE NAME / AWARD
+รับได้ทั้งโฟลเดอร์และไฟล์ ZIP — ถ้าเส้นทางมีโฟลเดอร์ online/onsite จะอ่านรูปแบบการสอบจากตรงนั้น
+ไม่มีก็ใช้ค่าจาก --mode (ปริยาย ONLINE)
+ได้ไฟล์ .xlsx หัวตารางเหมือนของจริง: CANDIDATE NO / GRADE / CANDIDATE NAME / AWARD / EXAM MODE / SCHOOL
 
 ⚠️ ไฟล์ที่ได้ **ไม่ใช่ข้อมูลจากต้นทาง** แต่เป็นสิ่งที่อ่านได้จากหน้าเกียรติบัตรเอง
    ใช้ทดสอบระบบได้ดี แต่จับผิด "เกียรติบัตรไม่ตรงกับรายชื่อ" ไม่ได้ เพราะมันมาจากที่เดียวกัน
@@ -17,37 +18,29 @@
 import argparse
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pymupdf  # noqa: E402
 from openpyxl import Workbook  # noqa: E402
 
-from app.normalize import normalize_award, normalize_name  # noqa: E402
-from app.tasks.extract import is_thai_national, page_lines, page_text, read_lines  # noqa: E402
-from app.tasks.zip_bundle import open_bundles, read_award_bundles  # noqa: E402
+from app.certificate_profiles import AwardCatalog, Nationality, folder_key, get_profile  # noqa: E402
+from app.normalize import normalize_name  # noqa: E402
+from app.tasks.extract import page_text  # noqa: E402
 
-HEADERS = ["CANDIDATE NO", "GRADE", "CANDIDATE NAME", "AWARD"]
-
-# ข้อความรางวัลแบบที่ชีทของจริงเขียน
-AWARD_TEXT = {
-    "GOLD": "GOLD AWARD",
-    "SILVER": "SILVER AWARD",
-    "BRONZE": "BRONZE AWARD",
-    "MERIT": "MERIT AWARD",
-    "PERFECT_SCORE": "PERFECT SCORER",
-}
-
-# ชีทของจริงมีคนละแถวเดียว และเขียนรางวัลสูงสุดไว้
-# คนที่ได้ทั้งเหรียญทองและคะแนนเต็ม ในชีทจะเป็น "PERFECT SCORER"
-AWARD_RANK = ["PERFECT_SCORE", "GOLD", "SILVER", "BRONZE", "MERIT"]
+HEADERS = ["CANDIDATE NO", "GRADE", "CANDIDATE NAME", "AWARD", "EXAM MODE", "SCHOOL"]
+MODES = ("ONLINE", "ONSITE")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("source", help="โฟลเดอร์ที่แยกรางวัลไว้ หรือไฟล์ .zip")
+    parser.add_argument("--program", required=True, help="รหัสรายการสอบ เช่น HKIMO")
+    parser.add_argument("--round", required=True, choices=("HEAT", "FINAL"))
+    parser.add_argument("--mode", default="ONLINE", choices=MODES,
+                        help="รูปแบบการสอบของไฟล์ที่ไม่ได้อยู่ในโฟลเดอร์ online/onsite")
     parser.add_argument("-o", "--out", help="ไฟล์ .xlsx ที่จะเขียน (ปริยาย: ข้าง ๆ ไฟล์ต้นทาง)")
     parser.add_argument("--include-foreign", action="store_true",
                         help="ใส่ผู้เข้าสอบต่างชาติด้วย (ปริยายเอาเฉพาะไทย เหมือนชีทของจริง)")
@@ -57,132 +50,140 @@ def main() -> int:
     if not source.exists():
         print(f"ไม่พบ {source}")
         return 1
-
-    pages = list(_read_pages(source))
-    if not pages:
-        print("ไม่พบหน้าเกียรติบัตรเลย")
-        return 1
+    profile = get_profile(args.program, args.round)
+    catalog = profile.catalog
 
     rows: dict[str, dict] = {}
     skipped_foreign = 0
     unreadable: list[str] = []
-    multi_award: list[str] = []
     conflicts: list[str] = []
+    multi_award: set[str] = set()
+    pages = 0
 
-    for info, award, text, where in pages:
-        if not args.include_foreign and not is_thai_national(text, ""):
+    for text, award, mode, where in _read_pages(source, catalog, args.mode):
+        pages += 1
+        parsed = profile.parse(text)
+        if not args.include_foreign and profile.nationality(parsed) is Nationality.FOREIGN:
             skipped_foreign += 1
             continue
-        if not info.cert_no or not info.name:
-            unreadable.append(f"{where} (เลข {info.cert_no or '-'} ชื่อ {info.name or '-'})")
+        if not parsed.candidate_no or not parsed.name:
+            unreadable.append(f"{where} (เลข {parsed.candidate_no or '-'} ชื่อ {parsed.name or '-'})")
             continue
 
-        existing = rows.get(info.cert_no)
+        existing = rows.get(parsed.candidate_no)
         if existing is None:
-            rows[info.cert_no] = {"name": info.name, "level": info.level or "", "award": award}
+            rows[parsed.candidate_no] = {
+                "name": parsed.name, "level": parsed.level or "", "award": award, "mode": mode,
+                "school": parsed.school_on_page or "",
+            }
             continue
-
         # เลขเดียวกันแต่คนละชื่อ = ไฟล์ต้นทางมีปัญหา ต้องบอกให้รู้ ห้ามเงียบ
-        # เก็บชื่อแรกที่เจอไว้ก่อน แล้วรายงานให้ไปแก้ไฟล์ต้นทาง
-        # (ถ้าทิ้งทั้งคู่ คนที่ข้อมูลถูกต้องจะหายไปจากชีทด้วย ซึ่งแย่กว่า)
-        if normalize_name(existing["name"]) != normalize_name(info.name):
-            conflicts.append(f"เลข {info.cert_no}: {existing['name']} / {info.name} ({where})")
+        if normalize_name(existing["name"]) != normalize_name(parsed.name):
+            conflicts.append(f"เลข {parsed.candidate_no}: {existing['name']} / {parsed.name} ({where})")
             continue
-
-        # คนเดิมอีกใบ — เก็บรางวัลที่สูงกว่าไว้ ให้เหมือนชีทของจริงที่มีคนละแถวเดียว
-        multi_award.append(f"{info.name} ({info.cert_no})")
-        if _rank(award) < _rank(existing["award"]):
+        # คนเดิมอีกใบ — เก็บรางวัลที่สูงกว่า ให้เหมือนชีทของจริงที่มีคนละแถวเดียว
+        multi_award.add(f"{parsed.name} ({parsed.candidate_no})")
+        if _rank(catalog, award) < _rank(catalog, existing["award"]):
             existing["award"] = award
+
+    if not pages:
+        print("ไม่พบหน้าเกียรติบัตรเลย")
+        return 1
 
     out = Path(args.out) if args.out else source.with_suffix("").with_name(
         f"{source.with_suffix('').name}-roster.xlsx"
     )
-    _write(out, rows)
+    _write(out, rows, catalog)
 
-    print(f"อ่านหน้าเกียรติบัตร {len(pages)} หน้า")
+    print(f"อ่านหน้าเกียรติบัตร {pages} หน้า ด้วยโปรไฟล์ {profile.key}")
     if skipped_foreign:
         print(f"  ข้ามผู้เข้าสอบต่างชาติ {skipped_foreign} หน้า (ใส่ --include-foreign ถ้าต้องการ)")
     if multi_award:
-        shown = ", ".join(sorted(set(multi_award))[:3])
-        print(f"  คนที่ได้หลายใบ {len(set(multi_award))} คน เขียนลงชีทคนละแถวตามรางวัลสูงสุด: {shown}")
-    if unreadable:
-        print(f"  ⚠️ อ่านไม่ครบ {len(unreadable)} หน้า ไม่ได้ใส่ลงชีท:")
-        for item in unreadable[:10]:
-            print(f"      {item}")
-    if conflicts:
-        print(f"  ⚠️ เลขผู้เข้าสอบซ้ำแต่ชื่อไม่ตรงกัน {len(conflicts)} หน้า — ไฟล์ต้นทางมีปัญหา:")
-        for item in conflicts[:10]:
-            print(f"      {item}")
-
-    awards: dict[str, int] = {}
+        print(f"  คนที่ได้หลายใบ {len(multi_award)} คน เขียนลงชีทคนละแถวตามรางวัลสูงสุด")
+    for label, items in (("อ่านไม่ครบ", unreadable), ("เลขซ้ำแต่ชื่อไม่ตรงกัน", conflicts)):
+        if items:
+            print(f"  ⚠️ {label} {len(items)} หน้า ไม่ได้ใส่ลงชีท:")
+            for item in items[:10]:
+                print(f"      {item}")
+    modes: dict[str, int] = {}
     for row in rows.values():
-        awards[row["award"]] = awards.get(row["award"], 0) + 1
-    print(f"เขียน {len(rows)} แถว -> {out}")
-    print(f"  รางวัล: {dict(sorted(awards.items()))}")
-    if unreadable or conflicts:
-        print("\nหน้าที่มีปัญหาไม่ได้ถูกใส่ลงชีท ต้องแก้ไฟล์ต้นทางหรือเติมแถวเอง")
-        print("ไม่งั้นตอนนำเข้าจะมีคนจับคู่ไม่ได้")
+        modes[row["mode"]] = modes.get(row["mode"], 0) + 1
+    print(f"เขียน {len(rows)} แถว -> {out}  ({modes})")
     return 0
 
 
-def _rank(award: str) -> int:
-    return AWARD_RANK.index(award) if award in AWARD_RANK else len(AWARD_RANK)
+def _rank(catalog: AwardCatalog, code: str) -> int:
+    """ลำดับความสูงของรางวัลในชีท — ชีทของจริงเขียน PERFECT SCORER ให้คนที่ได้ทั้งทองและคะแนนเต็ม"""
+    if code == "PERFECT_SCORE":
+        return -1
+    award = catalog.get(code)
+    return award.order if award else 999
 
 
-def _read_pages(source: Path):
-    """คืน (info, award, raw_text, ที่มา) ของทุกหน้า"""
+def _read_pages(source: Path, catalog: AwardCatalog, default_mode: str):
+    """คืน (ข้อความ, รหัสรางวัล, รูปแบบการสอบ, ที่มา) ของทุกหน้า — เปิดทีละไฟล์"""
     if source.is_file() and zipfile.is_zipfile(source):
-        bundles = read_award_bundles(str(source))
-        with open_bundles(str(source), bundles) as stream:
-            for bundle in stream:
-                with pymupdf.open(stream=bundle.data, filetype="pdf") as doc:
-                    yield from _pages_of(doc, bundle.award, bundle.source_file)
+        with zipfile.ZipFile(source) as zf:
+            for name in sorted(zf.namelist()):
+                if not name.lower().endswith(".pdf") or "__MACOSX" in name:
+                    continue
+                located = _locate(PurePosixPath(name).parts[:-1], catalog, default_mode)
+                if not located:
+                    print(f"  ⚠️ ข้าม {name} — ไม่รู้ว่าอยู่ในโฟลเดอร์รางวัลอะไร")
+                    continue
+                with pymupdf.open(stream=zf.read(name), filetype="pdf") as doc:
+                    yield from _pages_of(doc, *located, name)
         return
 
     if not source.is_dir():
         raise SystemExit(f"{source} ไม่ใช่โฟลเดอร์และไม่ใช่ไฟล์ zip")
-
     for pdf in sorted(source.rglob("*.pdf")):
-        award = _award_from_path(pdf, source)
-        if not award:
+        located = _locate(pdf.relative_to(source).parts[:-1], catalog, default_mode)
+        if not located:
             print(f"  ⚠️ ข้าม {pdf.relative_to(source)} — ไม่รู้ว่าอยู่ในโฟลเดอร์รางวัลอะไร")
             continue
         with pymupdf.open(pdf) as doc:
-            yield from _pages_of(doc, award, str(pdf.relative_to(source)))
+            yield from _pages_of(doc, *located, str(pdf.relative_to(source)))
 
 
-def _award_from_path(pdf: Path, root: Path) -> str:
-    """ไล่หาชื่อโฟลเดอร์ที่แปลงเป็นรางวัลได้ ตั้งแต่โฟลเดอร์ที่ใกล้ไฟล์ที่สุดขึ้นไป"""
-    for parent in pdf.relative_to(root).parents:
-        if parent.name and (award := normalize_award(parent.name)):
-            return award
-    return ""
+def _locate(dirs: tuple[str, ...], catalog: AwardCatalog, default_mode: str) -> tuple[str, str] | None:
+    """เครื่องมือนี้ใช้กับโฟลเดอร์ที่จัดมาหลายแบบ จึงไล่หาจากชั้นใกล้ไฟล์ขึ้นไป
+    (ต่างจากการนำเข้าจริง ซึ่งอ่านเฉพาะตำแหน่งที่กำหนดเท่านั้น)"""
+    mode = next((folder_key(d) for d in dirs if folder_key(d) in MODES), default_mode)
+    for folder in reversed(dirs):
+        award = catalog.resolve_folder(folder)
+        if award:
+            return award.code, mode
+    return None
 
 
-def _pages_of(doc, award: str, where: str):
+def _pages_of(doc, award: str, mode: str, where: str):
     for index in range(doc.page_count):
-        text = page_text(doc[index])
-        yield read_lines(page_lines(text)), award, text, f"{where} หน้า {index + 1}"
+        yield page_text(doc[index]), award, mode, f"{where} หน้า {index + 1}"
 
 
-def _write(out: Path, rows: dict[str, dict]) -> None:
+def _write(out: Path, rows: dict[str, dict], catalog: AwardCatalog) -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Roster"
     sheet.append(HEADERS)
-
     # เรียงตามเลขผู้เข้าสอบ ให้ไล่ตรวจด้วยตาได้ง่าย
     for cert_no in sorted(rows, key=lambda n: (len(n), n)):
         row = rows[cert_no]
-        sheet.append([cert_no, row["level"], row["name"],
-                      AWARD_TEXT.get(row["award"], row["award"])])
-
-    widths = [16, 26, 34, 18]
-    for column, width in zip(sheet.column_dimensions, widths):
+        sheet.append([cert_no, row["level"], row["name"], _award_text(catalog, row["award"]),
+                      row["mode"], row["school"]])
+    for column, width in zip(sheet.column_dimensions, [16, 26, 34, 18, 12, 40]):
         sheet.column_dimensions[column].width = width
-
     out.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(out)
+
+
+def _award_text(catalog: AwardCatalog, code: str) -> str:
+    """ข้อความรางวัลแบบที่ชีทของจริงเขียน"""
+    if code == "PERFECT_SCORE":
+        return "PERFECT SCORER"
+    award = catalog.get(code)
+    return f"{(award.label if award else code).upper()} AWARD"
 
 
 if __name__ == "__main__":
