@@ -9,14 +9,16 @@ ZIP กินที่มากที่สุด — 360 MB ต่อรอบ 
 เงื่อนไขก่อนลบต้องครบทุกข้อ ขาดข้อเดียวคือไม่ลบ:
   1. ผู้เข้าสอบทุกคนในรายชื่อมีเกียรติบัตรแล้ว
   2. ไม่มีหน้าที่ยังรอตัดสิน (จับคู่ไม่ได้ ชื่อ/รูปแบบไม่ตรง ชื่อพ้อง ใบซ้ำ ฯลฯ)
-  3. ไม่มีใครมีแต่ใบรางวัลเสริม (เช่น Perfect Score) โดยไม่มีใบรางวัลหลัก (คนที่ยังรอไฟล์ตกหล่น)
+  3. คนที่มีแต่ใบรางวัลเสริมต้องยืนยันชุดใบปัจจุบันและเผยแพร่แล้ว
   4. รอบนั้นเผยแพร่แล้ว
 
 ข้อ 1 คือหัวใจ: ถ้าทุกคนในรายชื่อมีเกียรติบัตรครบ แปลว่าไม่มีคนไทยตกหล่น
 หน้าที่ถูกข้ามไปตอนตัดจึงเป็นของต่างชาติจริง ๆ — ZIP ไม่เหลืออะไรที่เรายังต้องการ
 """
 
+import json
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -79,7 +81,9 @@ def check_blockers(batch_id: str) -> list[str]:
             """
             SELECT b.status::text AS status, b.stats, b.sources_cleared_at, b.updated_at,
                    p.code AS program_code, e.round::text AS round
-            FROM batches b JOIN exams e ON e.id = b.exam_id JOIN exam_programs p ON p.id = e.program_id
+            FROM batches b
+            JOIN exams e ON e.id = b.exam_id
+            JOIN exam_programs p ON p.id = e.program_id
             WHERE b.id = %s
             """,
             (batch_id,),
@@ -121,19 +125,12 @@ def check_blockers(batch_id: str) -> list[str]:
             blockers.append(f"ยังมีหน้าที่ต้องตัดสิน {pending['n']} หน้า")
 
         supplemental = _supplemental_codes(batch["program_code"], batch["round"])
-        held = conn.execute(
-            """
-            SELECT COUNT(*) AS n FROM (
-                SELECT student_id FROM certificates
-                WHERE batch_id = %s
-                GROUP BY student_id
-                HAVING bool_or(award = ANY(%s)) AND NOT bool_or(award <> ALL(%s))
-            ) held
-            """,
-            (batch_id, supplemental, supplemental),
-        ).fetchone()
-        if held["n"]:
-            blockers.append(f"ยังมีคนที่มีแต่ใบรางวัลเสริมโดยไม่มีใบรางวัลหลัก {held['n']} คน")
+        held = _unapproved_supplemental_only_count(conn, batch_id, supplemental)
+        if held:
+            blockers.append(
+                f"ยังมีคนที่มีแต่ใบรางวัลเสริมซึ่งยังไม่ยืนยันชุดปัจจุบัน"
+                f"หรือยังไม่เผยแพร่ครบ {held} คน"
+            )
 
         keep_days = settings().source_keep_days
         if keep_days and not blockers:
@@ -154,3 +151,47 @@ def _supplemental_codes(program_code: str, exam_round: str) -> list[str]:
     except UnsupportedProfile:
         return ["PERFECT_SCORE"]
     return [a.code for a in catalog.awards if a.kind == "SUPPLEMENTAL"]
+
+
+def _unapproved_supplemental_only_count(conn: Any, batch_id: str, codes: list[str]) -> int:
+    """นับเฉพาะชุดรางวัลเสริมที่ยังเคลียร์ไม่ได้ โดยใช้ snapshot กติกาเดียวกับฝั่งเว็บ
+
+    ใบจากระบบเดิมไม่มี roster_entry จึงยืนยันไม่ได้และยังถูกกันไว้ตามกฎเดิม
+    """
+    if not codes:
+        return 0
+    rows = conn.execute(
+        """
+        SELECT c.id::text, c.roster_entry_id::text, c.student_id::text,
+               c.award, c.pdf_key, c.published_at, re.supplemental_only_snapshot
+        FROM certificates c
+        LEFT JOIN roster_entries re ON re.id = c.roster_entry_id
+        WHERE c.batch_id = %s
+        ORDER BY c.id
+        """,
+        (batch_id,),
+    ).fetchall()
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row["roster_entry_id"]:
+            key = ("entry", row["roster_entry_id"])
+        else:
+            key = ("student", row["student_id"])
+        groups[key].append(row)
+
+    unapproved = 0
+    for certificates in groups.values():
+        if any(cert["award"] not in codes for cert in certificates):
+            continue
+        snapshot = json.dumps(
+            [[cert["id"], cert["award"], cert["pdf_key"]] for cert in certificates],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if (
+            not certificates[0]["roster_entry_id"]
+            or any(cert["published_at"] is None for cert in certificates)
+            or snapshot != certificates[0]["supplemental_only_snapshot"]
+        ):
+            unapproved += 1
+    return unapproved

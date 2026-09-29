@@ -44,7 +44,8 @@ export const POST = adminHandler<{ id: string }>(async (request, { params, sessi
       if (!batch.activeRosterImportId) {
         throw new HttpError(409, "ต้องใช้รายชื่อผู้เข้าสอบก่อน จึงจะอัปโหลดเกียรติบัตรได้");
       }
-      await tx.batch.update({ where: { id: batch.id }, data: { sourceZipKey: key } });
+      // ถ้ารอบก่อนเคลียร์ไปแล้ว ZIP ใหม่นี้ต้องเข้าสู่รอบเคลียร์ใหม่หลังเผยแพร่
+      await tx.batch.update({ where: { id: batch.id }, data: { sourceZipKey: key, sourcesClearedAt: null } });
       const job = await enqueue(tx, batch.id, "SPLIT", {
         kind: "zip",
         zipKey: key,
