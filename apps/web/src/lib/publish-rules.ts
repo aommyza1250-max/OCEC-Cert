@@ -2,8 +2,7 @@
  * กติกาการเผยแพร่ล้วน ๆ (ไม่แตะฐานข้อมูล) — แยกไฟล์ไว้ให้หน้าจอฝั่งเบราว์เซอร์ใช้ป้ายเหตุผลได้
  * โดยไม่ลาก Prisma ไปด้วย ตัวลงมือเผยแพร่อยู่ที่ publish.ts
  *
- * กติกาการให้รางวัล: รางวัลเสริม (เช่น Perfect Score) ให้คู่กับรางวัลหลักเสมอ
- * คนที่มีแต่ใบรางวัลเสริมจึงแปลว่าใบรางวัลหลักยังตกหล่นอยู่
+ * คนที่มีแต่ใบรางวัลเสริมต้องให้แอดมินตรวจและยืนยันชุดไฟล์ที่ได้รับจริงก่อนเผยแพร่
  */
 export type MultiAwardPolicy = "UNDECIDED" | "ALL" | "MEDAL_ONLY";
 export type Mode = "ONLINE" | "ONSITE";
@@ -38,10 +37,10 @@ export const HOLD_LABELS: Record<HoldReason, string> = {
   NATIONALITY_UNVERIFIED: "รอยืนยันสัญชาติ",
   PARSE_REVIEW: "รอบ/ปีบนหน้าไม่ตรง รอตรวจ",
   MISSING_FILE: "ยังไม่มีไฟล์เกียรติบัตร",
-  MISSING_PRIMARY: "มีแต่ใบรางวัลเสริม ใบรางวัลหลักยังไม่มา",
+  MISSING_PRIMARY: "มีแต่ใบรางวัลเสริม — ตรวจว่าได้รับเฉพาะใบที่มีอยู่จริงหรือไม่",
 };
 
-export type CertificateRef = { id: string; award: string; kind: "PRIMARY" | "SUPPLEMENTAL" };
+export type CertificateRef = { id: string; award: string; kind: "PRIMARY" | "SUPPLEMENTAL"; pdfKey: string };
 
 export type Participant = {
   entryId: string;
@@ -49,7 +48,19 @@ export type Participant = {
   certificates: CertificateRef[];
   /** ปัญหาของหน้าที่เป็นของคนนี้ซึ่งยังไม่ได้ตัดสิน */
   issues: HoldReason[];
+  /** แอดมินยืนยันชุดไฟล์รางวัลเสริมชุดปัจจุบันแล้ว (ไฟล์เปลี่ยน = หมดผล) */
+  supplementalOnlyApproved?: boolean;
 };
+
+/** ตรึงการยืนยันกับใบ/รางวัล/ไฟล์ ไม่ใช่แค่ตัวคน — อัปหรือเปลี่ยน PDF แล้วต้องตรวจใหม่ */
+export function supplementalOnlySnapshot(certificates: CertificateRef[]): string | null {
+  if (!certificates.length || certificates.some((c) => c.kind === "PRIMARY")) return null;
+  return JSON.stringify(
+    certificates
+      .map((c) => [c.id, c.award, c.pdfKey])
+      .sort((a, b) => a[0].localeCompare(b[0])),
+  );
+}
 
 export type PublishDecision = {
   /** ให้ผู้ปกครองค้นเจอ */
@@ -68,8 +79,8 @@ export type PublishDecision = {
  * ลำดับการตัดสิน:
  *   1. มีหน้าที่ยังรอตัดสิน (ชื่อ/รูปแบบไม่ตรง ระบุตัวไม่ได้ ใบซ้ำ สัญชาติ รอบ/ปี) -> กันไว้ทั้งคน
  *   2. ยังไม่มีใบเลย -> กันไว้ (ไฟล์ยังไม่มา)
- *   3. มีแต่ใบรางวัลเสริม -> กันไว้ทั้งคน เพราะใบรางวัลหลักน่าจะตกหล่น
- *   4. รอบนี้ตั้งไว้ว่าส่งฉบับจริงแค่ใบรางวัลหลัก -> ซ่อนใบรางวัลเสริม
+ *   3. มีแต่ใบรางวัลเสริม -> กันไว้จนกว่าแอดมินจะยืนยันไฟล์ชุดนี้
+ *   4. ถ้ามีรางวัลหลักด้วยและรอบนี้ตั้งให้แสดงแค่รางวัลหลัก -> ซ่อนใบรางวัลเสริม
  *   5. นอกนั้นเผยแพร่ทั้งหมด
  */
 export function decidePublish(participants: Participant[], policy: MultiAwardPolicy): PublishDecision {
@@ -93,7 +104,7 @@ export function decidePublish(participants: Participant[], policy: MultiAwardPol
     }
 
     decision.publishedParticipants.push({ entryId: person.entryId, mode: person.mode });
-    if (policy === "MEDAL_ONLY" && supplemental.length > 0) {
+    if (policy === "MEDAL_ONLY" && primary.length > 0 && supplemental.length > 0) {
       decision.hiddenByPolicy.push(...supplemental.map((c) => c.id));
       decision.publish.push(...primary.map((c) => c.id));
       continue;
@@ -107,7 +118,7 @@ function holdReason(person: Participant, primary: number, supplemental: number):
   const issue = HOLD_REASONS.find((r) => person.issues.includes(r));
   if (issue) return issue;
   if (primary + supplemental === 0) return "MISSING_FILE";
-  if (primary === 0) return "MISSING_PRIMARY";
+  if (primary === 0 && !person.supplementalOnlyApproved) return "MISSING_PRIMARY";
   return null;
 }
 

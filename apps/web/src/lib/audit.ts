@@ -14,6 +14,8 @@ export type AuditAction =
   | "STUDENT_LINKED"
   | "STUDENT_SEPARATED"
   | "STUDENT_RENAMED"
+  | "SUPPLEMENTAL_ONLY_APPROVED"
+  | "SUPPLEMENTAL_ONLY_REVOKED"
   | "MODE_MISMATCH_CONFIRMED"
   | "NATIONALITY_CONFIRMED"
   | "MARKED_FOREIGN"
@@ -72,6 +74,8 @@ export const AUDIT_LABELS: Record<string, string> = {
   STUDENT_LINKED: "เลือกตัวคนให้ผู้เข้าสอบ",
   STUDENT_SEPARATED: "แยกเป็นคนใหม่",
   STUDENT_RENAMED: "แก้ชื่อตัวคน (มีผลทุกรายการสอบ)",
+  SUPPLEMENTAL_ONLY_APPROVED: "ยืนยันใช้เฉพาะใบรางวัลเสริมที่มีอยู่",
+  SUPPLEMENTAL_ONLY_REVOKED: "ยกเลิกการยืนยันใบรางวัลเสริม",
   MODE_MISMATCH_CONFIRMED: "ยืนยันใช้รูปแบบการสอบตามรายชื่อ",
   NATIONALITY_CONFIRMED: "ยืนยันว่าเป็นผู้เข้าสอบไทย",
   MARKED_FOREIGN: "ระบุว่าเป็นผู้เข้าสอบต่างชาติ",

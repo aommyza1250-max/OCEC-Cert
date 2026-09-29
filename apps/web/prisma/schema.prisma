@@ -339,6 +339,11 @@ model RosterEntry {
   /// true = แอดมินเลือกตัวคนเอง (ชื่อพ้อง หรือแยกเป็นคนใหม่)
   studentLinkedManually Boolean  @default(false) @map("student_linked_manually")
 
+  /// ยืนยันให้ใช้เฉพาะรางวัลเสริมที่ได้รับจริง — snapshot รวม id/รางวัล/pdfKey ของใบชุดนั้น
+  /// ถ้าเพิ่มหรือเปลี่ยนไฟล์ การยืนยันเดิมจะหมดผลโดยไม่ต้องให้ worker แก้ค่านี้
+  supplementalOnlySnapshot   String?   @map("supplemental_only_snapshot") @db.Text
+  supplementalOnlyApprovedAt DateTime? @map("supplemental_only_approved_at")
+
   /// เพิ่มทุกครั้งที่แก้ — กันสองแท็บแก้ทับกันเงียบ ๆ
   version Int @default(0)
 

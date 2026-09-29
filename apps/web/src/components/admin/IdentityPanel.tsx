@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { postJson } from "./client-api";
@@ -20,6 +21,7 @@ export type StudentCandidate = {
  */
 export function IdentityPanel({
   entryId,
+  overviewHref,
   candidateNo,
   version,
   linked,
@@ -28,6 +30,7 @@ export function IdentityPanel({
   locked,
 }: {
   entryId: string;
+  overviewHref: string;
   candidateNo: string;
   version: number;
   linked: { id: string; name: string; school: string | null } | null;
@@ -192,6 +195,12 @@ export function IdentityPanel({
           >
             เปลี่ยนตัวคนที่ผูก
           </button>
+          <Link
+            href={overviewHref}
+            className="inline-flex min-h-11 items-center rounded-xl border border-brand-line bg-card px-3 font-medium text-brand transition duration-200 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            กลับภาพรวมรอบนี้ →
+          </Link>
           {otherCertificates > 0 && (
             <button
               type="button"

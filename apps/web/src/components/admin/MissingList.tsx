@@ -7,9 +7,10 @@ import type { AwardDef } from "@/lib/certificate-catalog";
 import type { MissingItem } from "@/lib/batch-view";
 import { HOLD_LABELS } from "@/lib/publish-rules";
 import { postJson, uploadFile, waitForJob } from "./client-api";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /**
- * ผู้เข้าสอบที่ยังขาดไฟล์ — แยก online/onsite
+ * ผู้เข้าสอบที่ต้องตามไฟล์หรือยืนยันเฉพาะรางวัลเสริม — แยก online/onsite
  *
  * โยน PDF เข้าไปในบล็อกของคนนั้นได้เลย (ไฟล์รวมเล่มก็ได้ ระบบคัดเฉพาะหน้าของคนนี้ออกมา)
  * แต่ **ต้องเลือกรางวัลเอง** — ระบบไม่เดารางวัลจากข้อความบนหน้าหรือจาก Excel
@@ -26,6 +27,7 @@ export function MissingList({
   catalog: AwardDef[];
   locked: string | null;
 }) {
+  const { confirm, dialog } = useConfirmDialog();
   if (items.length === 0) {
     return (
       <p className="rounded-xl border border-ok-line bg-ok-bg px-5 py-4 text-sm text-ok-ink">
@@ -37,8 +39,9 @@ export function MissingList({
   const byMode = (mode: string) => items.filter((i) => i.examMode === mode);
   return (
     <div className="space-y-4">
+      {dialog}
       <p className="text-sm text-ink-soft">
-        ยังขาดไฟล์ {items.length} คน — Online {byMode("ONLINE").length} · Onsite {byMode("ONSITE").length}
+        ต้องตรวจรางวัลหรือไฟล์ {items.length} คน — Online {byMode("ONLINE").length} · Onsite {byMode("ONSITE").length}
       </p>
       {(["ONLINE", "ONSITE"] as const).map((mode) =>
         byMode(mode).length === 0 ? null : (
@@ -48,7 +51,7 @@ export function MissingList({
             </summary>
             <div className="space-y-3 border-t border-hairline p-3">
               {byMode(mode).map((item) => (
-                <MissingCard key={item.id} batchId={batchId} item={item} catalog={catalog} locked={locked} />
+                <MissingCard key={item.id} batchId={batchId} item={item} catalog={catalog} locked={locked} confirm={confirm} />
               ))}
             </div>
           </details>
@@ -63,17 +66,20 @@ function MissingCard({
   item,
   catalog,
   locked,
+  confirm,
 }: {
   batchId: string;
   item: MissingItem;
   catalog: AwardDef[];
   locked: string | null;
+  confirm: ReturnType<typeof useConfirmDialog>["confirm"];
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [award, setAward] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [working, setWorking] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -111,13 +117,28 @@ function MissingCard({
     }
   }
 
-  const busy = progress !== null || working;
+  async function approveExisting() {
+    if (!(await confirm(
+      `ยืนยันว่าได้รับเพียงรางวัลเสริมที่มีอยู่ของผู้เข้าสอบเลข ${item.candidateNo}? หากเผยแพร่ ผู้ปกครองจะเห็นใบเหล่านี้โดยไม่มีใบรางวัลหลัก`,
+      { title: "ตรวจรางวัลเสริม", confirmLabel: "ยืนยันใช้ใบที่มีอยู่", tone: "brand" },
+    ))) return;
+    setApproving(true);
+    setError(null);
+    const result = await postJson(`/api/admin/participants/${item.id}/supplemental-only`, {
+      action: "APPROVE", version: item.version,
+    });
+    setApproving(false);
+    if (!result.ok) setError(result.error);
+    else router.refresh();
+  }
+
+  const busy = progress !== null || working || approving;
 
   return (
     <article className="rounded-lg border border-warn-line bg-warn-bg p-3 text-sm">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <Link
-          href={`/admin/batches/${batchId}/participants/${item.id}`}
+          href={`/admin/batches/${batchId}/participants/${item.id}?returnPanel=missing`}
           className="font-semibold underline-offset-2 hover:underline"
         >
           {item.name}
@@ -171,6 +192,16 @@ function MissingCard({
               ? "กำลังตรวจไฟล์และประมวลผล..."
               : "เลือกไฟล์ PDF ที่ได้มา"}
         </button>
+        {item.reason === "MISSING_PRIMARY" && (
+          <button
+            type="button"
+            onClick={() => void approveExisting()}
+            disabled={busy || Boolean(locked)}
+            className="min-h-11 cursor-pointer rounded-xl border border-brand-line bg-card px-3 font-medium text-brand transition duration-200 hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {approving ? "กำลังยืนยัน..." : "ยืนยันใช้เฉพาะรางวัลที่มีอยู่"}
+          </button>
+        )}
       </div>
 
       {(error ?? item.lastError) && (

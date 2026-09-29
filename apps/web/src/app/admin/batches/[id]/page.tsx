@@ -7,10 +7,17 @@ import { prisma } from "@/lib/db";
 import { batchConfirmPhrase } from "@/lib/batch-delete";
 import { loadBatchView } from "@/lib/batch-view";
 import { allowsLevelSubfolder } from "@/lib/certificate-catalog";
+import { parseIntakeLocation } from "@/lib/intake-location";
 
 export const dynamic = "force-dynamic";
 
-export default async function BatchPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BatchPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ step?: string; panel?: string }>;
+}) {
   if (!(await isAuthenticated())) redirect("/admin/login");
 
   const { id } = await params;
@@ -29,6 +36,12 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     select: { progress: true },
   });
   const blockers = readBlockers(lastCleanup?.progress);
+  const locationParams = await searchParams;
+  const { step, panel } = parseIntakeLocation(
+    locationParams.step,
+    locationParams.panel,
+    batch.status === "PUBLISHED" ? 3 : view.roster.active ? 2 : 1,
+  );
 
   const roundLabel = batch.round === "HEAT" ? "HEAT Round" : "FINAL Round";
 
@@ -49,6 +62,8 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
       <BatchWorkflow
         view={view}
+        initialStep={step}
+        initialPanel={panel}
         levelSubfolder={allowsLevelSubfolder(batch.programCode, batch.round)}
         deleteInfo={{
           confirmPhrase: batchConfirmPhrase(batch.programCode, batch.round, batch.year),
