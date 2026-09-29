@@ -417,7 +417,7 @@ function EditLink({
 }) {
   return (
     <Link
-      href={`/admin/batches/${batchId}/participants/${entryId}`}
+      href={`/admin/batches/${batchId}/participants/${entryId}?returnPanel=issues`}
       className={`min-h-10 cursor-pointer rounded-xl px-3 py-2 transition duration-200 ${
         primary ? "bg-brand font-semibold text-white hover:bg-brand-dark" : "border border-hairline hover:bg-paper"
       }`}

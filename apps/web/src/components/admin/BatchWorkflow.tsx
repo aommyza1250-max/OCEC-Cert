@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { BatchView } from "@/lib/batch-view";
+import { intakeLocationUrl, type IntakeStep, type ReviewPanel } from "@/lib/intake-location";
 import { CertificatesPanel } from "./CertificatesPanel";
 import { DangerZone } from "./DangerZone";
 import { IssueList } from "./IssueList";
@@ -24,8 +25,6 @@ const STAGE_LABEL: Record<string, string> = {
   DELETE_BATCH: "กำลังลบรอบการนำเข้า",
 };
 
-type IntakeStep = 1 | 2 | 3;
-
 type DeleteInfo = {
   confirmPhrase: string;
   counts: { certificates: number; pages: number; students: number };
@@ -40,12 +39,16 @@ type RetentionInfo = { expiresAt: string | null; deletedFiles: number };
  */
 export function BatchWorkflow({
   view,
+  initialStep,
+  initialPanel,
   levelSubfolder,
   deleteInfo,
   retention,
   blockers,
 }: {
   view: NonNullable<BatchView>;
+  initialStep: IntakeStep;
+  initialPanel: ReviewPanel;
   levelSubfolder: boolean;
   deleteInfo: DeleteInfo;
   retention: RetentionInfo;
@@ -57,8 +60,14 @@ export function BatchWorkflow({
   const draftBusy = roster.draft?.status === "PENDING" || roster.draft?.status === "ACTIVATING";
   const running = view.processing || draftBusy || batch.status === "DELETING";
   const hasRoster = Boolean(roster.active);
-  const [activeStep, setActiveStep] = useState<IntakeStep>(() => (published ? 3 : hasRoster ? 2 : 1));
-  const [reviewPanel, setReviewPanel] = useState<"issues" | "missing" | null>(null);
+  const [activeStep, setActiveStep] = useState<IntakeStep>(initialStep);
+  const [reviewPanel, setReviewPanel] = useState<ReviewPanel>(initialPanel);
+
+  function selectLocation(step: IntakeStep, panel: ReviewPanel = null) {
+    window.history.replaceState(window.history.state, "", intakeLocationUrl(window.location.href, step, panel));
+    setActiveStep(step);
+    setReviewPanel(step === 3 ? panel : null);
+  }
 
   // ระหว่าง worker ทำงานให้รีเฟรชหน้าเองทุก 3 วินาที แอดมินจะได้ไม่ต้องกด F5
   // รีเฟรชเฉพาะตอนที่แท็บเปิดอยู่จริง — ยิงรัวขณะสลับไปแอปอื่นบนเน็ตมือถือมีแต่จะล้มเป็นชุด
@@ -149,7 +158,7 @@ export function BatchWorkflow({
                   type="button"
                   aria-controls={`intake-step-${step.id}`}
                   aria-current={current ? "step" : undefined}
-                  onClick={() => setActiveStep(step.id)}
+                  onClick={() => selectLocation(step.id)}
                   className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${current
                     ? "border-2 border-brand bg-brand-soft text-brand"
                     : "border-hairline bg-card text-ink-soft hover:border-brand-line hover:text-ink"
@@ -178,7 +187,7 @@ export function BatchWorkflow({
               totals={roster.totals}
               draft={roster.draft}
               locked={locked}
-              footer={<StepNavigation label="ไปอัปโหลด ZIP →" onClick={() => setActiveStep(2)} />}
+              footer={<StepNavigation label="ไปอัปโหลด ZIP →" onClick={() => selectLocation(2)} />}
             />
           </section>
 
@@ -192,7 +201,7 @@ export function BatchWorkflow({
               activeJob={view.activeJob}
               hasRoster={hasRoster}
               locked={locked}
-              footer={<StepNavigation backLabel="← กลับไปขั้นรายชื่อ" onBack={() => setActiveStep(1)} label="ไปภาพรวมรอบนี้ →" onClick={() => setActiveStep(3)} />}
+              footer={<StepNavigation backLabel="← กลับไปขั้นรายชื่อ" onBack={() => selectLocation(1)} label="ไปภาพรวมรอบนี้ →" onClick={() => selectLocation(3)} />}
             />
           </section>
 
@@ -210,7 +219,7 @@ export function BatchWorkflow({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <OverviewMetric tone="brand" label="ผู้เข้าสอบทั้งหมด" value={`${formatCount(roster.totals.total)} คน`} detail={`Online ${formatCount(roster.totals.online)} · Onsite ${formatCount(roster.totals.onsite)}`} />
               <OverviewMetric tone="ok" label="เกียรติบัตรพร้อมเผยแพร่" value={view.processing ? "กำลังตรวจ" : `${formatCount(view.publish.summary.toPublish.certificates)} ใบ`} />
-              <OverviewMetric tone="warn" label="รอแอดมินตัดสิน" value={view.processing ? "กำลังตรวจ" : `${formatCount(view.issues.length + view.missing.length)} รายการ`} detail={view.processing ? "ผลจะอัปเดตหลังงานเสร็จ" : `หน้าเกียรติบัตร ${formatCount(view.issues.length)} · ผู้เข้าสอบขาดไฟล์ ${formatCount(view.missing.length)}`} />
+              <OverviewMetric tone="warn" label="รอแอดมินตัดสิน" value={view.processing ? "กำลังตรวจ" : `${formatCount(view.issues.length + view.missing.length)} รายการ`} detail={view.processing ? "ผลจะอัปเดตหลังงานเสร็จ" : `หน้าเกียรติบัตร ${formatCount(view.issues.length)} · รอตรวจรางวัล/ไฟล์ ${formatCount(view.missing.length)}`} />
               <OverviewMetric label="เกียรติบัตรที่เผยแพร่แล้ว" value={`${formatCount(view.publish.publishedCount)} ใบ`} />
             </div>
 
@@ -231,22 +240,22 @@ export function BatchWorkflow({
                 ) : (
                   <div className="mt-3 space-y-3">
                     {view.issues.length > 0 && (
-                      <OverviewAction title="หน้าเกียรติบัตรที่ต้องตัดสิน" count={`${formatCount(view.issues.length)} หน้า`} hint="ตรวจชื่อและเลขผู้เข้าสอบก่อนยืนยันการจับคู่" actionLabel="เปิดรายการตรวจ" onClick={() => setReviewPanel("issues")} />
+                      <OverviewAction title="หน้าเกียรติบัตรที่ต้องตัดสิน" count={`${formatCount(view.issues.length)} หน้า`} hint="ตรวจชื่อและเลขผู้เข้าสอบก่อนยืนยันการจับคู่" actionLabel="เปิดรายการตรวจ" onClick={() => selectLocation(3, "issues")} />
                     )}
                     {view.missing.length > 0 && (
-                      <OverviewAction title="ผู้เข้าสอบยังไม่มีเกียรติบัตร" count={`${formatCount(view.missing.length)} คน`} hint="เลือกรางวัลและเพิ่ม PDF หรือปล่อยค้างไว้ก่อน" actionLabel="ดูผู้เข้าสอบที่ขาดไฟล์" onClick={() => setReviewPanel("missing")} />
+                      <OverviewAction title="ผู้เข้าสอบที่ต้องตรวจรางวัล/ไฟล์" count={`${formatCount(view.missing.length)} คน`} hint="เพิ่ม PDF ที่ขาด หรือยืนยันว่าได้รับเฉพาะรางวัลเสริม" actionLabel="เปิดรายการตรวจ" onClick={() => selectLocation(3, "missing")} />
                     )}
                   </div>
                 )}
                 {!view.processing && reviewPanel === "issues" && view.issues.length > 0 && (
                   <div className="mt-4 rounded-2xl border border-hairline p-4" aria-label="รายการหน้าเกียรติบัตรที่ต้องตัดสิน">
-                    <button type="button" onClick={() => setReviewPanel(null)} className="mb-4 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-brand">← ปิดรายการตรวจ</button>
+                    <button type="button" onClick={() => selectLocation(3)} className="mb-4 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-brand">← ปิดรายการตรวจ</button>
                     <IssueList batchId={batch.id} issues={view.issues} catalog={view.catalog} locked={editLocked} />
                   </div>
                 )}
                 {!view.processing && reviewPanel === "missing" && view.missing.length > 0 && (
-                  <div className="mt-4 rounded-2xl border border-hairline p-4" aria-label="ผู้เข้าสอบที่ขาดไฟล์เกียรติบัตร">
-                    <button type="button" onClick={() => setReviewPanel(null)} className="mb-4 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-brand">← ปิดรายการผู้เข้าสอบ</button>
+                  <div className="mt-4 rounded-2xl border border-hairline p-4" aria-label="ผู้เข้าสอบที่ต้องตรวจรางวัลหรือไฟล์">
+                    <button type="button" onClick={() => selectLocation(3)} className="mb-4 min-h-11 cursor-pointer text-sm font-medium text-brand underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-brand">← ปิดรายการผู้เข้าสอบ</button>
                     <MissingList batchId={batch.id} items={view.missing} catalog={view.catalog} locked={editLocked} />
                   </div>
                 )}
@@ -272,7 +281,7 @@ export function BatchWorkflow({
               </aside>
             </div>
             <div className="mt-5 border-t border-hairline pt-5">
-              <StepNavigation backLabel="← กลับไปขั้นอัปโหลด ZIP" onBack={() => setActiveStep(2)} />
+              <StepNavigation backLabel="← กลับไปขั้นอัปโหลด ZIP" onBack={() => selectLocation(2)} />
             </div>
           </section>
         </>

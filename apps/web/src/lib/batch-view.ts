@@ -369,7 +369,7 @@ export async function loadIssues(batchId: string, programCode: string): Promise<
     .sort((a, b) => (order.get(a.status) ?? 99) - (order.get(b.status) ?? 99) || a.pageNumber - b.pageNumber);
 }
 
-/** ผู้เข้าสอบที่ยังขาดไฟล์ — ไม่มีใบเลย หรือมีแต่ใบรางวัลเสริม */
+/** ผู้เข้าสอบที่ต้องตามไฟล์ หรือยืนยันว่าได้รับเฉพาะใบรางวัลเสริม */
 async function loadMissing(
   batchId: string,
   held: { entryId: string; reason: HoldReason }[],

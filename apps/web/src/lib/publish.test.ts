@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   decidePublish,
   needsPolicyDecision,
+  supplementalOnlySnapshot,
   summarize,
   type HoldReason,
   type Mode,
@@ -13,16 +14,31 @@ const SUPPLEMENTAL = new Set(["PERFECT_SCORE", "SPECIAL_AWARD"]);
 const person = (
   entryId: string,
   awards: string[],
-  options: { mode?: Mode; issues?: HoldReason[] } = {},
+  options: { mode?: Mode; issues?: HoldReason[]; approved?: boolean } = {},
 ): Participant => ({
   entryId,
   mode: options.mode ?? "ONLINE",
   issues: options.issues ?? [],
+  supplementalOnlyApproved: options.approved ?? false,
   certificates: awards.map((award, i) => ({
     id: `${entryId}-${i}`,
     award,
     kind: SUPPLEMENTAL.has(award) ? "SUPPLEMENTAL" : "PRIMARY",
+    pdfKey: `synthetic/${entryId}-${i}.pdf`,
   })),
+});
+
+describe("supplementalOnlySnapshot", () => {
+  it("ผูกการยืนยันกับใบ รางวัล และไฟล์จริง ไม่ขึ้นกับลำดับการอ่าน", () => {
+    const certificates = person("a", ["PERFECT_SCORE", "SPECIAL_AWARD"]).certificates;
+    const original = supplementalOnlySnapshot(certificates);
+    expect(original).toBe(supplementalOnlySnapshot([...certificates].reverse()));
+    expect(original).not.toBe(supplementalOnlySnapshot([
+      { ...certificates[0], pdfKey: "synthetic/replaced.pdf" }, certificates[1],
+    ]));
+    expect(original).not.toBe(supplementalOnlySnapshot([certificates[0]]));
+    expect(supplementalOnlySnapshot([...certificates, person("a", ["GOLD"]).certificates[0]])).toBeNull();
+  });
 });
 
 describe("decidePublish", () => {
@@ -51,6 +67,29 @@ describe("decidePublish", () => {
     expect(d.publish).toEqual([]);
     expect(d.held).toEqual(["a-0"]);
     expect(d.heldParticipants).toEqual([{ entryId: "a", mode: "ONLINE", reason: "MISSING_PRIMARY" }]);
+  });
+
+  it("แอดมินยืนยันแล้วจึงเผยแพร่เฉพาะรางวัลเสริมที่มี แม้รอบเลือกเฉพาะรางวัลหลัก", () => {
+    for (const policy of ["ALL", "MEDAL_ONLY", "UNDECIDED"] as const) {
+      const d = decidePublish([person("a", ["PERFECT_SCORE"], { approved: true })], policy);
+      expect(d.publish).toEqual(["a-0"]);
+      expect(d.heldParticipants).toEqual([]);
+      expect(d.hiddenByPolicy).toEqual([]);
+    }
+  });
+
+  it("แม้ยืนยันรางวัลเสริมแล้ว ปัญหาอื่นยังกันไว้ทั้งคน", () => {
+    const d = decidePublish([person("a", ["PERFECT_SCORE"], {
+      approved: true, issues: ["MODE_MISMATCH"],
+    })], "ALL");
+    expect(d.publish).toEqual([]);
+    expect(d.heldParticipants[0].reason).toBe("MODE_MISMATCH");
+  });
+
+  it("เมื่อรางวัลหลักมาทีหลัง ให้กลับไปใช้ตัวเลือกการเผยแพร่ของรอบ", () => {
+    const d = decidePublish([person("a", ["GOLD", "PERFECT_SCORE"], { approved: true })], "MEDAL_ONLY");
+    expect(d.publish).toEqual(["a-0"]);
+    expect(d.hiddenByPolicy).toEqual(["a-1"]);
   });
 
   it("ยังไม่มีไฟล์เลย ถูกนับเป็นคนที่ค้างไว้", () => {

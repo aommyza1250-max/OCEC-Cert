@@ -15,6 +15,7 @@ import { awardCatalog } from "./certificate-catalog";
 import { prisma } from "./db";
 import {
   decidePublish,
+  supplementalOnlySnapshot,
   summarize,
   type CertificateRef,
   type HoldReason,
@@ -58,12 +59,12 @@ export async function loadParticipants(
   const [entries, certificates, pages] = await Promise.all([
     db.rosterEntry.findMany({
       where: { batchId: batch.id },
-      select: { id: true, candidateNo: true, examMode: true },
+      select: { id: true, candidateNo: true, examMode: true, supplementalOnlySnapshot: true },
       orderBy: { candidateNo: "asc" },
     }),
     db.certificate.findMany({
       where: { batchId: batch.id, rosterEntryId: { not: null } },
-      select: { id: true, award: true, rosterEntryId: true },
+      select: { id: true, award: true, pdfKey: true, rosterEntryId: true },
       orderBy: { pageNumber: "asc" },
     }),
     db.stagingPage.findMany({
@@ -90,16 +91,21 @@ export async function loadParticipants(
   const certsByEntry = new Map<string, CertificateRef[]>();
   for (const c of certificates) {
     const list = certsByEntry.get(c.rosterEntryId!) ?? [];
-    list.push({ id: c.id, award: c.award, kind: kinds.get(c.award) ?? "PRIMARY" });
+    list.push({ id: c.id, award: c.award, pdfKey: c.pdfKey, kind: kinds.get(c.award) ?? "PRIMARY" });
     certsByEntry.set(c.rosterEntryId!, list);
   }
 
-  return entries.map((e) => ({
-    entryId: e.id,
-    mode: e.examMode,
-    certificates: certsByEntry.get(e.id) ?? [],
-    issues: [...(issues.get(e.id) ?? [])],
-  }));
+  return entries.map((e) => {
+    const certificates = certsByEntry.get(e.id) ?? [];
+    const currentSnapshot = supplementalOnlySnapshot(certificates);
+    return {
+      entryId: e.id,
+      mode: e.examMode,
+      certificates,
+      issues: [...(issues.get(e.id) ?? [])],
+      supplementalOnlyApproved: currentSnapshot !== null && currentSnapshot === e.supplementalOnlySnapshot,
+    };
+  });
 }
 
 // ---------------------------------------------------------------- ลงมือ

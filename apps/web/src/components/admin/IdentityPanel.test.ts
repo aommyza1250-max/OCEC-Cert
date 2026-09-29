@@ -9,6 +9,7 @@ vi.mock("./ConfirmDialog", () => ({ useConfirmDialog: () => ({ confirm: async ()
 it("เสนอให้เปลี่ยนตัวคนแม้เพิ่งกดคนใหม่และยังไม่มีใบของรายการอื่น", () => {
   const html = renderToStaticMarkup(createElement(IdentityPanel, {
     entryId: "synthetic-entry",
+    overviewHref: "/admin/batches/synthetic?step=3",
     candidateNo: "9002",
     version: 1,
     linked: { id: "new-person", name: "SOMCHAI JAIDEE", school: null },
@@ -21,6 +22,7 @@ it("เสนอให้เปลี่ยนตัวคนแม้เพิ�
   }));
 
   expect(html).toContain("เปลี่ยนตัวคนที่ผูก");
+  expect(html).toContain("กลับภาพรวมรอบนี้");
   expect(html).toContain("พิมพ์เลขผู้เข้าสอบ 9002 เพื่อยืนยัน");
   expect(html).toContain("HKIMO HEAT 2092 Bronze Award");
   expect(html).not.toContain("ผูกผิดคน — แยกเป็นคนใหม่");
