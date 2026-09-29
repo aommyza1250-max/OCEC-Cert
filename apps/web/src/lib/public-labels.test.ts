@@ -16,7 +16,7 @@ describe("public certificate labels", () => {
     ["GOLD", "GOLD AWARD"],
     ["SILVER", "SILVER AWARD"],
     ["BRONZE", "BRONZE AWARD"],
-    ["PERFECT_SCORE", "PERFECT SCORE AWARD"],
+    ["PERFECT_SCORE", "PERFECT SCORE"],
     ["SPECIAL_AWARD", "SPECIAL AWARD"],
   ])("displays %s as %s", (code, expected) => {
     expect(publicAwardLabel(code, "stored English name")).toBe(expected);
