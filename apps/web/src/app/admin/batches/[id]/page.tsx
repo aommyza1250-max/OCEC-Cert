@@ -30,7 +30,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   });
   const blockers = readBlockers(lastCleanup?.progress);
 
-  const roundLabel = batch.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ";
+  const roundLabel = batch.round === "HEAT" ? "HEAT Round" : "FINAL Round";
 
   return (
     <AdminShell
