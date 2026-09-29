@@ -38,10 +38,14 @@ export function CertificateCard({
         <AwardBadge label={publicAwardLabel(cert.award, cert.awardLabel)} badge={cert.badge} />
         {/* ระดับชั้นกับเลขที่ใบอยู่บรรทัดเดียวกันบนมือถือ ลดจำนวนบรรทัดต่อการ์ด
             เพราะหน้าผลลัพธ์อาจมีหลายใบเรียงกันยาว */}
-        <p className="mt-1.5 text-sm text-ink-soft sm:mt-2 sm:text-base">
-          {cert.level}
-          {cert.level && cert.certNo && <span className="px-1.5">·</span>}
-          {cert.certNo && <span className="whitespace-nowrap">เลขที่ {cert.certNo}</span>}
+        <p className="mt-1.5 text-xs text-ink-soft sm:mt-2 sm:text-sm">
+          {cert.level && <span className="inline-block max-w-full break-words">{cert.level}</span>}
+          {cert.certNo && (
+            <span className="whitespace-nowrap">
+              {cert.level && <span className="px-1.5">·</span>}
+              เลขที่ {cert.certNo}
+            </span>
+          )}
         </p>
       </div>
 
@@ -72,7 +76,7 @@ export function CertificateCard({
           aria-label={`ดาวน์โหลดไฟล์ PDF เกียรติบัตรของ ${studentName}`}
         >
           <PdfIcon className="h-4 w-4 shrink-0 opacity-80" />
-          <span>ดาวน์โหลดไฟล์ PDF (สำหรับพิมพ์)</span>
+          <span>ดาวน์โหลดไฟล์ PDF</span>
         </a>
       </div>
     </div>

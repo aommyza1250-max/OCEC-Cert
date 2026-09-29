@@ -31,7 +31,7 @@ export function AwardBadge({
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5
-                  text-sm font-semibold sm:px-3 sm:py-1 sm:text-base ${tone} ${className}`}
+                  text-xs font-semibold sm:px-3 sm:py-1 sm:text-sm ${tone} ${className}`}
       title={label}
     >
       <MedalIcon className="h-4 w-4 shrink-0" />
