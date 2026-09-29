@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { isMaintenanceEnabled } from "@/lib/maintenance";
 import { normalizeName } from "@/lib/normalize";
 import { presignedDownloadUrl } from "@/lib/r2";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
@@ -16,6 +17,12 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
  * ตอนผู้ปกครองกดโหลดพร้อมกันหลายร้อยคน และ R2 ไม่คิดค่า egress
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (await isMaintenanceEnabled()) {
+    return NextResponse.json(
+      { error: "ระบบปิดปรับปรุงชั่วคราว กรุณากลับมาใหม่ภายหลัง" },
+      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "300" } },
+    );
+  }
   const { id } = await params;
 
   const limit = checkRateLimit(clientIp(await headers()));

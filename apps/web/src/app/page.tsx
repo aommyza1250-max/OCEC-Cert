@@ -4,6 +4,7 @@ import { CertificateCard } from "@/components/CertificateCard";
 import { ChatIcon, InfoIcon, PersonIcon, SchoolIcon, SearchIcon } from "@/components/icons";
 import { SearchBox } from "@/components/SearchBox";
 import { MIN_QUERY_LENGTH } from "@/lib/constants";
+import { isMaintenanceEnabled } from "@/lib/maintenance";
 import { publicRoundLabel } from "@/lib/public-labels";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { RETENTION_MONTHS } from "@/lib/publish";
@@ -37,6 +38,23 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
+  if (await isMaintenanceEnabled()) {
+    return (
+      <>
+        <SiteHeader />
+        <main id="main" className="mx-auto flex min-h-[60dvh] w-full max-w-5xl items-center justify-center px-4 py-12">
+          <section role="status" className="w-full max-w-2xl rounded-2xl border border-brand-line bg-card px-6 py-10 text-center shadow-sm sm:px-10 sm:py-14">
+            <h1 className="text-2xl font-bold text-brand sm:text-3xl">ระบบปิดปรับปรุงชั่วคราว</h1>
+            <p className="mt-4 leading-7 text-ink-soft">
+              ขณะนี้ยังไม่สามารถค้นหาหรือดาวน์โหลดเกียรติบัตรได้ กรุณากลับมาใหม่ภายหลัง
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">ทีมงานกำลังอัปเดตระบบและข้อมูลเกียรติบัตร</p>
+          </section>
+        </main>
+        <SiteFooter />
+      </>
+    );
+  }
   const { q = "" } = await searchParams;
   const query = q.trim();
   // ชื่อบนเกียรติบัตรและในชีทรายชื่อเป็นอังกฤษล้วน พิมพ์ไทยมาจึงไม่มีทางเจอ
