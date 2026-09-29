@@ -47,6 +47,8 @@ export const POST = adminHandler<{ entryId: string }>(async (request, { params, 
       throw new HttpError(409, "ไม่พบใบเดิมที่จะเปลี่ยนไฟล์ — อาจถูกเปลี่ยนหรือทิ้งไปแล้ว กรุณาโหลดหน้าใหม่");
     }
 
+    // PDF รายคนเป็นไฟล์ต้นฉบับเช่นกัน — อย่าปล่อยสถานะ "เคลียร์แล้ว" ค้างจากครั้งก่อน
+    await tx.batch.update({ where: { id: batch.id }, data: { sourcesClearedAt: null } });
     const created = await enqueue(tx, batch.id, "SPLIT", {
       kind: "single",
       purpose: input.purpose,
