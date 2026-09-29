@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { CertificateManager, type ParticipantPage } from "@/components/admin/CertificateManager";
@@ -57,7 +58,7 @@ export default async function ParticipantPage({ params }: { params: Promise<{ id
         ? "รอให้ระบบประมวลผลเสร็จก่อน"
         : null;
 
-  const candidates = entry.student ? [] : await studentCandidates(pages.map((p) => p.review));
+  const candidates = await studentCandidates(pages.map((p) => p.review), entry);
   const roundLabel = batch.exam.round === "HEAT" ? "รอบคัดเลือก" : "รอบชิงชนะเลิศ";
 
   return (
@@ -91,6 +92,7 @@ export default async function ParticipantPage({ params }: { params: Promise<{ id
 
         <IdentityPanel
           entryId={entry.id}
+          candidateNo={entry.candidateNo}
           version={entry.version}
           linked={
             entry.student
@@ -152,17 +154,47 @@ export default async function ParticipantPage({ params }: { params: Promise<{ id
   );
 }
 
-/** ตัวคนที่เป็นไปได้ของผู้เข้าสอบที่ระบบระบุตัวไม่ได้ — มาจากที่ตัวจับคู่บันทึกไว้บนหน้า */
-async function studentCandidates(reviews: unknown[]): Promise<StudentCandidate[]> {
+/** ตัวคนที่เป็นไปได้: ก่อนตัดสินใช้ผลของ worker; หลังตัดสินค้นชื่อเดิมอีกครั้งเพื่อให้แก้การกดผิดได้ */
+async function studentCandidates(
+  reviews: unknown[],
+  entry: {
+    id: string;
+    batchId: string;
+    studentId: string | null;
+    nameEnNormalized: string | null;
+    nameThNormalized: string | null;
+  },
+): Promise<StudentCandidate[]> {
   const ids = new Set<string>();
   for (const review of reviews) {
     const list = (review as { studentCandidateIds?: unknown } | null)?.studentCandidateIds;
     if (Array.isArray(list)) list.forEach((id) => ids.add(String(id)));
   }
-  if (ids.size === 0) return [];
+  const names = [...new Set([entry.nameEnNormalized, entry.nameThNormalized].filter((n): n is string => !!n))];
+  if (!entry.studentId && ids.size === 0) return [];
+  if (entry.studentId && names.length === 0) return [];
+  const where: Prisma.StudentWhereInput = entry.studentId
+    ? {
+        id: { not: entry.studentId },
+        AND: [
+          { OR: [{ nameEnNormalized: { in: names } }, { nameThNormalized: { in: names } }] },
+          // ระเบียนที่ไม่มีทั้งรายชื่อและใบเป็นซากจากการตัดสินก่อนหน้า ไม่เสนอให้ผูกซ้ำ
+          { OR: [{ rosterEntries: { some: {} } }, { certificates: { some: {} } }] },
+          // ผู้เข้าสอบสองคนในรอบเดียวกันห้ามใช้ตัวคนร่วมกัน
+          { rosterEntries: { none: { batchId: entry.batchId, id: { not: entry.id } } } },
+        ],
+      }
+    : { id: { in: [...ids] } };
   const students = await prisma.student.findMany({
-    where: { id: { in: [...ids] } },
-    include: { certificates: { include: { exam: { include: { program: true } } }, take: 10 } },
+    where,
+    include: {
+      certificates: {
+        include: { exam: { include: { program: true } } },
+        orderBy: { exam: { year: "desc" } },
+        take: 10,
+      },
+    },
+    orderBy: { createdAt: "asc" },
   });
   return students.map((s) => ({
     id: s.id,
