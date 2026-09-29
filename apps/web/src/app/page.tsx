@@ -7,7 +7,7 @@ import { MIN_QUERY_LENGTH } from "@/lib/constants";
 import { publicRoundLabel } from "@/lib/public-labels";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { RETENTION_MONTHS } from "@/lib/publish";
-import { searchStudents, type SearchResult } from "@/lib/search";
+import { searchStudents, type ExamSession, type SearchResult } from "@/lib/search";
 
 // ผลค้นหาเปลี่ยนตามฐานข้อมูล ห้าม cache
 export const dynamic = "force-dynamic";
@@ -18,6 +18,19 @@ const RETENTION_YEARS = Math.round(RETENTION_MONTHS / 12);
  *  ถ้าวันหนึ่งเปลี่ยนลิงก์ จะได้ไม่ลืมแก้ที่ใดที่หนึ่งแล้วผู้ปกครองกดไปเจอหน้าตาย */
 const LINE_URL = "https://lin.ee/3hzFg1z";
 const LINE_NAME = "OCEC_Thailand";
+
+/** จัดรอบของปีเดียวกันให้อยู่แถวเดียวกันบนจอใหญ่ โดยไม่เปลี่ยนข้อมูลผลค้นหา */
+function sessionsByYear(sessions: ExamSession[]): ExamSession[][] {
+  const years = new Map<number, ExamSession[]>();
+  for (const session of sessions) {
+    const group = years.get(session.year) ?? [];
+    group.push(session);
+    years.set(session.year, group);
+  }
+  return [...years.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([, group]) => group);
+}
 
 export default async function HomePage({
   searchParams,
@@ -249,21 +262,31 @@ function StudentBlock({ student }: { student: SearchResult }) {
                 แต่ต้องเขียนรอบให้เห็นชัด เพราะใบรอบคัดเลือกกับรอบชิงชนะเลิศของปีเดียวกัน
                 หน้าตาเกือบเหมือนกัน ถ้าไม่บอกให้ชัด ผู้ปกครองจะกดผิดใบ */}
             <div className="mt-3 space-y-5 sm:mt-4 sm:space-y-6">
-              {program.sessions.map((session) => (
-                <div key={`${session.year}-${session.round}`}>
-                  <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
-                    ปี {session.year} · {publicRoundLabel(session.round)}
-                  </h4>
-                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                    {session.certificates.map((cert) => (
-                      <CertificateCard
-                        key={cert.id}
-                        cert={cert}
-                        programCode={program.code}
-                        studentName={displayName}
-                      />
-                    ))}
-                  </div>
+              {sessionsByYear(program.sessions).map((yearSessions) => (
+                <div
+                  key={yearSessions[0].year}
+                  className="space-y-5 sm:space-y-6 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0"
+                >
+                  {yearSessions.map((session) => (
+                    <div
+                      key={`${session.year}-${session.round}`}
+                      className={`min-w-0 ${session.round === "HEAT" ? "lg:order-first" : ""}`}
+                    >
+                      <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
+                        ปี {session.year} · {publicRoundLabel(session.round)}
+                      </h4>
+                      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-3">
+                        {session.certificates.map((cert) => (
+                          <CertificateCard
+                            key={cert.id}
+                            cert={cert}
+                            programCode={program.code}
+                            studentName={displayName}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -412,9 +435,9 @@ function SiteFooter() {
           </p>
           <LineContactButton className="mt-2" />
         </div>
-        <div className="mt-5 border-t border-hairline pt-4 text-sm leading-relaxed text-ink-soft">
+        <div className="mt-5 border-t border-hairline pt-4 text-xs leading-relaxed text-ink-soft">
           <p>Copyright © 2026 OCEC TH. All rights reserved.</p>
-          <p className="mt-1">DEV by Saimon-X7</p>
+          <p className="mt-1 text-[0.625rem]">DEV by Saimon-X7</p>
         </div>
       </div>
     </footer>
