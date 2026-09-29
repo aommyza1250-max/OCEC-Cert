@@ -265,17 +265,17 @@ function StudentBlock({ student }: { student: SearchResult }) {
               {sessionsByYear(program.sessions).map((yearSessions) => (
                 <div
                   key={yearSessions[0].year}
-                  className="space-y-5 sm:space-y-6 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0"
+                  className="space-y-5 sm:space-y-6 md:grid md:grid-cols-2 md:gap-4 md:space-y-0"
                 >
                   {yearSessions.map((session) => (
                     <div
                       key={`${session.year}-${session.round}`}
-                      className={`min-w-0 ${session.round === "HEAT" ? "lg:order-first" : ""}`}
+                      className={`min-w-0 ${session.round === "HEAT" ? "md:order-first" : ""}`}
                     >
                       <h4 className="mb-2 inline-block rounded-lg bg-gold-bg px-2.5 py-1 text-sm font-bold text-gold-ink sm:mb-3 sm:px-3 sm:text-base">
                         ปี {session.year} · {publicRoundLabel(session.round)}
                       </h4>
-                      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-3">
+                      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-1 lg:grid-cols-2 lg:gap-3">
                         {session.certificates.map((cert) => (
                           <CertificateCard
                             key={cert.id}
