@@ -1,80 +1,56 @@
-# โครงสร้างฐานข้อมูล
+# โครงสร้างฐานข้อมูลปัจจุบัน
 
-แหล่งความจริงคือ `apps/web/prisma/schema.prisma` เอกสารนี้อธิบายเหตุผลเบื้องหลัง
+ปรับปรุง 1 ตุลาคม 2569 แหล่งความจริงคือ `apps/web/prisma/schema.prisma`
 
 ## ตาราง
 
 | ตาราง | หน้าที่ |
 |---|---|
-| `exam_programs` | รายการสอบที่หน่วยงานจัด เช่น HKIMO, TIMO — แอดมินจัดการเองได้ |
-| `exams` | รายการสอบ 1 **รอบ** ใน 1 ปี เช่น HKIMO รอบ FINAL ปี 2026 |
-| `students` | ผู้เข้าสอบ ใช้ซ้ำข้ามรายการสอบและข้ามปี |
-| `batches` | รอบการนำเข้า 1 ครั้ง = ZIP เกียรติบัตร 1 ไฟล์ + Excel 1 ไฟล์ |
-| `staging_pages` | หน้าที่ตัดออกมาจาก PDF ยังไม่ผูกกับคน |
-| `certificates` | เกียรติบัตรที่จับคู่สำเร็จแล้ว = สิ่งที่ผู้ใช้ค้นเจอ |
-| `jobs` | คิวงานของ worker |
-| `site_settings` | สวิตช์ปิดปรับปรุงทั้งเว็บ (แถวเดียว `id=1`, ค่าเริ่มต้นเปิดเว็บ) |
-| `audit_events` | ประวัติการแก้ไข รวมถึงการเปิด–ปิดโหมดปิดปรับปรุง |
+| `exam_programs` | รายการสอบ รหัส ชื่อ และสถานะเปิดใช้งาน |
+| `exams` | รายการสอบหนึ่งรอบในปี ค.ศ. unique `(programId, round, year)` |
+| `students` | ตัวคนที่รวมใบข้ามรายการและปี |
+| `batches` | รอบนำเข้ารองรับหลายไฟล์และหลายครั้ง มี profile รายชื่อที่ใช้งาน และนโยบายรางวัล |
+| `roster_imports` | การอัป Excel และสถานะร่าง |
+| `roster_import_rows` | แถวร่าง unique `(importId, candidateNo)` |
+| `roster_entries` | ผู้เข้าสอบในรอบ จาก Excel หรือเพิ่มเอง เก็บ ONLINE/ONSITE และการผูกตัวคน |
+| `staging_pages` | หน้า PDF หลักฐานต้นทาง ผลอ่าน ปัญหาจับคู่ การตัดสิน fingerprint |
+| `certificates` | ใบที่ผูกกับตัวคนและ roster ใช้เผยแพร่และกำหนดอายุไฟล์ |
+| `jobs` | คิว worker attempts progress และ error |
+| `audit_events` | ประวัติการแก้ไขและการปิดปรับปรุง |
+| `site_settings` | สถานะปิดปรับปรุง แถว `id=1` |
+| `deleted_batches` | หลักฐานสรุปรอบที่ลบ |
 
-`site_settings.maintenance_enabled` ถูกอ่านทุกครั้งที่เปิดหน้าค้นหาหรือขอลิงก์ดาวน์โหลด
-จึงสลับสถานะได้โดยไม่ต้อง deploy ใหม่ ส่วน `audit_events` เก็บ session ที่สลับสถานะไว้ใน transaction เดียวกัน
+`RosterEntry` คือการสอบของคนในรอบ ส่วน `Student` คือตัวคนข้ามรอบ ห้ามยืนยันว่าเป็นคนเดียวกันจากชื่อเพียงอย่างเดียว เมื่อแยกไม่ได้ส่งแอดมิน ไม่สร้างคนใหม่เพื่อหนีปัญหา
 
-## Index สำหรับค้นหา
+## คีย์ป้องกันข้อมูลซ้ำ
 
-```sql
-CREATE EXTENSION pg_trgm;
-CREATE INDEX students_name_th_normalized_trgm_idx ON students USING GIN (name_th_normalized gin_trgm_ops);
-CREATE INDEX students_name_en_normalized_trgm_idx ON students USING GIN (name_en_normalized gin_trgm_ops);
-```
+- RosterEntry unique `(batchId, candidateNo)` เลขไม่ซ้ำทั้ง Online และ Onsite
+- Certificate unique `(examId, studentId, award)` และ `(rosterEntryId, award)` คนมีหลายใบได้ถ้าคนละรางวัล
+- StagingPage unique `(batchId, pageNumber)` และมี index รอบกับเลข / fingerprint
+- UUID สร้างจากโค้ด Prisma ใช้ `@default(uuid())`; Python ต้องเรียก `new_id()` ทุก INSERT
 
-การค้นหาใช้ `LIKE '%คำค้น%'` ซึ่ง **btree index ช่วยไม่ได้เลย** เพราะไม่ได้ค้นจากต้นสตริง
-trigram index แก้ปัญหานี้โดยตรง และเป็นเหตุผลที่ค้นได้ในระดับมิลลิวินาที
+## รางวัลและหลักฐาน
 
-คอลัมน์ที่ index เป็นคอลัมน์ที่ normalize แล้ว (พิมพ์ใหญ่ ตัดคำนำหน้า ยุบช่องว่าง)
-จึงใช้ `LIKE` ธรรมดาได้ ไม่ต้องใช้ `ILIKE` ที่ช้ากว่า
+`award` เป็นรหัสจาก `shared/certificate-profiles/` ไม่จำกัดห้ารางวัล BBB มี `1ST_PRIZE` และมี `PARTICIPATION` / `SPECIAL_AWARD` ตามรายการและรอบ
 
-## รอบการสอบและปี
+StagingPage.award เก็บรางวัลต้นทางห้ามแก้ การเปลี่ยนรางวัลเขียน `awardOverride` พร้อม audit Certificate.award ต้องมีค่า และมี awardLabel / awardLabelTh เก็บชื่อรางวัลเมื่อออกใบ โหมดจากโฟลเดอร์หรือ roster เก็บหลักฐานที่มา
 
-`exams` เก็บ `round` (`HEAT` / `FINAL`) และ `year` เป็น **ค.ศ.**
+## การเผยแพร่และอายุไฟล์
 
-- **ปีเป็น ค.ศ. ไม่ใช่ พ.ศ.** เพราะบนหน้าเกียรติบัตรพิมพ์ ค.ศ. ไว้ (`Final Round 2026`)
-  ถ้าเก็บ พ.ศ. จะต้องแปลงไปมาทุกครั้งที่เทียบกับไฟล์ ซึ่งเป็นจุดที่พลาดได้ง่าย
-- **รอบอยู่ที่ `exams` ไม่ใช่ `exam_programs`** เพราะรายการสอบเดียวจัดทั้งสองรอบ
-  และการกรองสัญชาติขึ้นกับรอบ: `HEAT` ตัดทุกหน้า, `FINAL` กรองเฉพาะ `from THAILAND`
+แก้ข้อมูลไม่ได้ขณะ batch เป็น PUBLISHED เผยแพร่เฉพาะคนที่พร้อม การค้นหาตรวจ published_at, expires_at และ files_deleted_at การตั้งวันหมดอายุกับการลบไฟล์จริงเป็นคนละขั้น ต้องเปิด RETENTION_ENABLED ที่ worker จึงลบจริง
 
-## รางวัล
+site_settings.maintenance_enabled ถูกอ่านเมื่อค้นหาและออกลิงก์ไฟล์ สลับสถานะและ audit ใน transaction เดียวกัน
 
-`staging_pages.award` และ `certificates.award` เก็บค่ามาตรฐาน 5 ค่า:
-`GOLD` `SILVER` `BRONZE` `MERIT` `PERFECT_SCORE`
+## Index ค้นหา
 
-ค่านี้มาจาก **ชื่อโฟลเดอร์ใน ZIP** ไม่ใช่จากข้อความบนหน้าหรือจาก Excel เพราะ:
-- หน้า Perfect Score ไม่มีข้อความรางวัลพิมพ์อยู่เลย
-- Excel บันทึกรางวัลสูงสุดของคนนั้นแค่แถวเดียว ทั้งที่คนนั้นอาจมีเกียรติบัตร 2 ใบ
+ประกาศ GIN trigram ของ nameEnNormalized และ nameThNormalized พร้อม gin_trgm_ops ใน **schema.prisma เท่านั้น** ค้นอังกฤษแบบ contains ของค่าที่ normalize แล้ว เป็น substring ไม่ใช่ fuzzy แก้สะกดผิด
 
-`staging_pages` ยังเก็บ `award_on_page` (จากหน้า) และ `roster_award` (จาก Excel) ไว้ตรวจทาน
-ถ้าไม่ตรงกับโฟลเดอร์จะนับลงสถิติให้แอดมินเห็น แต่ไม่ทำให้การนำเข้าล้มเหลว
+ห้ามเพิ่ม index ด้วย raw SQL อย่างเดียว Prisma อาจสร้าง migration ลบเพราะ drift แก้ schema แล้ว generate client และรีสตาร์ท dev server เสมอ
 
-## เรื่องที่ต้องระวัง
+## สถานะ
 
-**UUID ไม่มี DEFAULT ที่ฐานข้อมูล**
-Prisma `@default(uuid())` สร้างค่าที่ฝั่ง client ไม่ได้ใส่ `DEFAULT gen_random_uuid()` ลง schema
-โค้ด Python จึงต้องเรียก `new_id()` เองทุกครั้งที่ INSERT
+BatchStatus: DRAFT SPLITTING MATCHING READY PUBLISHED FAILED DELETING; SPLIT_DONE คงไว้สำหรับข้อมูลระบบเดิม
 
-**`certificates` มี unique (exam_id, student_id, award)**
-คนหนึ่งคนมีได้หลายใบในรอบเดียวกัน **ถ้าเป็นคนละรางวัล** — ของจริงคือผู้ที่ทำคะแนนเต็ม
-จะได้ทั้งใบ Gold และใบ Perfect Score แต่รางวัลเดียวกันซ้ำสองใบไม่ได้
-เพราะนั่นแปลว่าจับคู่ผิดหรือไฟล์ซ้ำ
+MatchStatus: UNMATCHED MATCHED AMBIGUOUS DUPLICATE_NAME NAME_MISMATCH MODE_MISMATCH NATIONALITY_UNVERIFIED PARSE_REVIEW SKIPPED_FOREIGN DISCARDED
 
-`award` จึงต้อง **ห้ามเป็น NULL** เพราะ Postgres ถือว่า NULL ไม่เท่ากับ NULL
-ถ้าปล่อยให้ว่างได้ กติกา unique จะกันของซ้ำไม่ได้จริง
-
-**ชื่อซ้ำ = ยุบเป็นคนเดียวกัน**
-ตอนจับคู่ ถ้าชื่อที่ normalize แล้วตรงกับผู้เข้าสอบเดิม ระบบถือว่าเป็นคนเดียวกัน
-เป็นสิ่งที่ทำให้ "รวมเกียรติบัตรทุกใบของคนคนนั้น" ทำงานได้ แต่แลกมาด้วยความเสี่ยงที่
-คนละคนชื่อเหมือนกันเป๊ะจะถูกยุบรวม — ยอมรับได้เพราะผลลัพธ์แย่กว่าคือ
-แยกคนเดียวกันเป็นสองรายการจนผู้ปกครองหาไม่เจอ
-
-ภายในรอบนำเข้าเดียวกันเรื่องนี้ไม่เป็นปัญหา เพราะ `cert_no` ระบุตัวคนได้แน่นอนอยู่แล้ว
-ปัญหาเกิดตอนข้ามรอบ/ข้ามปีที่ไม่มีเลขให้อ้าง ระบบจะลองแยกด้วยโรงเรียนก่อน
-ถ้ายังแยกไม่ออกจะ **ไม่สร้างผู้เข้าสอบใหม่** แต่ส่งให้แอดมินตัดสิน เพราะการสร้างคนใหม่
-ก็เป็นการเดาอย่างหนึ่ง และถ้ารันจับคู่ซ้ำจะเกิดผู้เข้าสอบซ้ำซ้อนขึ้นเรื่อย ๆ โดยไม่มีอะไรฟ้อง
+ดู `data-intake-spec.md` และ `admin-guide.md` สำหรับขั้นตอนและกฎการเปลี่ยนสถานะ
