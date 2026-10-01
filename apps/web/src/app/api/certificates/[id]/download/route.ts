@@ -9,14 +9,11 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 /**
  * ออกลิงก์ดาวน์โหลดแบบมีอายุแล้ว redirect ไป R2
  *
- * รองรับทั้ง:
- *   - ?format=image  -> ดาวน์โหลดไฟล์รูปภาพ .webp (สำหรับเซฟลงอัลบั้มในมือถือ)
- *   - ?format=pdf    -> ดาวน์โหลดไฟล์เอกสาร .pdf (สำหรับพิมพ์)
- *
- * ไฟล์ทั้งสองแบบไม่วิ่งผ่านเซิร์ฟเวอร์นี้เลย — Railway จึงไม่ต้องแบก bandwidth
+ * ลิงก์เดิม ?format=pdf ก็ส่ง WebP เพื่อไม่ให้ bookmark เก่าพัง
+ * ไฟล์ไม่วิ่งผ่านเซิร์ฟเวอร์นี้เลย — Railway จึงไม่ต้องแบก bandwidth
  * ตอนผู้ปกครองกดโหลดพร้อมกันหลายร้อยคน และ R2 ไม่คิดค่า egress
  */
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (await isMaintenanceEnabled()) {
     return NextResponse.json(
       { error: "ระบบปิดปรับปรุงชั่วคราว กรุณากลับมาใหม่ภายหลัง" },
@@ -44,33 +41,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "ไม่พบเกียรติบัตรที่ต้องการ" }, { status: 404 });
   }
 
-  const url = new URL(request.url);
-  const format = url.searchParams.get("format") === "image" ? "image" : "pdf";
-
   // ชื่อไฟล์ตามสเปก: {FNAME}_{LNAME}_{รายการสอบ}_{รอบ}_{รางวัล}_{ปี}
   const slug =
     normalizeName(certificate.student.nameEn ?? certificate.student.nameTh)?.replace(/ /g, "_") ||
     "certificate";
   const { program, round, year } = certificate.exam;
 
-  if (format === "image") {
-    if (!certificate.previewKey) {
-      return NextResponse.json({ error: "ไม่พบไฟล์รูปภาพเกียรติบัตร" }, { status: 404 });
-    }
-    const filename = `${slug}_${program.code}_${round}_${certificate.award}_${year}.webp`;
-    const downloadUrl = await presignedDownloadUrl(
-      certificate.previewKey,
-      filename,
-      "image/webp",
-    );
-    return NextResponse.redirect(downloadUrl, 302);
+  if (!certificate.previewKey || certificate.filesDeletedAt) {
+    return NextResponse.json({ error: "ไม่พบไฟล์รูปภาพเกียรติบัตร" }, { status: 404 });
   }
-
-  const filename = `${slug}_${program.code}_${round}_${certificate.award}_${year}.pdf`;
+  const filename = `${slug}_${program.code}_${round}_${certificate.award}_${year}.webp`;
   const downloadUrl = await presignedDownloadUrl(
-    certificate.pdfKey,
+    certificate.previewKey,
     filename,
-    "application/octet-stream",
+    "image/webp",
   );
   return NextResponse.redirect(downloadUrl, 302);
 }

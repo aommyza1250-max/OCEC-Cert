@@ -21,7 +21,7 @@ import app.db
 import app.storage
 
 TABLES = (
-    "audit_events", "certificates", "staging_pages", "roster_entries", "roster_import_rows",
+    "asset_cleanup", "audit_events", "certificates", "staging_pages", "roster_entries", "roster_import_rows",
     "roster_imports", "jobs", "batches", "students", "exams", "exam_programs", "deleted_batches",
 )
 
@@ -34,6 +34,10 @@ class FakeS3:
 
     def put_object(self, Bucket, Key, Body, ContentType):  # noqa: N803 — ชื่อตาม boto3
         self.objects[Key] = bytes(Body)
+
+    def head_object(self, Bucket, Key):  # noqa: N803
+        data = self.objects[Key]
+        return {"ContentLength": len(data), "ContentType": "image/webp" if Key.endswith(".webp") else "application/pdf"}
 
     def download_fileobj(self, bucket, key, buffer):
         buffer.write(self.objects[key])

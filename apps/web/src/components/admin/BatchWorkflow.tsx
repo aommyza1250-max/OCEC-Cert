@@ -14,6 +14,7 @@ import { RosterPanel } from "./RosterPanel";
 import { RetentionPanel } from "./RetentionPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { StatusBadge } from "./StatusBadge";
+import { WebpMigrationPanel } from "./WebpMigrationPanel";
 
 /** ชื่อขั้นตอนที่แอดมินเข้าใจ — แยกให้ชัดว่ากำลังทำอะไรอยู่ ไม่ใช่ "กำลังประมวลผล" ลอย ๆ */
 const STAGE_LABEL: Record<string, string> = {
@@ -23,6 +24,7 @@ const STAGE_LABEL: Record<string, string> = {
   ROSTER_ACTIVATE: "กำลังเปลี่ยนรายชื่อและจับคู่ใหม่ทั้งรอบ",
   CLEANUP_SOURCES: "กำลังเคลียร์ไฟล์ต้นฉบับ",
   DELETE_BATCH: "กำลังลบรอบการนำเข้า",
+  MIGRATE_WEBP: "กำลังย้ายเกียรติบัตรเก่าเป็น WebP",
 };
 
 type DeleteInfo = {
@@ -271,6 +273,7 @@ export function BatchWorkflow({
                     )}
                     <RetentionPanel batchId={batch.id} expiresAt={retention.expiresAt} certificates={view.publish.certificateCount} deletedFiles={retention.deletedFiles} compact />
                     <SourcesPanel batchId={batch.id} clearedAt={batch.sourcesClearedAt} blockers={blockers} compact />
+                    <WebpMigrationPanel batchId={batch.id} processing={view.processing} />
                     <DangerZone batchId={batch.id} confirmPhrase={deleteInfo.confirmPhrase} published={published} counts={deleteInfo.counts} siblingBatches={deleteInfo.siblingBatches} compact />
                   </div>
                 </section>
@@ -332,6 +335,7 @@ function LegacyOverview({
         </section>
       </div>
       <OverviewLinks batchId={batchId} includeParticipants={false} />
+      <WebpMigrationPanel batchId={batchId} processing={processing} />
       <DangerZone
         batchId={batchId}
         confirmPhrase={deleteInfo.confirmPhrase}

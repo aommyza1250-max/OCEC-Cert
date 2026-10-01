@@ -39,6 +39,7 @@ from ..storage import (
     certificate_stem,
     delete_keys,
     download_to_file,
+    final_webp_key,
     job_output_prefixes,
     list_keys,
     preview_key,
@@ -85,7 +86,7 @@ def run_split(
         else:
             stats = _run_zip(batch, profile, job_id, payload, workdir, progress)
 
-    stats["match"] = run_match(batch_id, progress.update)
+    stats["match"] = run_match(batch_id, progress.update, revision=job_id)
     log.info("นำเข้า batch %s งาน %s เสร็จ: %s", batch_id, job_id, stats)
     return stats
 
@@ -393,6 +394,7 @@ def rollback_job_outputs(batch_id: str, job_id: str) -> int:
         ).fetchall()
 
     keys = [f["key"] for prefix in job_output_prefixes(batch_id, job_id) for f in list_keys(prefix)]
+    keys.extend(final_webp_key(batch_id, str(row["id"]), job_id) for row in removed)
     delete_keys(keys)
     if removed or keys:
         log.warning("ย้อนงาน %s: ลบหน้า %s หน้า ไฟล์ %s ชิ้น", job_id, len(removed), len(keys))

@@ -64,7 +64,7 @@ export async function loadParticipants(
     }),
     db.certificate.findMany({
       where: { batchId: batch.id, rosterEntryId: { not: null } },
-      select: { id: true, award: true, pdfKey: true, rosterEntryId: true },
+      select: { id: true, award: true, pdfKey: true, previewKey: true, rosterEntryId: true },
       orderBy: { pageNumber: "asc" },
     }),
     db.stagingPage.findMany({
@@ -91,7 +91,8 @@ export async function loadParticipants(
   const certsByEntry = new Map<string, CertificateRef[]>();
   for (const c of certificates) {
     const list = certsByEntry.get(c.rosterEntryId!) ?? [];
-    list.push({ id: c.id, award: c.award, pdfKey: c.pdfKey, kind: kinds.get(c.award) ?? "PRIMARY" });
+    list.push({ id: c.id, award: c.award, pdfKey: c.pdfKey, previewKey: c.previewKey,
+      kind: kinds.get(c.award) ?? "PRIMARY" });
     certsByEntry.set(c.rosterEntryId!, list);
   }
 

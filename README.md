@@ -25,7 +25,7 @@
      ถ้าวันหนึ่งมีข้อมูลโรงเรียน หน้าเว็บจะแสดงโรงเรียนแทนให้เอง)
    * แสดงรูปภาพตัวอย่าง (Preview Thumbnail) ของเกียรติบัตรบนหน้าเว็บ
 3. **การดาวน์โหลด (Download):**
-   * มีปุ่มกดดาวน์โหลดไฟล์ PDF คุณภาพสูง โดยโหลดตรงผ่าน CDN ไม่ดึง Bandwidth จากเซิร์ฟเวอร์หลัก
+   * ดาวน์โหลดรูป WebP คุณภาพสูงตรงผ่าน CDN ไม่ดึง Bandwidth จากเซิร์ฟเวอร์หลัก
 
 ### ฝั่งผู้ดูแลระบบ
 
@@ -47,7 +47,7 @@
 ## 3. เครื่องมือและเทคโนโลยีที่ใช้ (Tech Stack)
 
 * **Frontend:** **Next.js (React) + Tailwind CSS**
-  * หน้า UI ค้นหาข้อมูลแบบ Mobile-first รองรับการเปิดพรีวิวรูปภาพ และบันทึกรูปภาพแยกจาก PDF
+  * หน้า UI ค้นหาข้อมูลแบบ Mobile-first ใช้รูป WebP เดียวกันสำหรับพรีวิวและดาวน์โหลด
   * หน้า Dashboard ของ Admin สำหรับอัปโหลดไฟล์และแสดงตารางสรุปผลการ Match ข้อมูล
 * **Backend & API:** **Next.js Route Handlers และ Server Components**
   * จัดการระบบค้นหาชื่อผู้สอบ และสร้าง Direct/Presigned URL ไปยัง Object Storage
@@ -57,7 +57,7 @@
   * จัดการรายการสอบ ตัวคน รายชื่อร่าง รายชื่อที่ใช้ หน้าที่ตัด เกียรติบัตร คิว และ audit ตาม schema.prisma
   * ประกาศ GIN trigram index ใน schema.prisma บน `name_en_normalized` และ `name_th_normalized` เพื่อให้ค้นหาได้ทันทีในระดับมิลลิวินาที
 * **Storage:** **Cloudflare R2**
-  * ใช้เก็บไฟล์รูปภาพ Preview และไฟล์ PDF เกียรติบัตรทั้งหมด รองรับ S3-Compatible API
+  * ใช้เก็บรูป WebP ของเกียรติบัตร และไฟล์ PDF ต้นทางชั่วคราวระหว่างนำเข้า รองรับ S3-Compatible API
 
 ---
 
@@ -70,7 +70,7 @@
          │
          ├── ค้นหาชื่อ / โหลดเว็บ UI ────> [ Railway ] (Web + Worker + PostgreSQL)
          │
-         └── โหลดรูป / ดาวน์โหลด PDF ───> [ Cloudflare R2 ] (CDN Direct Download)
+         └── ดูและดาวน์โหลด WebP ───> [ Cloudflare R2 ] (CDN Direct Download)
 ```
 
 * **Application & Database Host:** **Railway (Hobby Plan - $5/mo)**
