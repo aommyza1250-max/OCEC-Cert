@@ -7,6 +7,9 @@
 
 ---
 
+> ปรับปรุง 1 ตุลาคม 2569: production จริงตั้งผ่าน Railway Settings (Dockerfile, On Failure 10 retries) ไม่ผูก infra/railway.*.json ซึ่งยังระบุ 3 retries ไฟล์นี้เป็นค่าทางประวัติ ไม่ใช่ snapshot ระบบจริง
+> [Railway เลิกใช้ Config as Code](https://docs.railway.com/config-as-code) สำหรับบริการใหม่แล้ว ไฟล์ที่ใช้อยู่เดิมมี cutoff 1 ธันวาคม 2569 ให้ใช้ Settings หรือเตรียม Infrastructure as Code ไม่ทำ apply โดยไม่ได้ review
+
 ## ภาพรวมสิ่งที่จะสร้าง
 
 โปรเจกต์เดียว มี 3 service คุยกันผ่าน private network (ไม่มีค่า egress ระหว่างกัน)
@@ -55,7 +58,7 @@
    > ⚠️ ชื่อนี้สำคัญ เพราะ web จะเรียกผ่าน `http://worker.railway.internal:8000`
    > ถ้าตั้งชื่ออื่นต้องแก้ `WORKER_BASE_URL` ให้ตรงกัน
 3. **Settings → Source (หรือ General) → Root Directory** ปล่อยเป็น `/` (ค่าเริ่มต้น)
-4. **Settings → Build → Config as code** ใส่ `infra/railway.worker.json`
+4. **Settings → Build** เลือก Dockerfile และกำหนด `/apps/worker/Dockerfile` โดยใช้ root ของ repo runtime เป็น stage สุดท้ายของ Dockerfile
 5. **Variables** ใส่:
    ```
    DATABASE_URL=${{Postgres.DATABASE_URL}}
@@ -65,6 +68,7 @@
    R2_BUCKET=ocec-cert
    R2_FORCE_PATH_STYLE=false
    WORKER_SHARED_SECRET=<ค่าที่สุ่มไว้>
+   PORT=8000
    ```
 6. **Settings → Networking** — **อย่ากด Generate Domain**
    > worker ไม่ควรเข้าถึงได้จากอินเทอร์เน็ต ให้เข้าถึงได้จาก private network เท่านั้น
@@ -79,7 +83,7 @@
 1. **New** → **GitHub Repo** → เลือก repo เดิม
 2. **Service Name** ตั้งเป็น `web`
 3. **Settings → Source (หรือ General) → Root Directory** ปล่อยเป็น `/` (ค่าเริ่มต้น)
-4. **Settings → Build → Config as code** ใส่ `infra/railway.web.json`
+4. **Settings → Build** เลือก Dockerfile และกำหนด `/apps/web/Dockerfile` โดยใช้ root ของ repo
 5. **Variables** ใส่:
    ```
    DATABASE_URL=${{Postgres.DATABASE_URL}}
@@ -94,6 +98,7 @@
    WORKER_BASE_URL=http://worker.railway.internal:8000
    WORKER_SHARED_SECRET=<ค่าเดียวกับที่ใส่ใน worker>
    NEXT_PUBLIC_SITE_URL=https://cert.example.com
+   PORT=3000
    ```
 5. **Settings → Networking → Generate Domain** (หรือ **Custom Domain** ถ้ามีโดเมนเอง)
 
@@ -131,7 +136,9 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://cert.example.co
 ```
 
 **ตรวจ worker ว่าต่อฐานข้อมูลได้:** ดูใน Railway แท็บ **Deployments** ของ service `worker`
-ถ้า healthcheck ขึ้นเขียว แปลว่า `/healthz` ตอบ 200 ซึ่งแปลว่าต่อฐานข้อมูลได้แล้ว
+`/healthz` ตอบ `{"ok":true}` ตรวจ HTTP process เท่านั้น **ไม่ได้คิวรีฐานข้อมูล** ต้องดู runner log และทดสอบงานสังเคราะห์ใน staging เพื่อยืนยันการเชื่อม DB/R2 เพิ่มเติม
+
+ไฟล์ railway.*.json ปัจจุบันยังไม่ได้กำหนด healthcheckPath หากต้องการ healthcheck ให้ตั้งใน Railway หรือประกาศใน config อย่างชัดเจน
 
 ---
 
@@ -142,20 +149,14 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://cert.example.co
 
 ---
 
-## ค่าใช้จ่ายที่คาดไว้
+## ตัวแปรเพิ่มเติมและค่าใช้จ่าย
 
-| รายการ | ต่อเดือน |
-|---|---|
-| Railway Hobby (web + worker + postgres) | ~$5 |
-| Cloudflare R2 (10 GB แรก ไม่มีค่า egress) | $0 |
-| ส่วนเกินตามการใช้จริง | $0–2 |
-| **รวม** | **~$5–7 (~175–250 บาท)** |
+- Web: `RETENTION_MONTHS=24`, `SEARCH_RATE_LIMIT_PER_MIN=300`, `LOGIN_RATE_LIMIT_PER_MIN=10` เป็นค่าปริยาย
+- Worker: `RETENTION_ENABLED=false`, `SOURCE_ZIP_KEEP_DAYS=0`, `PREVIEW_DPI=72`, `PREVIEW_QUALITY=75`, `POLL_INTERVAL_SEC=2.0`, `MAX_ATTEMPTS=3`
+- `PORT` ของ worker ต้องตรงกับ `WORKER_BASE_URL`; Dockerfile ใช้ `${PORT:-8000}`
+- `NEXT_PUBLIC_SITE_URL` อยู่ในไฟล์ตัวอย่างแต่ไม่มีการอ่านใน application ปัจจุบัน ไม่ใช้แทน CORS และไม่รับประกันการตั้ง runtime NEXT_PUBLIC จะเปลี่ยนค่าที่ build ไปแล้ว
+- กฎ parser เก็บใน `app/certificate_profiles/` ไม่ใช้ NAME_ANCHOR หรือ CERT_NO_PATTERN เป็น env แล้ว
+- Build web รัน Prisma generate; ตอน start รัน migrate deploy และ generate ก่อน server.js ห้ามใช้ migrate dev หรือ db push กับ production
+- อย่าเปิด retention ลบจริงจนตรวจ dry-run ผ่าน และเก็บไฟล์สำรองนอกระบบแล้ว
 
-### จุดที่จะทำให้บานปลาย
-
-- **worker ทำงานค้าง** — งานตัด PDF กิน CPU เต็มตลอดเวลาที่ทำ ถ้า job ค้างวนซ้ำจะกินชั่วโมงเครื่อง
-  ดูวิธีแก้ที่ [runbook.md](runbook.md)
-- **เก็บ ZIP ต้นฉบับไว้ทุกรอบ** — ZIP จริงรอบละหลายร้อย MB ถ้าเก็บทุกรอบจะเต็ม 10 GB เร็ว
-  พิจารณาลบ `sources/<batch id>/` หลังยืนยันว่านำเข้าถูกต้องแล้ว
-- **ปล่อยให้ preview เรนเดอร์ละเอียดเกิน** — ค่าปริยาย `PREVIEW_DPI=110` ให้ไฟล์ราว 250 KB ต่อใบ
-  ถ้าเพิ่มเป็น 200 ไฟล์จะใหญ่ขึ้นราว 3 เท่า
+ค่าใช้จ่ายไม่คงที่ $5–7 ต้องดูการใช้ RAM CPU volume และ egress จริง ดู [แบบจำลอง 10,000 คนต่อเดือน](capacity-and-cost.md) ซึ่งแยก minimum plan ออกจากค่าใช้งาน ไม่บวก Hobby $5 ซ้ำเมื่อใช้เกินเครดิต
