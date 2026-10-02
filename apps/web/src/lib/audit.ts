@@ -22,6 +22,8 @@ export type AuditAction =
   | "PARSE_REVIEW_ACCEPTED"
   | "PAGE_LINKED_MANUALLY"
   | "CERTIFICATE_DISCARDED"
+  | "CERTIFICATE_FILES_PURGE_REQUESTED"
+  | "ASSET_CLEANUP_RETRY_REQUESTED"
   | "CERTIFICATE_RESTORED"
   | "AWARD_RECLASSIFIED"
   | "DUPLICATE_RESOLVED"
@@ -84,6 +86,8 @@ export const AUDIT_LABELS: Record<string, string> = {
   PARSE_REVIEW_ACCEPTED: "ยอมรับหน้าที่รอบ/ปีไม่ตรง",
   PAGE_LINKED_MANUALLY: "จับคู่หน้าด้วยมือ",
   CERTIFICATE_DISCARDED: "ทิ้งหน้า/เกียรติบัตร",
+  CERTIFICATE_FILES_PURGE_REQUESTED: "สั่งลบไฟล์ของหน้าที่ทิ้งถาวร",
+  ASSET_CLEANUP_RETRY_REQUESTED: "สั่งลองลบไฟล์ R2 ที่ค้างอีกครั้ง",
   CERTIFICATE_RESTORED: "คืนหน้าที่ทิ้งไว้",
   AWARD_RECLASSIFIED: "เปลี่ยนรางวัล",
   DUPLICATE_RESOLVED: "ตัดสินใบซ้ำ",

@@ -157,6 +157,7 @@ export default async function ParticipantPage({
                 source: [upload, p.sourceFile].filter(Boolean).join(" › ") || "—",
                 note: p.matchNote,
                 hasCertificate: Boolean(p.certificate),
+                filesPurgeRequested: Boolean((p.review as Record<string, unknown> | null)?.filesPurgeRequestedAt),
               };
             },
           )}

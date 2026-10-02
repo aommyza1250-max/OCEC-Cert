@@ -75,6 +75,16 @@ export type MissingItem = EntryRef & {
   lastError: string | null;
 };
 
+export type DiscardedAsset = {
+  id: string;
+  version: number;
+  pageNumber: number;
+  certNo: string | null;
+  sourceFile: string | null;
+  hasPdf: boolean;
+  hasPreview: boolean;
+};
+
 export type UploadRecord = {
   jobId: string;
   kind: "zip" | "single";
@@ -123,7 +133,7 @@ export async function loadBatchView(batchId: string) {
   const catalog = awardCatalog(programCode, round);
   const guarded = { id: batch.id, programCode, round };
 
-  const [entryCounts, drafts, uploads, pendingJobs, runningJob, latestFailure, certificateCount, publishedCount] =
+  const [entryCounts, drafts, uploads, pendingJobs, runningJob, latestFailure, certificateCount, publishedCount, discardedAssetCount, discardedAssetRows, pendingAssetCleanup] =
     await Promise.all([
       prisma.rosterEntry.groupBy({ by: ["examMode", "source"], where: { batchId }, _count: true }),
       prisma.rosterImport.findMany({
@@ -143,6 +153,14 @@ export async function loadBatchView(batchId: string) {
       }),
       prisma.certificate.count({ where: { batchId } }),
       prisma.certificate.count({ where: { batchId, published: { not: null } } }),
+      prisma.stagingPage.count({ where: { batchId, matchStatus: "DISCARDED", OR: [{ pdfKey: { not: null } }, { previewKey: { not: null } }] } }),
+      prisma.stagingPage.findMany({
+        where: { batchId, matchStatus: "DISCARDED", OR: [{ pdfKey: { not: null } }, { previewKey: { not: null } }] },
+        select: { id: true, version: true, pageNumber: true, certNo: true, sourceFile: true, pdfKey: true, previewKey: true },
+        orderBy: { pageNumber: "asc" },
+        take: 100,
+      }),
+      prisma.assetCleanup.count({ where: { batchId, completedAt: null } }),
     ]);
 
   const count = (mode?: Mode, source?: "EXCEL" | "MANUAL") =>
@@ -197,6 +215,19 @@ export async function loadBatchView(batchId: string) {
     systemFailure: latestFailure ? (latestFailure.error ?? "").split("\n")[0] : null,
     issues: processing ? [] : await loadIssues(batchId, programCode),
     missing: processing ? [] : await loadMissing(batchId, decision.heldParticipants),
+    discardedAssets: {
+      total: discardedAssetCount,
+      pendingCleanup: pendingAssetCleanup,
+      pages: discardedAssetRows.map((page): DiscardedAsset => ({
+        id: page.id,
+        version: page.version,
+        pageNumber: page.pageNumber,
+        certNo: page.certNo,
+        sourceFile: page.sourceFile,
+        hasPdf: Boolean(page.pdfKey),
+        hasPreview: Boolean(page.previewKey),
+      })),
+    },
     publish: {
       summary,
       needsDecision: needsPolicyDecision(participants),
