@@ -45,7 +45,7 @@ export default async function ParticipantPage({
     prisma.stagingPage.findMany({
       // หน้าที่ติดตั้งแต่ตอนตัด (สัญชาติ/รอบปี) ยังไม่ผูกกับใคร แต่เลขบนหน้าบอกได้ว่าเป็นของคนนี้
       where: { batchId: id, OR: [{ rosterEntryId: entry.id }, { rosterEntryId: null, certNo: entry.candidateNo }] },
-      include: { certificate: { select: { id: true, award: true, pdfKey: true } }, sourceJob: { select: { payload: true } } },
+      include: { certificate: { select: { id: true, award: true, pdfKey: true, previewKey: true } }, sourceJob: { select: { payload: true } } },
       orderBy: { pageNumber: "asc" },
     }),
     prisma.job.count({ where: { batchId: id, type: { in: INTAKE_JOBS }, status: { in: ["QUEUED", "RUNNING"] } } }),

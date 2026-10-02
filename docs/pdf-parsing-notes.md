@@ -34,7 +34,7 @@ Cert No: 900101                                         ← เลขผู้�
 2. **ชื่อหาได้ 2 ทาง** ซึ่งได้ผลตรงกันทั้ง 242 หน้า
    - บรรทัด **ก่อน** บรรทัดที่ขึ้นต้นด้วย `from `
    - บรรทัด **ถัดจาก** `This is awarded to`
-3. **ชื่อเป็นอังกฤษพิมพ์ใหญ่ล้วนเสมอ** — ใช้ `[A-Z][A-Z .'\-]+` ตรวจว่าหยิบถูกบรรทัด
+3. **ชื่อในตัวอย่างชุดนี้เป็นอังกฤษพิมพ์ใหญ่** — ใช้ `[A-Z][A-Z .'\-]+` ตรวจว่าหยิบถูกบรรทัด
    ถ้าไม่เข้ารูปแบบให้คืน `None` ดีกว่าคืนค่าผิด เพราะชื่อผิด = จับคู่ผิดคน
 4. **`Cert No` คือเลขเดียวกับ `CANDIDATE NO` ใน Excel** (ตรวจแล้ว 242/242)
    จึงใช้เป็นคีย์จับคู่หลักได้ — ดู `docs/data-intake-spec.md` ข้อ 2
@@ -43,21 +43,16 @@ Cert No: 900101                                         ← เลขผู้�
 
 ---
 
-## ค่าตั้งต้นที่ใช้อยู่ (ปรับผ่าน environment ได้ทุกตัว)
+## การตั้งกฎอ่านในระบบปัจจุบัน
 
-| ตัวแปร | ค่าตั้งต้น | ใช้หาอะไร |
-|---|---|---|
-| `NAME_ANCHOR` | `This is awarded to` | บรรทัดก่อนชื่อ |
-| `COUNTRY_LINE_PREFIX` | `from ` | บรรทัดสัญชาติ (ชื่ออยู่บรรทัดก่อนหน้า) |
-| `NATIONALITY_PATTERN` | `from\s+THAILAND` | ใช้กรองคนไทยในรอบ Final |
-| `LEVEL_LINE_PREFIX` | `for outstanding achievement in` | ระดับชั้น |
-| `CERT_NO_PATTERN` | `(?:Cert\s+)?No:\s*(\d+)` | เลขผู้เข้าสอบ |
-| `AWARD_LINE_PATTERN` | `^(.+?)\s+Award$` | รางวัลบนหน้า (ใช้ตรวจทานกับโฟลเดอร์) |
-| `ROUND_YEAR_PATTERN` | `(Final\|Heat)\s+Round\s+(\d{4})` | รอบและปี ค.ศ. |
-| `NAME_VALIDATION_PATTERN` | `[A-Z][A-Z .'\-]+` | ตรวจว่าหยิบถูกบรรทัด |
-| `NAME_PATTERN` | (ว่าง) | ใส่ regex ที่มี capture group เดียวเพื่อข้ามตรรกะ anchor ทั้งหมด |
+กฎ parser อยู่ในโปรไฟล์ Python รายรายการและรอบที่ `apps/worker/app/certificate_profiles/` ไม่มี env กลาง NAME_ANCHOR, COUNTRY_LINE_PREFIX, NATIONALITY_PATTERN, LEVEL_LINE_PREFIX, CERT_NO_PATTERN, AWARD_LINE_PATTERN, ROUND_YEAR_PATTERN, NAME_VALIDATION_PATTERN หรือ NAME_PATTERN ที่ใช้เปลี่ยน parser แล้ว
 
----
+ใช้เมธอด extract_name, extract_candidate_no, extract_level, extract_from, extract_round_year, extract_award_text และ extract_extra โดย override เฉพาะส่วนต่างของรายการ ดู [certificate-profiles.md](certificate-profiles.md)
+
+ตัวอย่าง HKIMO ด้านบนเป็นผลสำรวจเฉพาะชุดเดิม ไม่ใช่โครงทุกใบ BBB ไม่มี anchor แบบเดียวกัน Heat ใช้ from เป็นโรงเรียน Final เป็นประเทศ ขาดหลักฐานประเทศต้องค้าง NATIONALITY_UNVERIFIED ไม่เดาเป็นไทย
+
+รูป WebP สำหรับดูและดาวน์โหลดใช้ `CERT_IMAGE_DPI=150` และ `CERT_IMAGE_QUALITY=85`
+ส่วน `PREVIEW_DPI=72` กับ `PREVIEW_QUALITY=75` ใช้เฉพาะสคริปต์สร้าง preview รุ่นเก่าของหน้าที่ยังจับคู่ไม่ได้
 
 ## วิธีสำรวจไฟล์ของรายการสอบใหม่
 

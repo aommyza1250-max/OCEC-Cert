@@ -67,7 +67,7 @@ def run_expire(
             conn.execute(
                 """
                 UPDATE certificates
-                SET files_deleted_at = NOW(), pdf_key = '', preview_key = NULL
+                SET files_deleted_at = NOW(), pdf_key = NULL, preview_key = NULL
                 WHERE id = ANY(%s)
                 """,
                 (ids,),

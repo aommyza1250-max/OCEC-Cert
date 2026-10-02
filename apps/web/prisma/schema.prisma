@@ -119,6 +119,8 @@ enum JobType {
   DELETE_BATCH
   /// ลบไฟล์ต้นฉบับ (ZIP และ PDF ที่อัปทีละใบ) หลังจับคู่ครบและเผยแพร่แล้ว
   CLEANUP_SOURCES
+  /// ย้าย PDF รายใบเก่าเป็น WebP หลัง deploy (งานชั่วคราว)
+  MIGRATE_WEBP
   /// กวาดเกียรติบัตรที่ครบอายุการเก็บแล้ว — เป็นงานของทั้งระบบ ไม่ผูกกับรอบนำเข้าใด
   EXPIRE
 }
@@ -241,6 +243,7 @@ model Batch {
   rosterImports RosterImport[] @relation("BatchRosterImports")
   rosterEntries RosterEntry[]
   auditEvents   AuditEvent[]
+  assetCleanups AssetCleanup[]
 
   @@index([examId])
   @@index([status])
@@ -339,7 +342,7 @@ model RosterEntry {
   /// true = แอดมินเลือกตัวคนเอง (ชื่อพ้อง หรือแยกเป็นคนใหม่)
   studentLinkedManually Boolean  @default(false) @map("student_linked_manually")
 
-  /// ยืนยันให้ใช้เฉพาะรางวัลเสริมที่ได้รับจริง — snapshot รวม id/รางวัล/pdfKey ของใบชุดนั้น
+  /// ยืนยันให้ใช้เฉพาะรางวัลเสริมที่ได้รับจริง — snapshot รวม id/รางวัล/คีย์รูปของใบชุดนั้น
   /// ถ้าเพิ่มหรือเปลี่ยนไฟล์ การยืนยันเดิมจะหมดผลโดยไม่ต้องให้ worker แก้ค่านี้
   supplementalOnlySnapshot   String?   @map("supplemental_only_snapshot") @db.Text
   supplementalOnlyApprovedAt DateTime? @map("supplemental_only_approved_at")
@@ -525,7 +528,7 @@ model Certificate {
   stagingPageId String      @unique @map("staging_page_id") @db.Uuid
   stagingPage   StagingPage @relation(fields: [stagingPageId], references: [id], onDelete: Cascade)
 
-  pdfKey     String  @map("pdf_key")
+  pdfKey     String? @map("pdf_key")
   previewKey String? @map("preview_key")
   pageNumber Int     @map("page_number")
 
@@ -602,4 +605,19 @@ model Job {
   @@index([status, createdAt])
   @@index([batchId])
   @@map("jobs")
+}
+
+/// ไฟล์เก่าที่รอลบบน R2 หลังสลับ certificate ไปใช้ WebP ใหม่แล้ว
+/// แยกจาก jobs เพื่อให้การลบที่พังกลางทางกลับมาทำต่อได้
+model AssetCleanup {
+  id            String    @id @default(uuid()) @db.Uuid
+  batchId       String    @map("batch_id") @db.Uuid
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  oldPdfKey     String?   @map("old_pdf_key")
+  oldPreviewKey String?   @map("old_preview_key")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  @@index([batchId, completedAt])
+  @@map("asset_cleanup")
 }

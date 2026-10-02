@@ -26,12 +26,6 @@ def _client():
     )
 
 
-def download_bytes(key: str) -> bytes:
-    buffer = io.BytesIO()
-    _client().download_fileobj(settings().r2_bucket, key, buffer)
-    return buffer.getvalue()
-
-
 def download_to_file(key: str, path: str) -> None:
     """ดาวน์โหลดลงดิสก์แทนการอมไว้ในหน่วยความจำ
 
@@ -41,10 +35,21 @@ def download_to_file(key: str, path: str) -> None:
     _client().download_file(settings().r2_bucket, key, path)
 
 
+def download_bytes(key: str) -> bytes:
+    buffer = io.BytesIO()
+    _client().download_fileobj(settings().r2_bucket, key, buffer)
+    return buffer.getvalue()
+
+
 def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     _client().put_object(
         Bucket=settings().r2_bucket, Key=key, Body=data, ContentType=content_type
     )
+
+
+def head_object(key: str) -> dict:
+    """ตรวจ metadata ของไฟล์ที่อัปแล้วก่อนสลับคีย์ในฐานข้อมูล"""
+    return _client().head_object(Bucket=settings().r2_bucket, Key=key)
 
 
 def list_keys(prefix: str) -> list[dict]:
@@ -105,6 +110,33 @@ def preview_key(batch_id: str, stem: str, job_id: str | None = None) -> str:
     # prefix previews/ ถูกตั้งให้อ่านสาธารณะได้ เพื่อให้เสิร์ฟผ่าน CDN ตรง ๆ
     folder = f"{batch_id}/{job_id}" if job_id else batch_id
     return f"previews/{folder}/{stem}.webp"
+
+
+def current_webp_pattern(batch_id: str, dpi: int, quality: int) -> str:
+    """จับรูปที่ทำด้วยค่าปัจจุบัน ทั้งจากงานนำเข้าและงานย้ายไฟล์เก่า"""
+    return f"previews/{batch_id}/%/d{dpi}/q{quality}/%.webp"
+
+
+def is_current_webp_key(batch_id: str, key: str | None, dpi: int, quality: int) -> bool:
+    return bool(
+        key and key.startswith(f"previews/{batch_id}/")
+        and f"/d{dpi}/q{quality}/" in key and key.endswith(".webp")
+    )
+
+
+def candidate_webp_key(
+    batch_id: str, stem: str, job_id: str, dpi: int, quality: int
+) -> str:
+    """รูปเต็มที่สร้างระหว่างตัดหน้า อยู่ใต้ prefix ของงานเพื่อให้ rollback เก็บได้ครบ"""
+    return f"previews/{batch_id}/{job_id}/final/d{dpi}/q{quality}/{stem}.webp"
+
+
+def final_webp_key(
+    batch_id: str, page_id: str, revision: str, quality: int = 85, dpi: int = 150
+) -> str:
+    """รูปคุณภาพสูงใช้ key ใหม่เสมอ เพื่อไม่ทับ preview ที่ยังถูกอ้างอยู่"""
+    # final/ อยู่แยกจาก prefix ของ SPLIT job: rollback ห้ามลบรูปที่ใบเก่าใช้อยู่
+    return f"previews/{batch_id}/final/d{dpi}/q{quality}/{revision}/{page_id}.webp"
 
 
 def job_output_prefixes(batch_id: str, job_id: str) -> list[str]:

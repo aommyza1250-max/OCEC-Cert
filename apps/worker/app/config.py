@@ -32,10 +32,6 @@ class Settings:
     # (app/certificate_profiles/) ตัวแปร environment ชุดเดิมอย่าง NAME_ANCHOR หรือ CERT_NO_PATTERN
     # ถูกถอดออก เพราะค่าเดียวใช้กับทุกรายการ แก้เพื่อรายการหนึ่งจะไปเปลี่ยนผลของรายการอื่นเงียบ ๆ
 
-    # 72 DPI = 841x595 px เท่าขนาดกระดาษ A4 นอนพอดี ไฟล์ราว 85 KB/ใบ
-    # มือถือจอกว้าง 390px แสดงที่ 2 เท่า กดดูเต็มจอยังอ่านชื่อและเลขได้ครบ
-    # ใหญ่กว่านี้ไม่ได้ช่วยให้อ่านง่ายขึ้น แต่ทำให้หน้าผลค้นหาหนักขึ้นเป็นเท่าตัว
-    # (110 DPI ของเดิมได้ไฟล์ 242 KB/ใบ คนที่มี 4 ใบต้องโหลดเกือบ 1 MB)
     # เปิดการลบเกียรติบัตรที่ครบอายุการเก็บโดยอัตโนมัติ
     # ปิดไว้เป็นค่าตั้งต้นโดยตั้งใจ — งานนี้ลบไฟล์จริงและย้อนกลับไม่ได้
     # เปิดเมื่อลอง dry-run แล้วเห็นว่ารายการที่จะลบถูกต้องเท่านั้น
@@ -45,8 +41,12 @@ class Settings:
     # ต้นฉบับยังอยู่ในเครื่องแอดมินที่อัปขึ้นมา R2 ไม่ใช่สำเนาเดียว
     source_keep_days: int = 0
 
+    # ใช้เฉพาะสคริปต์ rerender_previews.py กับหน้าที่ยังจับคู่ไม่ได้ของระบบเดิม
     preview_dpi: int = 72
     preview_quality: int = 75
+    # ไฟล์ WebP เดียวที่ผู้ปกครองดูและดาวน์โหลด หลังจับคู่สำเร็จ
+    cert_image_dpi: int = 150
+    cert_image_quality: int = 85
 
     poll_interval_sec: float = 2.0
     max_attempts: int = 3
@@ -68,6 +68,8 @@ def settings() -> Settings:
         source_keep_days=int(os.environ.get("SOURCE_ZIP_KEEP_DAYS", "0")),
         preview_dpi=int(os.environ.get("PREVIEW_DPI", "72")),
         preview_quality=int(os.environ.get("PREVIEW_QUALITY", "75")),
+        cert_image_dpi=int(os.environ.get("CERT_IMAGE_DPI", "150")),
+        cert_image_quality=int(os.environ.get("CERT_IMAGE_QUALITY", "85")),
         poll_interval_sec=float(os.environ.get("POLL_INTERVAL_SEC", "2.0")),
         max_attempts=int(os.environ.get("MAX_ATTEMPTS", "3")),
     )

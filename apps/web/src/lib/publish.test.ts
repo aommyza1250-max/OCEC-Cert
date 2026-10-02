@@ -24,7 +24,8 @@ const person = (
     id: `${entryId}-${i}`,
     award,
     kind: SUPPLEMENTAL.has(award) ? "SUPPLEMENTAL" : "PRIMARY",
-    pdfKey: `synthetic/${entryId}-${i}.pdf`,
+    pdfKey: null,
+    previewKey: `synthetic/${entryId}-${i}.webp`,
   })),
 });
 
@@ -34,7 +35,7 @@ describe("supplementalOnlySnapshot", () => {
     const original = supplementalOnlySnapshot(certificates);
     expect(original).toBe(supplementalOnlySnapshot([...certificates].reverse()));
     expect(original).not.toBe(supplementalOnlySnapshot([
-      { ...certificates[0], pdfKey: "synthetic/replaced.pdf" }, certificates[1],
+      { ...certificates[0], previewKey: "synthetic/replaced.webp" }, certificates[1],
     ]));
     expect(original).not.toBe(supplementalOnlySnapshot([certificates[0]]));
     expect(supplementalOnlySnapshot([...certificates, person("a", ["GOLD"]).certificates[0]])).toBeNull();
@@ -42,6 +43,15 @@ describe("supplementalOnlySnapshot", () => {
 });
 
 describe("decidePublish", () => {
+  it("กันทั้งคนไว้เมื่อใบที่จับคู่แล้วยังรอแปลง WebP", () => {
+    const pending = person("a", ["GOLD", "SILVER"]);
+    pending.certificates[1].pdfKey = "certificates/a/pending.pdf";
+    const decision = decidePublish([pending], "ALL");
+    expect(decision.publish).toEqual([]);
+    expect(decision.held).toEqual(["a-0", "a-1"]);
+    expect(decision.heldParticipants[0].reason).toBe("IMAGE_PENDING");
+  });
+
   it("คนที่มีใบรางวัลหลักเผยแพร่เสมอ ไม่ว่าตั้งค่ารอบไว้ยังไง", () => {
     const people = [person("a", ["GOLD"]), person("b", ["1ST_PRIZE"]), person("c", ["PARTICIPATION"])];
     for (const policy of ["ALL", "MEDAL_ONLY", "UNDECIDED"] as const) {

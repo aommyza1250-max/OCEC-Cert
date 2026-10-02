@@ -30,6 +30,7 @@ from typing import Any, Callable
 from ..certificate_profiles import AwardCatalog, FromField, get_profile
 from ..db import connection, new_id
 from ..normalize import name_sort_key, normalize_name, normalize_school
+from .finalize_webp import finalize_matched_assets
 
 log = logging.getLogger(__name__)
 
@@ -352,7 +353,13 @@ def _narrow_by_school(candidates: list[StudentRow], school_norm: str | None) -> 
 # ---------------------------------------------------------------- งานของ worker
 
 
-def run_match(batch_id: str, on_progress: ProgressFn, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_match(
+    batch_id: str,
+    on_progress: ProgressFn,
+    payload: dict[str, Any] | None = None,
+    *,
+    revision: str | None = None,
+) -> dict[str, Any]:
     """จับคู่ใหม่ทั้งรอบนำเข้า แล้วเขียนผลในทรานแซกชันเดียว"""
     with connection() as conn:
         with conn.transaction():
@@ -379,6 +386,14 @@ def run_match(batch_id: str, on_progress: ProgressFn, payload: dict[str, Any] | 
             stats = _apply(conn, batch, profile.catalog, entries, pages, current, decisions)
 
     on_progress({"stage": "match", "done": len(pages), "total": len(pages)})
+    # จับคู่และบันทึก Certificate ก่อน แล้วจึงสร้างรูปคุณภาพปัจจุบัน
+    # ใบที่แปลงไม่สำเร็จยังมีไฟล์เดิมและไม่ผ่านกฎเผยแพร่
+    try:
+        stats["assetFinalization"] = finalize_matched_assets(batch_id, revision or new_id(), on_progress)
+    except Exception as exc:
+        # ผลจับคู่ถูก commit แล้ว: ห้ามให้ SPLIT rollback หน้าที่จับคู่สำเร็จเพราะ R2 สะดุด
+        log.exception("แปลงรูปหลังจับคู่ batch %s ไม่สำเร็จ", batch_id)
+        stats["assetFinalization"] = {"failed": True, "reason": str(exc)[:200]}
     log.info("จับคู่ batch %s เสร็จ: %s", batch_id, stats)
     return stats
 

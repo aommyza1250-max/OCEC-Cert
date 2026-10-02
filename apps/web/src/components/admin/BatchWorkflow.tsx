@@ -14,6 +14,7 @@ import { RosterPanel } from "./RosterPanel";
 import { RetentionPanel } from "./RetentionPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { StatusBadge } from "./StatusBadge";
+import { WebpMigrationPanel } from "./WebpMigrationPanel";
 
 /** ชื่อขั้นตอนที่แอดมินเข้าใจ — แยกให้ชัดว่ากำลังทำอะไรอยู่ ไม่ใช่ "กำลังประมวลผล" ลอย ๆ */
 const STAGE_LABEL: Record<string, string> = {
@@ -23,6 +24,7 @@ const STAGE_LABEL: Record<string, string> = {
   ROSTER_ACTIVATE: "กำลังเปลี่ยนรายชื่อและจับคู่ใหม่ทั้งรอบ",
   CLEANUP_SOURCES: "กำลังเคลียร์ไฟล์ต้นฉบับ",
   DELETE_BATCH: "กำลังลบรอบการนำเข้า",
+  MIGRATE_WEBP: "กำลังย้ายเกียรติบัตรเก่าเป็น WebP",
 };
 
 type DeleteInfo = {
@@ -271,6 +273,7 @@ export function BatchWorkflow({
                     )}
                     <RetentionPanel batchId={batch.id} expiresAt={retention.expiresAt} certificates={view.publish.certificateCount} deletedFiles={retention.deletedFiles} compact />
                     <SourcesPanel batchId={batch.id} clearedAt={batch.sourcesClearedAt} blockers={blockers} compact />
+                    <WebpMigrationPanel batchId={batch.id} processing={view.processing} />
                     <DangerZone batchId={batch.id} confirmPhrase={deleteInfo.confirmPhrase} published={published} counts={deleteInfo.counts} siblingBatches={deleteInfo.siblingBatches} compact />
                   </div>
                 </section>
@@ -332,6 +335,7 @@ function LegacyOverview({
         </section>
       </div>
       <OverviewLinks batchId={batchId} includeParticipants={false} />
+      <WebpMigrationPanel batchId={batchId} processing={processing} />
       <DangerZone
         batchId={batchId}
         confirmPhrase={deleteInfo.confirmPhrase}
@@ -454,7 +458,8 @@ function WaitNotice() {
 
 /** บอกว่ากำลังอยู่ขั้นไหนและไปถึงไหนแล้ว — รอนานแล้วไม่รู้ว่าค้างหรือยังเดินอยู่ คือสิ่งที่แย่ที่สุด */
 function ProgressBanner({ job }: { job: NonNullable<BatchView>["activeJob"] }) {
-  const stage = job ? (STAGE_LABEL[job.type] ?? "กำลังประมวลผล") : "กำลังประมวลผล";
+  const cleaningOldFiles = job?.type === "MIGRATE_WEBP" && job?.progress?.stage === "cleanup";
+  const stage = cleaningOldFiles ? "กำลังลบไฟล์เก่าที่ตรวจแล้ว" : job ? STAGE_LABEL[job.type] ?? "กำลังประมวลผล" : "กำลังประมวลผล";
   const waiting = job?.status === "QUEUED";
   const done = numberOf(job?.progress?.done);
   const total = numberOf(job?.progress?.total);
@@ -464,7 +469,7 @@ function ProgressBanner({ job }: { job: NonNullable<BatchView>["activeJob"] }) {
     <div className="rounded-2xl border border-brand-line bg-brand-soft px-5 py-4">
       <p className="text-sm font-medium text-brand">
         {waiting ? `รอคิว: ${stage}` : stage}
-        {done !== null && total ? ` ${done} / ${total} หน้า` : "..."}
+        {done !== null && total ? ` ${done} / ${total} ${cleaningOldFiles ? "รายการ" : "หน้า"}` : "..."}
       </p>
       {percent !== null && (
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-card">

@@ -1,3 +1,5 @@
+> **บันทึกประวัติการออกแบบ** เอกสารนี้สะท้อนผลสำรวจหรือแผน ณ วันที่จัดทำ ไม่ใช่คู่มือระบบปัจจุบัน ให้ใช้ admin-guide.md, data-intake-spec.md และ certificate-profiles.md กับโค้ดปัจจุบัน โดย JPG/PNG ยังไม่ใช่ไฟล์นำเข้าที่รองรับ และ HKICO Gold รองรับผ่าน manifest แล้ว
+
 # Implementation Plan: Admin Intake Flow (Online and Onsite)
 
 Spec: `docs/superpowers/specs/2026-09-23-admin-intake-online-onsite-design.md`

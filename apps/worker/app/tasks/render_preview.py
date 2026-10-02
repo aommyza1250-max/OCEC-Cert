@@ -18,3 +18,13 @@ def render_webp(page: Any, dpi: int = 110, quality: int = 80) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format="WEBP", quality=quality, method=4)
     return buffer.getvalue()
+
+
+def validate_webp(data: bytes) -> tuple[int, int]:
+    """ตรวจรูปก่อนอ้างในฐานข้อมูลหรือลบ PDF ที่ใช้สร้าง"""
+    with Image.open(io.BytesIO(data)) as image:
+        if image.format != "WEBP" or image.width < 1 or image.height < 1:
+            raise ValueError("รูปที่แปลงมาไม่ใช่ WebP ที่เปิดได้")
+        size = image.size
+        image.verify()
+    return size
