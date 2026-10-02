@@ -7,6 +7,7 @@ import type { BatchView } from "@/lib/batch-view";
 import { intakeLocationUrl, type IntakeStep, type ReviewPanel } from "@/lib/intake-location";
 import { CertificatesPanel } from "./CertificatesPanel";
 import { DangerZone } from "./DangerZone";
+import { DiscardedFilesPanel } from "./DiscardedFilesPanel";
 import { IssueList } from "./IssueList";
 import { MissingList } from "./MissingList";
 import { PublishPanel } from "./PublishPanel";
@@ -283,6 +284,7 @@ export function BatchWorkflow({
                 </section>
               </aside>
             </div>
+            <DiscardedFilesPanel batchId={batch.id} {...view.discardedAssets} locked={editLocked} />
             <div className="mt-5 border-t border-hairline pt-5">
               <StepNavigation backLabel="← กลับไปขั้นอัปโหลด ZIP" onBack={() => selectLocation(2)} />
             </div>

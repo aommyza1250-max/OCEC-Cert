@@ -22,6 +22,7 @@ export type ParticipantPage = {
   source: string;
   note: string | null;
   hasCertificate: boolean;
+  filesPurgeRequested: boolean;
 };
 
 /**
@@ -164,7 +165,9 @@ function PageCard({
                 </Secondary>
               </span>
             )}
-            {page.status === "DISCARDED" ? (
+            {page.status === "DISCARDED" && page.filesPurgeRequested ? (
+              <span className="text-ink-soft">สั่งลบไฟล์ถาวรแล้ว · คืนหน้านี้ไม่ได้</span>
+            ) : page.status === "DISCARDED" ? (
               <Secondary disabled={disabled} onClick={() => resolve({ action: "RESTORE" })}>
                 คืนหน้านี้
               </Secondary>

@@ -22,6 +22,7 @@ const schema = z.discriminatedUnion("action", [
     candidateNo: z.string().trim().min(1).optional(),
   }),
   z.object({ action: z.literal("DISCARD"), version }),
+  z.object({ action: z.literal("PURGE_FILES"), version }),
   z.object({ action: z.literal("RESTORE"), version }),
   z.object({ action: z.literal("RECLASSIFY"), version, awardCode: z.string(), confirm: z.literal(true) }),
   z.object({ action: z.literal("USE_THIS"), version }),
@@ -43,7 +44,7 @@ export const POST = adminHandler<{ id: string }>(async (request, { params, sessi
   const found = await prisma.stagingPage.findUnique({ where: { id: params.id }, select: { batchId: true } });
   if (!found) throw new HttpError(404, "ไม่พบหน้านี้");
 
-  await withBatchMutation(found.batchId, async (tx, batch) => {
+  const jobId = await withBatchMutation(found.batchId, async (tx, batch) => {
     const page = await tx.stagingPage.findFirst({ where: { id: params.id, batchId: batch.id } });
     if (!page) throw new HttpError(404, "ไม่พบหน้านี้");
     if (page.version !== input.version) throw new HttpError(409, STALE_MESSAGE, { code: "STALE" });
@@ -56,11 +57,12 @@ export const POST = adminHandler<{ id: string }>(async (request, { params, sessi
       after: action.after,
       sessionId: session.sessionId,
     });
-    await enqueueRematch(tx, batch.id);
+    const job = await enqueueRematch(tx, batch.id);
+    return job.id;
   });
 
   await afterCommit();
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, jobId });
 });
 
 type Outcome = { audit: AuditAction; before?: Record<string, unknown>; after: Prisma.InputJsonValue };
@@ -160,9 +162,46 @@ const ACTIONS: { [K in z.infer<typeof schema>["action"]]: Action<Extract<z.infer
     return { audit: "CERTIFICATE_DISCARDED", after: { status: "DISCARDED" } };
   },
 
+  /** ลบได้เฉพาะไฟล์ของหน้าที่ทิ้งแล้วและไม่มีใครใช้ คิวลบคงอยู่แม้ R2 ล้มชั่วคราว */
+  async PURGE_FILES(tx, batch, page) {
+    requireStatus(page, ["DISCARDED"], "ต้องทิ้งหน้านี้ก่อน จึงจะลบไฟล์ถาวรได้");
+    const keys = [page.pdfKey, page.previewKey].filter((key): key is string => Boolean(key));
+    if (keys.length === 0) throw new HttpError(409, "หน้านี้ไม่มีไฟล์เหลือให้ลบแล้ว");
+    if ((page.pdfKey && !page.pdfKey.startsWith(`certificates/${batch.id}/`)) ||
+        (page.previewKey && !page.previewKey.startsWith(`previews/${batch.id}/`))) {
+      throw new HttpError(409, "ที่อยู่ไฟล์ของหน้านี้ไม่ตรงกับรอบนำเข้า กรุณาให้ผู้ดูแลตรวจสอบ");
+    }
+    const [certificate, otherPage] = await Promise.all([
+      tx.certificate.findFirst({
+        where: { OR: [{ stagingPageId: page.id }, { pdfKey: { in: keys } }, { previewKey: { in: keys } }] },
+        select: { id: true },
+      }),
+      tx.stagingPage.findFirst({
+        where: { id: { not: page.id }, OR: [{ pdfKey: { in: keys } }, { previewKey: { in: keys } }] },
+        select: { id: true },
+      }),
+    ]);
+    if (certificate || otherPage) throw new HttpError(409, "ไฟล์นี้ยังถูกเกียรติบัตรหรือหน้าอื่นใช้อยู่ จึงลบไม่ได้");
+
+    const cleanup = await tx.assetCleanup.create({
+      data: { batchId: batch.id, oldPdfKey: page.pdfKey, oldPreviewKey: page.previewKey },
+    });
+    await save(tx, page, {
+      pdfKey: null,
+      previewKey: null,
+      review: { ...reviewOf(page), filesPurgeRequestedAt: new Date().toISOString(), filesCleanupId: cleanup.id } as Prisma.InputJsonValue,
+    });
+    return {
+      audit: "CERTIFICATE_FILES_PURGE_REQUESTED",
+      before: { pdfKey: page.pdfKey, previewKey: page.previewKey },
+      after: { status: "DISCARDED", cleanupId: cleanup.id },
+    };
+  },
+
   /** คืนหน้าที่ทิ้งไว้ — หน้าที่เคยติดเรื่องสัญชาติหรือรอบ/ปีกลับไปรอตรวจเหมือนเดิม ไม่ข้ามด่าน */
   async RESTORE(tx, _batch, page) {
     requireStatus(page, ["DISCARDED"], "หน้านี้ไม่ได้ถูกทิ้งไว้");
+    if (reviewOf(page).filesPurgeRequestedAt) throw new HttpError(409, "หน้านี้สั่งลบไฟล์ถาวรแล้ว คืนหน้าไม่ได้");
     const from = reviewOf(page).discardedFrom as MatchStatus | undefined;
     const status: MatchStatus = from === "NATIONALITY_UNVERIFIED" || from === "PARSE_REVIEW" ? from : "UNMATCHED";
     const { discardedFrom: _discarded, ...rest } = reviewOf(page);
