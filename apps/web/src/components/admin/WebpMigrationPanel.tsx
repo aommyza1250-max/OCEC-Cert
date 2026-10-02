@@ -69,8 +69,8 @@ export function WebpMigrationPanel({ batchId, processing }: { batchId: string; p
 
   return (
     <section className="rounded-2xl border border-hairline bg-card p-4 text-sm">
-      <h3 className="font-semibold">ย้ายเกียรติบัตรเก่าเป็น WebP</h3>
-      <p className="mt-1 text-ink-soft">ตรวจจำนวนก่อน แล้วสั่งแปลงทีละใบ ระบบจะลบ PDF รายใบหลังตรวจรูปและสลับไฟล์สำเร็จ</p>
+      <h3 className="font-semibold">ย้ายรูปเก่าเป็น WebP คุณภาพปัจจุบัน</h3>
+      <p className="mt-1 text-ink-soft">ตรวจจำนวนก่อน ระบบจะแปลง PDF ที่ยังเหลือ หรือบีบอัด WebP รุ่นเก่าซ้ำ แล้วสลับไฟล์ก่อนลบรูปเดิม</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={running || processing} onClick={() => queue(true)} className="min-h-10 rounded-xl border border-brand-line px-3 font-medium text-brand disabled:opacity-50">ตรวจจำนวน</button>
         <button type="button" disabled={running || processing} onClick={() => queue(false)} className="min-h-10 rounded-xl bg-brand px-3 font-medium text-white disabled:opacity-50">เริ่มย้าย / ลองใหม่</button>

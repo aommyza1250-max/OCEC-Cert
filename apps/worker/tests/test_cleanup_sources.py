@@ -50,7 +50,7 @@ def _published_supplemental() -> tuple[str, str, str]:
             "VALUES (%s, %s, %s, %s, %s, %s, "
             "NULL, %s, 1, 'PERFECT_SCORE', NOW())",
             (cert_id, student_id, exam_id, batch_id, page_id, entry_id,
-             f"previews/{batch_id}/final/seed/synthetic.webp"),
+             f"previews/{batch_id}/final/q85/seed/synthetic.webp"),
         )
     return batch_id, entry_id, cert_id
 
@@ -101,7 +101,7 @@ def test_การยืนยันเก่าหรือใบที่ย�
     with connection() as conn:
         conn.execute(
             "UPDATE certificates SET preview_key = %s, published_at = NULL "
-            "WHERE id = %s", (f"previews/{batch_id}/final/seed/synthetic.webp", cert_id)
+            "WHERE id = %s", (f"previews/{batch_id}/final/q85/seed/synthetic.webp", cert_id)
         )
     assert any("ใบรางวัลเสริม" in reason for reason in check_blockers(batch_id))
 

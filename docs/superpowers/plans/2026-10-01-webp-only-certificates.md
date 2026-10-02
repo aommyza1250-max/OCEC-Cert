@@ -38,7 +38,7 @@
 
 **Files:** Modify `apps/web/prisma/schema.prisma`, `apps/worker/app/config.py`, `apps/worker/app/storage.py`, `apps/worker/app/tasks/render_preview.py`; create `apps/web/prisma/migrations/<generated_timestamp>_webp_assets/migration.sql`; test `apps/worker/tests/test_render_preview.py`.
 
-**Interfaces:** Produce `render_webp(page, dpi=180, quality=85) -> bytes`, `final_webp_key(batch_id, page_id, revision) -> str`, and `head_object(key) -> dict`. `revision` is the finalizer job UUID; the returned key is under `previews/<batch>/final/<job>/`.
+**Interfaces:** Produce `render_webp(page, dpi=180, quality=85) -> bytes`, `final_webp_key(batch_id, page_id, revision) -> str`, and `head_object(key) -> dict`. `revision` is the finalizer job UUID; the returned key is under `previews/<batch>/final/q85/<job>/`. The migration also re-encodes older final WebPs into the current quality-versioned prefix.
 
 - [ ] **Step 1: Write a synthetic one-page PDF test that renders and decodes WebP.**
 
@@ -151,7 +151,7 @@ elif job_type == "MIGRATE_WEBP":
     stats = run_migrate_webp(batch_id, job_id, on_progress, payload)
 ```
 
-- [ ] **Step 4: Implement the admin route with `adminHandler`, batch row lock and no active conflicting job. Add a panel with dry-run, start/retry, progress counts and failure summary. Label it “ย้ายเกียรติบัตรเก่าเป็น WebP”, never “รีเซ็ตข้อมูล”, because no certificate records are reset.**
+- [ ] **Step 4: Implement the admin route with `adminHandler`, batch row lock and no active conflicting job. Add a panel with dry-run, start/retry, progress counts and failure summary. Label it “ย้ายรูปเก่าเป็น WebP คุณภาพปัจจุบัน”, never “รีเซ็ตข้อมูล”, because no certificate records are reset.**
 - [ ] **Step 5: Run focused tests and an end-to-end migration on synthetic dev data, then commit the temporary migration unit.**
 
 ### Task 6: Retention, approval migration, and operator docs

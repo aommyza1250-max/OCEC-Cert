@@ -41,6 +41,12 @@ def download_to_file(key: str, path: str) -> None:
     _client().download_file(settings().r2_bucket, key, path)
 
 
+def download_bytes(key: str) -> bytes:
+    buffer = io.BytesIO()
+    _client().download_fileobj(settings().r2_bucket, key, buffer)
+    return buffer.getvalue()
+
+
 def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     _client().put_object(
         Bucket=settings().r2_bucket, Key=key, Body=data, ContentType=content_type
@@ -112,10 +118,10 @@ def preview_key(batch_id: str, stem: str, job_id: str | None = None) -> str:
     return f"previews/{folder}/{stem}.webp"
 
 
-def final_webp_key(batch_id: str, page_id: str, revision: str) -> str:
+def final_webp_key(batch_id: str, page_id: str, revision: str, quality: int = 85) -> str:
     """รูปคุณภาพสูงใช้ key ใหม่เสมอ เพื่อไม่ทับ preview ที่ยังถูกอ้างอยู่"""
     # final/ อยู่แยกจาก prefix ของ SPLIT job: rollback ห้ามลบรูปที่ใบเก่าใช้อยู่
-    return f"previews/{batch_id}/final/{revision}/{page_id}.webp"
+    return f"previews/{batch_id}/final/q{quality}/{revision}/{page_id}.webp"
 
 
 def job_output_prefixes(batch_id: str, job_id: str) -> list[str]:

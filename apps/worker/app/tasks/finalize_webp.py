@@ -1,5 +1,6 @@
-"""แปลง PDF รายใบที่จับคู่แล้วเป็น WebP และลบ PDF หลังสลับคีย์สำเร็จ
+"""ทำ WebP คุณภาพปัจจุบันให้ใบที่จับคู่แล้ว และลบไฟล์เดิมหลังสลับคีย์สำเร็จ
 
+อ่านจาก split PDF เมื่อยังมี หรือบีบอัด WebP รุ่นเก่าซ้ำเมื่อ PDF ถูกลบแล้ว
 ไฟล์ต้นฉบับใน sources/ และหน้าที่ยังจับคู่ไม่ได้ไม่ถูกแตะที่นี่
 """
 
@@ -17,7 +18,14 @@ from PIL import Image
 
 from ..config import settings
 from ..db import connection, new_id
-from ..storage import delete_keys, download_to_file, final_webp_key, head_object, upload_bytes
+from ..storage import (
+    delete_keys,
+    download_bytes,
+    download_to_file,
+    final_webp_key,
+    head_object,
+    upload_bytes,
+)
 from .render_preview import render_webp
 
 log = logging.getLogger(__name__)
@@ -33,16 +41,21 @@ def _pending_pages(batch_id: str) -> list[dict[str, Any]]:
         return conn.execute(
             """
             SELECT c.id::text AS certificate_id, c.roster_entry_id::text,
-                   c.pdf_key, c.preview_key, sp.id::text AS page_id,
+                   c.pdf_key AS certificate_pdf_key, c.preview_key, sp.id::text AS page_id,
+                   COALESCE(NULLIF(c.pdf_key, ''), NULLIF(sp.pdf_key, '')) AS source_pdf_key,
                    sp.pdf_key AS staging_pdf_key, sp.preview_key AS staging_preview_key
             FROM certificates c
             JOIN staging_pages sp ON sp.id = c.staging_page_id
             WHERE c.batch_id = %s AND c.files_deleted_at IS NULL
-              AND c.pdf_key IS NOT NULL AND c.pdf_key <> ''
               AND sp.match_status = 'MATCHED'
+              AND (
+                NULLIF(c.pdf_key, '') IS NOT NULL
+                OR (c.preview_key LIKE %s AND c.preview_key NOT LIKE %s)
+              )
             ORDER BY sp.page_number
             """,
-            (batch_id,),
+            (batch_id, f"previews/{batch_id}/final/%.webp",
+             f"previews/{batch_id}/final/q{settings().cert_image_quality}/%.webp"),
         ).fetchall()
 
 
@@ -75,6 +88,22 @@ def _render_from_pdf(pdf_key: str) -> bytes:
     return data
 
 
+def _render_from_webp(key: str) -> bytes:
+    cfg = settings()
+    with Image.open(io.BytesIO(download_bytes(key))) as source:
+        if source.format != "WEBP":
+            raise ValueError("ไฟล์รูปเดิมไม่ใช่ WebP จึงไม่สามารถบีบอัดซ้ำได้")
+        image = source.convert("RGB")
+        buffer = io.BytesIO()
+        image.save(buffer, format="WEBP", quality=cfg.cert_image_quality, method=4)
+        data = buffer.getvalue()
+    with Image.open(io.BytesIO(data)) as image:
+        if image.format != "WEBP" or image.width < 1 or image.height < 1:
+            raise ValueError("รูป WebP ที่บีบอัดซ้ำเปิดไม่ได้")
+        image.verify()
+    return data
+
+
 def _translate_approved_snapshot(conn: Any, row: dict[str, Any], new_key: str) -> None:
     entry_id = row["roster_entry_id"]
     if not entry_id:
@@ -94,10 +123,11 @@ def _translate_approved_snapshot(conn: Any, row: dict[str, Any], new_key: str) -
         return
 
     changed = False
+    previous_asset_key = row["certificate_pdf_key"] or row["preview_key"]
     for item in items:
         if (
             isinstance(item, list) and len(item) == 3
-            and item[0] == row["certificate_id"] and item[2] == row["pdf_key"]
+            and item[0] == row["certificate_id"] and item[2] == previous_asset_key
         ):
             item[2] = new_key
             changed = True
@@ -114,10 +144,13 @@ def _switch_to_webp(batch_id: str, row: dict[str, Any], new_key: str) -> None:
         certificate = conn.execute(
             """
             SELECT id FROM certificates
-            WHERE id = %s AND pdf_key = %s AND files_deleted_at IS NULL
+            WHERE id = %s
+              AND pdf_key IS NOT DISTINCT FROM %s
+              AND preview_key IS NOT DISTINCT FROM %s
+              AND files_deleted_at IS NULL
             FOR UPDATE
             """,
-            (row["certificate_id"], row["pdf_key"]),
+            (row["certificate_id"], row["certificate_pdf_key"], row["preview_key"]),
         ).fetchone()
         if certificate is None:
             raise StaleAsset(row["page_id"])
@@ -125,9 +158,12 @@ def _switch_to_webp(batch_id: str, row: dict[str, Any], new_key: str) -> None:
         page = conn.execute(
             """
             UPDATE staging_pages SET pdf_key = NULL, preview_key = %s
-            WHERE id = %s AND pdf_key IS NOT DISTINCT FROM %s RETURNING id
+            WHERE id = %s
+              AND pdf_key IS NOT DISTINCT FROM %s
+              AND preview_key IS NOT DISTINCT FROM %s
+            RETURNING id
             """,
-            (new_key, row["page_id"], row["staging_pdf_key"]),
+            (new_key, row["page_id"], row["staging_pdf_key"], row["staging_preview_key"]),
         ).fetchone()
         if page is None:
             raise StaleAsset(row["page_id"])
@@ -142,7 +178,7 @@ def _switch_to_webp(batch_id: str, row: dict[str, Any], new_key: str) -> None:
             INSERT INTO asset_cleanup (id, batch_id, old_pdf_key, old_preview_key)
             VALUES (%s, %s, %s, %s)
             """,
-            (new_id(), batch_id, row["pdf_key"], row["preview_key"]),
+            (new_id(), batch_id, row["source_pdf_key"], row["preview_key"]),
         )
 
 
@@ -218,9 +254,13 @@ def finalize_matched_assets(
     failures: list[dict[str, str]] = []
     bytes_before = bytes_after = 0
     for index, row in enumerate(rows, start=1):
-        new_key = final_webp_key(batch_id, row["page_id"], revision)
+        quality = settings().cert_image_quality
+        new_key = final_webp_key(batch_id, row["page_id"], revision, quality)
         try:
-            data = _render_from_pdf(row["pdf_key"])
+            source_key = row["source_pdf_key"] or row["preview_key"]
+            if not source_key:
+                raise ValueError("ไม่พบทั้ง PDF และ WebP ต้นทาง")
+            data = _render_from_pdf(source_key) if row["source_pdf_key"] else _render_from_webp(source_key)
             upload_bytes(new_key, data, "image/webp")
             metadata = head_object(new_key)
             if metadata.get("ContentLength") != len(data) or metadata.get("ContentType") != "image/webp":
@@ -229,13 +269,13 @@ def finalize_matched_assets(
             converted += 1
             bytes_after += len(data)
             try:
-                bytes_before += int(head_object(row["pdf_key"]).get("ContentLength", 0))
+                bytes_before += int(head_object(source_key).get("ContentLength", 0))
             except Exception:
-                pass  # PDF จะถูกลบในขั้น cleanup; ขนาดใช้รายงานเท่านั้น
+                pass  # ใช้รายงานขนาดเท่านั้น; การลบจริงทำจาก cleanup ledger
         except Exception as exc:
             log.exception("แปลงใบ %s ไม่สำเร็จ", row["page_id"])
             failures.append({"pageId": row["page_id"], "reason": str(exc)[:200]})
-            # ถ้าแถวไม่สลับแล้วรูปใหม่ไม่ถูกอ้าง ลบทิ้ง; พังอีกก็ยังมี PDF เดิม
+            # ถ้าแถวไม่สลับแล้วรูปใหม่ไม่ถูกอ้าง ลบทิ้ง; ไฟล์เดิมยังอยู่
             try:
                 with connection() as conn:
                     active = conn.execute(

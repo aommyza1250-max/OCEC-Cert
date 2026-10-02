@@ -386,8 +386,8 @@ def run_match(
             stats = _apply(conn, batch, profile.catalog, entries, pages, current, decisions)
 
     on_progress({"stage": "match", "done": len(pages), "total": len(pages)})
-    # จับคู่และบันทึก Certificate ก่อน แล้วจึงแปลง PDF รายใบที่จับคู่ได้
-    # ใบที่แปลงไม่สำเร็จยังมี PDF เดิมและไม่ผ่านกฎเผยแพร่
+    # จับคู่และบันทึก Certificate ก่อน แล้วจึงสร้างรูปคุณภาพปัจจุบัน
+    # ใบที่แปลงไม่สำเร็จยังมีไฟล์เดิมและไม่ผ่านกฎเผยแพร่
     try:
         stats["assetFinalization"] = finalize_matched_assets(batch_id, revision or new_id(), on_progress)
     except Exception as exc:

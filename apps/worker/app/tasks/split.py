@@ -394,7 +394,10 @@ def rollback_job_outputs(batch_id: str, job_id: str) -> int:
         ).fetchall()
 
     keys = [f["key"] for prefix in job_output_prefixes(batch_id, job_id) for f in list_keys(prefix)]
-    keys.extend(final_webp_key(batch_id, str(row["id"]), job_id) for row in removed)
+    keys.extend(
+        final_webp_key(batch_id, str(row["id"]), job_id, settings().cert_image_quality)
+        for row in removed
+    )
     delete_keys(keys)
     if removed or keys:
         log.warning("ย้อนงาน %s: ลบหน้า %s หน้า ไฟล์ %s ชิ้น", job_id, len(removed), len(keys))

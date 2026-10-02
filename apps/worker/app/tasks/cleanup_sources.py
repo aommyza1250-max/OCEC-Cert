@@ -131,7 +131,7 @@ def check_blockers(batch_id: str) -> list[str]:
               AND (pdf_key IS NOT NULL OR preview_key IS NULL
                    OR preview_key NOT LIKE %s)
             """,
-            (batch_id, f"previews/{batch_id}/final/%.webp"),
+            (batch_id, f"previews/{batch_id}/final/q{settings().cert_image_quality}/%.webp"),
         ).fetchone()
         if not_finalized["n"]:
             blockers.append(f"ยังมีเกียรติบัตรที่แปลงเป็น WebP ไม่สำเร็จ {not_finalized['n']} ใบ")
