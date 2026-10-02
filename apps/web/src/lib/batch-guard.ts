@@ -27,7 +27,7 @@ export type GuardedBatch = {
 };
 
 /** งานที่แก้ข้อมูลของรอบนำเข้า — ระหว่างที่ค้างอยู่ ห้ามแก้ไขจากหน้าเว็บ */
-export const INTAKE_JOBS: JobType[] = ["SPLIT", "MATCH", "ROSTER_VALIDATE", "ROSTER_ACTIVATE"];
+export const INTAKE_JOBS: JobType[] = ["SPLIT", "MATCH", "ROSTER_VALIDATE", "ROSTER_ACTIVATE", "MIGRATE_WEBP"];
 
 export const PUBLISHED_MESSAGE =
   "รอบนี้เผยแพร่อยู่ — ต้องกด \"ยกเลิกการเผยแพร่\" ก่อน จึงจะอัปโหลดหรือแก้ไขได้";

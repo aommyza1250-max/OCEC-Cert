@@ -1,12 +1,12 @@
 import { publicAwardLabel, publicRoundLabel } from "@/lib/public-labels";
 import type { CertificateItem } from "@/lib/search";
 import { AwardBadge } from "./AwardBadge";
-import { ImageIcon, PdfIcon } from "./icons";
+import { ImageIcon } from "./icons";
 import { PreviewLightbox } from "./PreviewLightbox";
 
 /** เกียรติบัตร 1 ใบ
  *
- *  ลำดับที่ตาไล่อ่าน: รูป -> รางวัล -> ปุ่มบันทึกรูปภาพ (ปุ่มหลัก) -> ปุ่มดาวน์โหลด PDF (ปุ่มรอง)
+ *  ลำดับที่ตาไล่อ่าน: รูป -> รางวัล -> ปุ่มบันทึกรูปภาพ
  *  ไม่เขียนรอบซ้ำบนการ์ด เพราะหัวข้อด้านบนบอกไปแล้วว่ากลุ่มนี้เป็นรอบไหนของปีไหน
  *  ระดับชั้นกับเลขที่ใบอยู่ตัวเล็กใต้รางวัล คนส่วนใหญ่ไม่ได้มาหาสิ่งนี้
  *  แต่คนที่ต้องใช้ (เช่นโทรไปสอบถามเจ้าหน้าที่) ต้องหาเจอโดยไม่ต้องกดเปิดอะไรเพิ่ม */
@@ -49,10 +49,8 @@ export function CertificateCard({
         </p>
       </div>
 
-      {/* ส่วนปุ่มดาวน์โหลด: ปุ่มบันทึกรูปภาพใหญ่และเด่นที่สุด (Hero Button)
-          และปุ่ม PDF ขนาดกะทัดรัดเป็นทางเลือกเสริมสำหรับสั่งพิมพ์ */}
+      {/* บันทึกรูป WebP ไฟล์เดียวกับที่ใช้แสดง */}
       <div className="flex flex-col gap-2 pt-1">
-        {/* ปุ่มที่ 1: บันทึกรูปภาพ (.webp) — ปุ่มหลัก ขนาดใหญ่ เด่นชัดที่สุด */}
         <a
           href={`/api/certificates/${cert.id}/download?format=image`}
           download
@@ -65,19 +63,6 @@ export function CertificateCard({
           <span>บันทึกรูปภาพ</span>
         </a>
 
-        {/* ปุ่มที่ 2: ดาวน์โหลดไฟล์ PDF — ปุ่มรอง ขนาดกะทัดรัด สำหรับผู้ที่ต้องการพิมพ์ */}
-        <a
-          href={`/api/certificates/${cert.id}/download`}
-          download
-          className="flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg
-                     border border-hairline bg-paper/60 px-3 text-center text-xs font-medium
-                     text-ink-soft transition duration-200 hover:bg-paper hover:text-ink
-                     active:scale-[0.99] sm:min-h-10 sm:text-sm"
-          aria-label={`ดาวน์โหลดไฟล์ PDF เกียรติบัตรของ ${studentName}`}
-        >
-          <PdfIcon className="h-4 w-4 shrink-0 opacity-80" />
-          <span>ดาวน์โหลดไฟล์ PDF</span>
-        </a>
       </div>
     </div>
   );

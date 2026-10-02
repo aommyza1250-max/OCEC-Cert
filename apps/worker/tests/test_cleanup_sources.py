@@ -1,9 +1,11 @@
 """กติกาเคลียร์ต้นฉบับเมื่อเผยแพร่เฉพาะรางวัลเสริม — ใช้ฐาน ocec_test และ S3 ปลอมเท่านั้น"""
 
 import json
+import pymupdf
 
 from app.db import connection, new_id
 from app.tasks.cleanup_sources import check_blockers, run_cleanup_sources
+from app.tasks.finalize_webp import finalize_matched_assets
 
 
 def _published_supplemental() -> tuple[str, str, str]:
@@ -44,17 +46,22 @@ def _published_supplemental() -> tuple[str, str, str]:
         conn.execute(
             "INSERT INTO certificates "
             "(id, student_id, exam_id, batch_id, staging_page_id, roster_entry_id, "
-            "pdf_key, page_number, award, published_at) "
+            "pdf_key, preview_key, page_number, award, published_at) "
             "VALUES (%s, %s, %s, %s, %s, %s, "
-            "'certificates/synthetic.pdf', 1, 'PERFECT_SCORE', NOW())",
-            (cert_id, student_id, exam_id, batch_id, page_id, entry_id),
+            "NULL, %s, 1, 'PERFECT_SCORE', NOW())",
+            (cert_id, student_id, exam_id, batch_id, page_id, entry_id,
+             f"previews/{batch_id}/final/seed/synthetic.webp"),
         )
     return batch_id, entry_id, cert_id
 
 
 def _approve(entry_id: str, cert_id: str) -> None:
+    with connection() as conn:
+        preview_key = conn.execute(
+            "SELECT preview_key FROM certificates WHERE id = %s", (cert_id,)
+        ).fetchone()["preview_key"]
     snapshot = json.dumps(
-        [[cert_id, "PERFECT_SCORE", "certificates/synthetic.pdf"]], separators=(",", ":")
+        [[cert_id, "PERFECT_SCORE", preview_key]], separators=(",", ":")
     )
     with connection() as conn:
         conn.execute(
@@ -86,15 +93,15 @@ def test_การยืนยันเก่าหรือใบที่ย�
     _approve(entry_id, cert_id)
     with connection() as conn:
         conn.execute(
-            "UPDATE certificates SET pdf_key = 'certificates/replaced.pdf' WHERE id = %s",
+            "UPDATE certificates SET preview_key = 'previews/replaced.webp' WHERE id = %s",
             (cert_id,),
         )
     assert any("ใบรางวัลเสริม" in reason for reason in check_blockers(batch_id))
 
     with connection() as conn:
         conn.execute(
-            "UPDATE certificates SET pdf_key = 'certificates/synthetic.pdf', published_at = NULL "
-            "WHERE id = %s", (cert_id,)
+            "UPDATE certificates SET preview_key = %s, published_at = NULL "
+            "WHERE id = %s", (f"previews/{batch_id}/final/seed/synthetic.webp", cert_id)
         )
     assert any("ใบรางวัลเสริม" in reason for reason in check_blockers(batch_id))
 
@@ -122,3 +129,53 @@ def test_อนุมัติรางวัลเสริมไม่ข้�
     db.objects[zip_key] = b"synthetic zip"
     assert run_cleanup_sources(batch_id, lambda _: None)["cleared"] is False
     assert zip_key in db.objects
+
+
+def test_ย้าย_pdf_รายใบแล้วลบเฉพาะหลังสลับรูปสำเร็จ(db):
+    batch_id, entry_id, cert_id = _published_supplemental()
+    pdf_key = f"certificates/{batch_id}/old.pdf"
+    preview_key = f"previews/{batch_id}/old.webp"
+    with pymupdf.open() as document:
+        page = document.new_page(width=842, height=595)
+        page.insert_text((72, 72), "Synthetic certificate")
+        pdf_bytes = document.tobytes()
+    db.objects[pdf_key] = pdf_bytes
+    db.objects[preview_key] = b"old preview"
+    with connection() as conn:
+        conn.execute(
+            "UPDATE certificates SET pdf_key = %s, preview_key = %s WHERE id = %s",
+            (pdf_key, preview_key, cert_id),
+        )
+        conn.execute(
+            "UPDATE staging_pages SET pdf_key = %s, preview_key = %s "
+            "WHERE id = (SELECT staging_page_id FROM certificates WHERE id = %s)",
+            (pdf_key, preview_key, cert_id),
+        )
+    _approve(entry_id, cert_id)
+    with connection() as conn:
+        conn.execute(
+            "UPDATE roster_entries SET supplemental_only_snapshot = %s WHERE id = %s",
+            (json.dumps([[cert_id, "PERFECT_SCORE", pdf_key]]), entry_id),
+        )
+
+    result = finalize_matched_assets(batch_id, new_id(), lambda _: None)
+    assert result["converted"] == 1
+    assert result["failed"] == 0
+    assert pdf_key not in db.objects
+    assert preview_key not in db.objects
+    with connection() as conn:
+        cert = conn.execute(
+            "SELECT pdf_key, preview_key FROM certificates WHERE id = %s", (cert_id,)
+        ).fetchone()
+        page = conn.execute(
+            "SELECT pdf_key, preview_key FROM staging_pages "
+            "WHERE id = (SELECT staging_page_id FROM certificates WHERE id = %s)", (cert_id,)
+        ).fetchone()
+        snapshot = conn.execute(
+            "SELECT supplemental_only_snapshot FROM roster_entries WHERE id = %s", (entry_id,)
+        ).fetchone()["supplemental_only_snapshot"]
+    assert cert["pdf_key"] is None and page["pdf_key"] is None
+    assert cert["preview_key"] == page["preview_key"]
+    assert cert["preview_key"] in db.objects
+    assert json.loads(snapshot)[0][2] == cert["preview_key"]
+    assert finalize_matched_assets(batch_id, new_id(), lambda _: None)["converted"] == 0

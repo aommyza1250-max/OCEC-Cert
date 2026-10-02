@@ -50,6 +50,7 @@ async function main() {
   console.log("ล้างข้อมูล seed เดิม...");
   // ลบตามลำดับ FK: certificates -> staging_pages -> รายชื่อ -> jobs -> batches -> students -> exams -> programs
   await prisma.auditEvent.deleteMany();
+  await prisma.assetCleanup.deleteMany();
   await prisma.certificate.deleteMany();
   await prisma.stagingPage.deleteMany();
   await prisma.rosterEntry.deleteMany();

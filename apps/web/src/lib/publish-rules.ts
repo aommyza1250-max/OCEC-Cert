@@ -14,6 +14,7 @@ export type HoldReason =
   | "DUPLICATE_REVIEW"
   | "NATIONALITY_UNVERIFIED"
   | "PARSE_REVIEW"
+  | "IMAGE_PENDING"
   | "MISSING_FILE"
   | "MISSING_PRIMARY";
 
@@ -25,6 +26,7 @@ export const HOLD_REASONS: HoldReason[] = [
   "DUPLICATE_REVIEW",
   "NATIONALITY_UNVERIFIED",
   "PARSE_REVIEW",
+  "IMAGE_PENDING",
   "MISSING_FILE",
   "MISSING_PRIMARY",
 ];
@@ -36,11 +38,18 @@ export const HOLD_LABELS: Record<HoldReason, string> = {
   DUPLICATE_REVIEW: "มีใบซ้ำรอตัดสิน",
   NATIONALITY_UNVERIFIED: "รอยืนยันสัญชาติ",
   PARSE_REVIEW: "รอบ/ปีบนหน้าไม่ตรง รอตรวจ",
+  IMAGE_PENDING: "รูปเกียรติบัตรยังแปลงไม่สำเร็จ — รอระบบลองอีกครั้ง",
   MISSING_FILE: "ยังไม่มีไฟล์เกียรติบัตร",
   MISSING_PRIMARY: "มีแต่ใบรางวัลเสริม — ตรวจว่าได้รับเฉพาะใบที่มีอยู่จริงหรือไม่",
 };
 
-export type CertificateRef = { id: string; award: string; kind: "PRIMARY" | "SUPPLEMENTAL"; pdfKey: string };
+export type CertificateRef = {
+  id: string;
+  award: string;
+  kind: "PRIMARY" | "SUPPLEMENTAL";
+  pdfKey: string | null;
+  previewKey: string | null;
+};
 
 export type Participant = {
   entryId: string;
@@ -52,12 +61,12 @@ export type Participant = {
   supplementalOnlyApproved?: boolean;
 };
 
-/** ตรึงการยืนยันกับใบ/รางวัล/ไฟล์ ไม่ใช่แค่ตัวคน — อัปหรือเปลี่ยน PDF แล้วต้องตรวจใหม่ */
+/** ตรึงการยืนยันกับใบ/รางวัล/รูปที่ใช้จริง — เปลี่ยนไฟล์แล้วต้องตรวจใหม่ */
 export function supplementalOnlySnapshot(certificates: CertificateRef[]): string | null {
-  if (!certificates.length || certificates.some((c) => c.kind === "PRIMARY")) return null;
+  if (!certificates.length || certificates.some((c) => c.kind === "PRIMARY" || c.pdfKey !== null || !c.previewKey)) return null;
   return JSON.stringify(
     certificates
-      .map((c) => [c.id, c.award, c.pdfKey])
+      .map((c): [string, string, string | null] => [c.id, c.award, c.previewKey])
       .sort((a, b) => a[0].localeCompare(b[0])),
   );
 }
@@ -118,6 +127,7 @@ function holdReason(person: Participant, primary: number, supplemental: number):
   const issue = HOLD_REASONS.find((r) => person.issues.includes(r));
   if (issue) return issue;
   if (primary + supplemental === 0) return "MISSING_FILE";
+  if (person.certificates.some((c) => c.pdfKey !== null || !c.previewKey)) return "IMAGE_PENDING";
   if (primary === 0 && !person.supplementalOnlyApproved) return "MISSING_PRIMARY";
   return null;
 }
@@ -127,6 +137,7 @@ export function needsPolicyDecision(participants: Participant[]): boolean {
   return participants.some(
     (p) =>
       !HOLD_REASONS.some((r) => p.issues.includes(r)) &&
+      p.certificates.every((c) => c.pdfKey === null && !!c.previewKey) &&
       p.certificates.some((c) => c.kind === "PRIMARY") &&
       p.certificates.some((c) => c.kind === "SUPPLEMENTAL"),
   );

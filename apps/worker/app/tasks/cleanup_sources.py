@@ -124,6 +124,18 @@ def check_blockers(batch_id: str) -> list[str]:
         if pending["n"]:
             blockers.append(f"ยังมีหน้าที่ต้องตัดสิน {pending['n']} หน้า")
 
+        not_finalized = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM certificates
+            WHERE batch_id = %s AND files_deleted_at IS NULL
+              AND (pdf_key IS NOT NULL OR preview_key IS NULL
+                   OR preview_key NOT LIKE %s)
+            """,
+            (batch_id, f"previews/{batch_id}/final/%.webp"),
+        ).fetchone()
+        if not_finalized["n"]:
+            blockers.append(f"ยังมีเกียรติบัตรที่แปลงเป็น WebP ไม่สำเร็จ {not_finalized['n']} ใบ")
+
         supplemental = _supplemental_codes(batch["program_code"], batch["round"])
         held = _unapproved_supplemental_only_count(conn, batch_id, supplemental)
         if held:
@@ -163,7 +175,7 @@ def _unapproved_supplemental_only_count(conn: Any, batch_id: str, codes: list[st
     rows = conn.execute(
         """
         SELECT c.id::text, c.roster_entry_id::text, c.student_id::text,
-               c.award, c.pdf_key, c.published_at, re.supplemental_only_snapshot
+               c.award, c.preview_key, c.published_at, re.supplemental_only_snapshot
         FROM certificates c
         LEFT JOIN roster_entries re ON re.id = c.roster_entry_id
         WHERE c.batch_id = %s
@@ -184,7 +196,7 @@ def _unapproved_supplemental_only_count(conn: Any, batch_id: str, codes: list[st
         if any(cert["award"] not in codes for cert in certificates):
             continue
         snapshot = json.dumps(
-            [[cert["id"], cert["award"], cert["pdf_key"]] for cert in certificates],
+            [[cert["id"], cert["award"], cert["preview_key"]] for cert in certificates],
             ensure_ascii=False,
             separators=(",", ":"),
         )

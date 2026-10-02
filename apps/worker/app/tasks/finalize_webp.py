@@ -1,0 +1,259 @@
+"""แปลง PDF รายใบที่จับคู่แล้วเป็น WebP และลบ PDF หลังสลับคีย์สำเร็จ
+
+ไฟล์ต้นฉบับใน sources/ และหน้าที่ยังจับคู่ไม่ได้ไม่ถูกแตะที่นี่
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import logging
+import os
+import tempfile
+from typing import Any, Callable
+
+import pymupdf
+from PIL import Image
+
+from ..config import settings
+from ..db import connection, new_id
+from ..storage import delete_keys, download_to_file, final_webp_key, head_object, upload_bytes
+from .render_preview import render_webp
+
+log = logging.getLogger(__name__)
+ProgressFn = Callable[[dict[str, Any]], None]
+
+
+class StaleAsset(ValueError):
+    """แถวเปลี่ยนระหว่างอ่าน PDF กับสลับคีย์ — ห้ามเขียนทับผลใหม่"""
+
+
+def _pending_pages(batch_id: str) -> list[dict[str, Any]]:
+    with connection() as conn:
+        return conn.execute(
+            """
+            SELECT c.id::text AS certificate_id, c.roster_entry_id::text,
+                   c.pdf_key, c.preview_key, sp.id::text AS page_id,
+                   sp.pdf_key AS staging_pdf_key, sp.preview_key AS staging_preview_key
+            FROM certificates c
+            JOIN staging_pages sp ON sp.id = c.staging_page_id
+            WHERE c.batch_id = %s AND c.files_deleted_at IS NULL
+              AND c.pdf_key IS NOT NULL AND c.pdf_key <> ''
+              AND sp.match_status = 'MATCHED'
+            ORDER BY sp.page_number
+            """,
+            (batch_id,),
+        ).fetchall()
+
+
+def _unresolved_count(batch_id: str) -> int:
+    with connection() as conn:
+        return conn.execute(
+            """
+            SELECT count(*) AS count FROM staging_pages
+            WHERE batch_id = %s AND pdf_key IS NOT NULL
+              AND match_status NOT IN ('MATCHED', 'DISCARDED', 'SUPERSEDED')
+            """,
+            (batch_id,),
+        ).fetchone()["count"]
+
+
+def _render_from_pdf(pdf_key: str) -> bytes:
+    cfg = settings()
+    with tempfile.TemporaryDirectory() as directory:
+        pdf_path = os.path.join(directory, "certificate.pdf")
+        download_to_file(pdf_key, pdf_path)
+        with pymupdf.open(pdf_path) as doc:
+            if doc.page_count != 1:
+                raise ValueError(f"PDF รายใบมี {doc.page_count} หน้า แทนที่จะมี 1 หน้า")
+            data = render_webp(doc[0], cfg.cert_image_dpi, cfg.cert_image_quality)
+
+    with Image.open(io.BytesIO(data)) as image:
+        if image.format != "WEBP" or image.width < 1 or image.height < 1:
+            raise ValueError("รูปที่แปลงมาไม่ใช่ WebP ที่เปิดได้")
+        image.verify()
+    return data
+
+
+def _translate_approved_snapshot(conn: Any, row: dict[str, Any], new_key: str) -> None:
+    entry_id = row["roster_entry_id"]
+    if not entry_id:
+        return
+    entry = conn.execute(
+        "SELECT supplemental_only_snapshot FROM roster_entries WHERE id = %s FOR UPDATE",
+        (entry_id,),
+    ).fetchone()
+    snapshot = entry["supplemental_only_snapshot"] if entry else None
+    if not snapshot:
+        return
+    try:
+        items = json.loads(snapshot)
+    except (TypeError, ValueError):
+        return
+    if not isinstance(items, list):
+        return
+
+    changed = False
+    for item in items:
+        if (
+            isinstance(item, list) and len(item) == 3
+            and item[0] == row["certificate_id"] and item[2] == row["pdf_key"]
+        ):
+            item[2] = new_key
+            changed = True
+    if changed:
+        conn.execute(
+            "UPDATE roster_entries SET supplemental_only_snapshot = %s WHERE id = %s",
+            (json.dumps(items, ensure_ascii=False, separators=(",", ":")), entry_id),
+        )
+
+
+def _switch_to_webp(batch_id: str, row: dict[str, Any], new_key: str) -> None:
+    """สลับสองแถวพร้อมบันทึกคีย์เก่าใน transaction เดียว"""
+    with connection() as conn, conn.transaction():
+        certificate = conn.execute(
+            """
+            SELECT id FROM certificates
+            WHERE id = %s AND pdf_key = %s AND files_deleted_at IS NULL
+            FOR UPDATE
+            """,
+            (row["certificate_id"], row["pdf_key"]),
+        ).fetchone()
+        if certificate is None:
+            raise StaleAsset(row["page_id"])
+
+        page = conn.execute(
+            """
+            UPDATE staging_pages SET pdf_key = NULL, preview_key = %s
+            WHERE id = %s AND pdf_key IS NOT DISTINCT FROM %s RETURNING id
+            """,
+            (new_key, row["page_id"], row["staging_pdf_key"]),
+        ).fetchone()
+        if page is None:
+            raise StaleAsset(row["page_id"])
+
+        conn.execute(
+            "UPDATE certificates SET pdf_key = NULL, preview_key = %s WHERE id = %s",
+            (new_key, row["certificate_id"]),
+        )
+        _translate_approved_snapshot(conn, row, new_key)
+        conn.execute(
+            """
+            INSERT INTO asset_cleanup (id, batch_id, old_pdf_key, old_preview_key)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (new_id(), batch_id, row["pdf_key"], row["preview_key"]),
+        )
+
+
+def drain_asset_cleanup(batch_id: str) -> dict[str, Any]:
+    """ลบไฟล์เก่าจาก ledger; ถ้าลบไม่สำเร็จแถวจะค้างให้รันรอบถัดไป"""
+    with connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, old_pdf_key, old_preview_key FROM asset_cleanup
+            WHERE batch_id = %s AND completed_at IS NULL ORDER BY created_at
+            """,
+            (batch_id,),
+        ).fetchall()
+    completed = 0
+    failed = 0
+    for row in rows:
+        keys = [k for k in (row["old_pdf_key"], row["old_preview_key"]) if k]
+        try:
+            for key in keys:
+                if not (
+                    key.startswith(f"certificates/{batch_id}/")
+                    or key.startswith(f"previews/{batch_id}/")
+                ):
+                    raise ValueError("คีย์ไฟล์เก่าอยู่นอกรอบนำเข้า")
+                with connection() as conn:
+                    used = conn.execute(
+                        """
+                        SELECT 1 FROM certificates
+                        WHERE pdf_key = %s OR preview_key = %s
+                        UNION ALL
+                        SELECT 1 FROM staging_pages
+                        WHERE pdf_key = %s OR preview_key = %s
+                        LIMIT 1
+                        """,
+                        (key, key, key, key),
+                    ).fetchone()
+                if used:
+                    raise ValueError("คีย์ไฟล์เก่ายังถูกใช้อยู่")
+            delete_keys(keys)
+            with connection() as conn:
+                conn.execute(
+                    "UPDATE asset_cleanup SET completed_at = NOW() WHERE id = %s",
+                    (row["id"],),
+                )
+            completed += 1
+        except Exception:
+            failed += 1
+            log.exception("ลบไฟล์เก่าของ cleanup %s ไม่สำเร็จ", row["id"])
+    return {"completed": completed, "pendingCleanup": failed}
+
+
+def finalize_matched_assets(
+    batch_id: str,
+    revision: str,
+    on_progress: ProgressFn,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """ทำทีละใบ; ใบที่พังไม่ทำให้ใบอื่นเสีย และรันซ้ำได้"""
+    rows = _pending_pages(batch_id)
+    if dry_run:
+        with connection() as conn:
+            pending_cleanup = conn.execute(
+                "SELECT count(*) AS count FROM asset_cleanup WHERE batch_id = %s AND completed_at IS NULL",
+                (batch_id,),
+            ).fetchone()["count"]
+        return {"total": len(rows), "converted": 0, "failed": 0,
+                "unresolved": _unresolved_count(batch_id),
+                "pendingCleanup": pending_cleanup, "dryRun": True}
+
+    cleanup = drain_asset_cleanup(batch_id)
+    converted = 0
+    failures: list[dict[str, str]] = []
+    bytes_before = bytes_after = 0
+    for index, row in enumerate(rows, start=1):
+        new_key = final_webp_key(batch_id, row["page_id"], revision)
+        try:
+            data = _render_from_pdf(row["pdf_key"])
+            upload_bytes(new_key, data, "image/webp")
+            metadata = head_object(new_key)
+            if metadata.get("ContentLength") != len(data) or metadata.get("ContentType") != "image/webp":
+                raise ValueError("ตรวจไฟล์ WebP หลังอัปโหลดไม่ผ่าน")
+            _switch_to_webp(batch_id, row, new_key)
+            converted += 1
+            bytes_after += len(data)
+            try:
+                bytes_before += int(head_object(row["pdf_key"]).get("ContentLength", 0))
+            except Exception:
+                pass  # PDF จะถูกลบในขั้น cleanup; ขนาดใช้รายงานเท่านั้น
+        except Exception as exc:
+            log.exception("แปลงใบ %s ไม่สำเร็จ", row["page_id"])
+            failures.append({"pageId": row["page_id"], "reason": str(exc)[:200]})
+            # ถ้าแถวไม่สลับแล้วรูปใหม่ไม่ถูกอ้าง ลบทิ้ง; พังอีกก็ยังมี PDF เดิม
+            try:
+                with connection() as conn:
+                    active = conn.execute(
+                        "SELECT 1 FROM certificates WHERE preview_key = %s LIMIT 1", (new_key,)
+                    ).fetchone()
+                if not active:
+                    delete_keys([new_key])
+            except Exception:
+                log.exception("ลบรูปที่สร้างค้างไม่สำเร็จ: %s", new_key)
+        if index % 25 == 0 or index == len(rows):
+            on_progress({"stage": "webp", "done": index, "total": len(rows),
+                         "converted": converted, "failed": len(failures)})
+
+    after_cleanup = drain_asset_cleanup(batch_id)
+    return {
+        "total": len(rows), "converted": converted, "failed": len(failures),
+        "unresolved": _unresolved_count(batch_id),
+        "failures": failures[:20], "bytesBefore": bytes_before, "bytesAfter": bytes_after,
+        "pendingCleanup": after_cleanup["pendingCleanup"],
+        "cleanupCompleted": cleanup["completed"] + after_cleanup["completed"],
+    }

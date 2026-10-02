@@ -21,6 +21,7 @@ from .queue import (
 from .tasks.cleanup_sources import run_cleanup_sources
 from .tasks.delete_batch import run_delete_batch
 from .tasks.expire import run_expire
+from .tasks.finalize_webp import finalize_matched_assets
 from .tasks.match import run_match
 from .tasks.roster import run_roster_activate, run_roster_validate
 from .tasks.split import rollback_job_outputs, run_split
@@ -143,16 +144,22 @@ def _run_one() -> bool:
         if job_type == "SPLIT":
             stats = run_split(batch_id, job_id, on_progress, payload)
         elif job_type == "MATCH":
-            stats = run_match(batch_id, on_progress, payload)
+            stats = run_match(batch_id, on_progress, payload, revision=job_id)
         elif job_type == "ROSTER_VALIDATE":
             stats = run_roster_validate(batch_id, on_progress, payload)
         elif job_type == "ROSTER_ACTIVATE":
             stats = run_roster_activate(batch_id, on_progress, payload)
             # รายชื่อเปลี่ยน = ผลจับคู่อัตโนมัติเดิมใช้ไม่ได้แล้ว ต้องคำนวณใหม่ทั้งรอบทันที
-            stats["match"] = run_match(batch_id, on_progress)
+            stats["match"] = run_match(batch_id, on_progress, revision=job_id)
         elif job_type == "EXPIRE":
             # งานของทั้งระบบ ไม่ผูกกับรอบนำเข้าใด batch_id จึงเป็น None
             stats = run_expire(batch_id, on_progress, payload)
+        elif job_type == "MIGRATE_WEBP":
+            if previous_status in (None, "DELETING"):
+                raise ValueError("รอบนำเข้านี้ถูกลบหรือกำลังถูกลบ")
+            stats = finalize_matched_assets(
+                batch_id, job_id, on_progress, dry_run=bool(payload.get("dryRun", False))
+            )
         elif job_type == "CLEANUP_SOURCES":
             stats = run_cleanup_sources(batch_id, on_progress, payload)
         elif job_type == "DELETE_BATCH":

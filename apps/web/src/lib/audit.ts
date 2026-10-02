@@ -32,7 +32,9 @@ export type AuditAction =
   | "POLICY_CHANGED"
   | "PUBLISHED"
   | "PUBLICATION_WITHDRAWN"
-  | "BATCH_DELETE_REQUESTED";
+  | "BATCH_DELETE_REQUESTED"
+  | "WEBP_MIGRATION_CHECK_QUEUED"
+  | "WEBP_MIGRATION_QUEUED";
 
 export async function recordAudit(
   tx: Tx,
@@ -93,4 +95,6 @@ export const AUDIT_LABELS: Record<string, string> = {
   PUBLISHED: "เผยแพร่",
   PUBLICATION_WITHDRAWN: "ยกเลิกการเผยแพร่",
   BATCH_DELETE_REQUESTED: "สั่งลบรอบนำเข้า",
+  WEBP_MIGRATION_CHECK_QUEUED: "สั่งตรวจจำนวนเกียรติบัตรเก่า",
+  WEBP_MIGRATION_QUEUED: "สั่งย้ายเกียรติบัตรเก่าเป็น WebP",
 };
