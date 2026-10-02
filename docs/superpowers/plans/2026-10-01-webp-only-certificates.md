@@ -18,7 +18,7 @@
 - Preserve `AMBIGUOUS` and `DUPLICATE_NAME` manual review; do not infer new people or awards.
 - Worker reads large ZIPs from disk, processes one PDF at a time, and creates every Python-inserted UUID with `new_id()`.
 - Keep Prisma indexes in `schema.prisma`; after schema change, run `prisma generate` and restart `pnpm dev` before UI verification.
-- Start image evaluation at 180 DPI and WebP quality 90. The supplied one-page sample measured 419 KiB at 2105 × 1489 pixels versus an 888 KiB PDF; verify representative files before production rollout.
+- Render final WebP images at 180 DPI and quality 85. A representative 2105 × 1489 WebP measured 856,098 bytes at quality 90 and 626,690 bytes after re-encoding at quality 85, with small text and signatures remaining clear on inspection. Another PDF sample produced 419 KiB, so expect variation by source artwork.
 - Production deletion is performed only by the deployed worker after object verification. No plan or test step deletes production assets.
 
 ## File map and interfaces
@@ -38,7 +38,7 @@
 
 **Files:** Modify `apps/web/prisma/schema.prisma`, `apps/worker/app/config.py`, `apps/worker/app/storage.py`, `apps/worker/app/tasks/render_preview.py`; create `apps/web/prisma/migrations/<generated_timestamp>_webp_assets/migration.sql`; test `apps/worker/tests/test_render_preview.py`.
 
-**Interfaces:** Produce `render_webp(page, dpi=180, quality=90) -> bytes`, `final_webp_key(batch_id, page_id, revision) -> str`, and `head_object(key) -> dict`. `revision` is the finalizer job UUID; the returned key is under `previews/<batch>/<job>/`.
+**Interfaces:** Produce `render_webp(page, dpi=180, quality=85) -> bytes`, `final_webp_key(batch_id, page_id, revision) -> str`, and `head_object(key) -> dict`. `revision` is the finalizer job UUID; the returned key is under `previews/<batch>/final/<job>/`.
 
 - [ ] **Step 1: Write a synthetic one-page PDF test that renders and decodes WebP.**
 
@@ -53,7 +53,7 @@ with Image.open(io.BytesIO(data)) as image:
 ```
 
 - [ ] **Step 2: Run `cd apps/worker && python -m pytest -q tests/test_render_preview.py`; expect failure because `cert_image_dpi` and `cert_image_quality` are absent.**
-- [ ] **Step 3: Add worker settings `cert_image_dpi` from `CERT_IMAGE_DPI=180` and `cert_image_quality` from `CERT_IMAGE_QUALITY=90`; keep the existing low-resolution preliminary preview settings for unresolved pages. Add output format/dimension validation and a `head_object` call using S3 `head_object`.**
+- [ ] **Step 3: Add worker settings `cert_image_dpi` from `CERT_IMAGE_DPI=180` and `cert_image_quality` from `CERT_IMAGE_QUALITY=85`; keep the existing low-resolution preliminary preview settings for unresolved pages. Add output format/dimension validation and a `head_object` call using S3 `head_object`.**
 
 ```python
 def final_webp_key(batch_id: str, page_id: str, revision: str) -> str:
