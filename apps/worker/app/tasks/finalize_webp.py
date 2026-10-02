@@ -78,23 +78,25 @@ def _unresolved_count(batch_id: str) -> int:
         ).fetchone()["count"]
 
 
-def _render_from_pdf(pdf_key: str) -> bytes:
+def _render_from_pdf(pdf_key: str) -> tuple[bytes, int]:
     cfg = settings()
     with tempfile.TemporaryDirectory() as directory:
         pdf_path = os.path.join(directory, "certificate.pdf")
         download_to_file(pdf_key, pdf_path)
+        source_size = os.path.getsize(pdf_path)
         with pymupdf.open(pdf_path) as doc:
             if doc.page_count != 1:
                 raise ValueError(f"PDF รายใบมี {doc.page_count} หน้า แทนที่จะมี 1 หน้า")
             data = render_webp(doc[0], cfg.cert_image_dpi, cfg.cert_image_quality)
 
     validate_webp(data)
-    return data
+    return data, source_size
 
 
-def _render_from_webp(key: str) -> bytes:
+def _render_from_webp(key: str) -> tuple[bytes, int]:
     cfg = settings()
-    with Image.open(io.BytesIO(download_bytes(key))) as source:
+    original = download_bytes(key)
+    with Image.open(io.BytesIO(original)) as source:
         if source.format != "WEBP":
             raise ValueError("ไฟล์รูปเดิมไม่ใช่ WebP จึงไม่สามารถบีบอัดซ้ำได้")
         image = source.convert("RGB")
@@ -111,7 +113,7 @@ def _render_from_webp(key: str) -> bytes:
         image.save(buffer, format="WEBP", quality=cfg.cert_image_quality, method=4)
         data = buffer.getvalue()
     validate_webp(data)
-    return data
+    return data, len(original)
 
 
 def _translate_approved_snapshot(conn: Any, row: dict[str, Any], new_key: str) -> None:
@@ -202,8 +204,10 @@ def _switch_to_webp(batch_id: str, row: dict[str, Any], new_key: str) -> None:
             )
 
 
-def drain_asset_cleanup(batch_id: str) -> dict[str, Any]:
-    """ลบไฟล์เก่าจาก ledger; ถ้าลบไม่สำเร็จแถวจะค้างให้รันรอบถัดไป"""
+def drain_asset_cleanup(
+    batch_id: str, on_progress: ProgressFn | None = None
+) -> dict[str, Any]:
+    """ตรวจการอ้างอิงและลบไฟล์เก่าจาก ledger เป็นชุด; ล้มเหลวแล้วรันซ้ำได้"""
     with connection() as conn:
         rows = conn.execute(
             """
@@ -212,41 +216,55 @@ def drain_asset_cleanup(batch_id: str) -> dict[str, Any]:
             """,
             (batch_id,),
         ).fetchall()
-    completed = 0
-    failed = 0
-    for row in rows:
-        keys = [k for k in (row["old_pdf_key"], row["old_preview_key"]) if k]
-        try:
-            for key in keys:
-                if not (
-                    key.startswith(f"certificates/{batch_id}/")
-                    or key.startswith(f"previews/{batch_id}/")
-                ):
-                    raise ValueError("คีย์ไฟล์เก่าอยู่นอกรอบนำเข้า")
+    completed = failed = 0
+    for start in range(0, len(rows), 100):
+        chunk = rows[start:start + 100]
+        candidates: list[tuple[Any, list[str]]] = []
+        for row in chunk:
+            keys = list(dict.fromkeys(
+                key for key in (row["old_pdf_key"], row["old_preview_key"]) if key
+            ))
+            if not keys or any(not (
+                key.startswith(f"certificates/{batch_id}/")
+                or key.startswith(f"previews/{batch_id}/")
+            ) for key in keys):
+                failed += 1
+                log.error("คีย์ไฟล์เก่าของ cleanup %s ไม่ถูกต้อง", row["id"])
+                continue
+            candidates.append((row["id"], keys))
+
+        if candidates:
+            keys = list(dict.fromkeys(key for _, pair in candidates for key in pair))
+            try:
                 with connection() as conn:
                     used = conn.execute(
                         """
-                        SELECT 1 FROM certificates
-                        WHERE pdf_key = %s OR preview_key = %s
-                        UNION ALL
-                        SELECT 1 FROM staging_pages
-                        WHERE pdf_key = %s OR preview_key = %s
-                        LIMIT 1
+                        SELECT pdf_key AS key FROM certificates WHERE pdf_key = ANY(%s)
+                        UNION SELECT preview_key FROM certificates WHERE preview_key = ANY(%s)
+                        UNION SELECT pdf_key FROM staging_pages WHERE pdf_key = ANY(%s)
+                        UNION SELECT preview_key FROM staging_pages WHERE preview_key = ANY(%s)
                         """,
-                        (key, key, key, key),
-                    ).fetchone()
-                if used:
-                    raise ValueError("คีย์ไฟล์เก่ายังถูกใช้อยู่")
-            delete_keys(keys)
-            with connection() as conn:
-                conn.execute(
-                    "UPDATE asset_cleanup SET completed_at = NOW() WHERE id = %s",
-                    (row["id"],),
-                )
-            completed += 1
-        except Exception:
-            failed += 1
-            log.exception("ลบไฟล์เก่าของ cleanup %s ไม่สำเร็จ", row["id"])
+                        (keys, keys, keys, keys),
+                    ).fetchall()
+                referenced = {row["key"] for row in used}
+                ready = [(row_id, pair) for row_id, pair in candidates
+                         if not referenced.intersection(pair)]
+                if ready:
+                    delete_keys(list(dict.fromkeys(key for _, pair in ready for key in pair)))
+                    with connection() as conn:
+                        conn.execute(
+                            "UPDATE asset_cleanup SET completed_at = NOW() WHERE id = ANY(%s::uuid[])",
+                            ([row_id for row_id, _ in ready],),
+                        )
+                    completed += len(ready)
+                failed += len(candidates) - len(ready)
+            except Exception:
+                failed += len(candidates)
+                log.exception("ลบไฟล์เก่าชุดที่เริ่มจาก cleanup %s ไม่สำเร็จ", chunk[0]["id"])
+        if on_progress:
+            on_progress({"stage": "cleanup", "done": min(start + len(chunk), len(rows)),
+                         "total": len(rows), "cleanupCompleted": completed,
+                         "pendingCleanup": failed})
     return {"completed": completed, "pendingCleanup": failed}
 
 
@@ -269,7 +287,7 @@ def finalize_matched_assets(
                 "unresolved": _unresolved_count(batch_id),
                 "pendingCleanup": pending_cleanup, "dryRun": True}
 
-    cleanup = drain_asset_cleanup(batch_id)
+    cleanup = drain_asset_cleanup(batch_id, on_progress)
     converted = 0
     failures: list[dict[str, str]] = []
     bytes_before = bytes_after = 0
@@ -291,8 +309,9 @@ def finalize_matched_assets(
             if use_candidate:
                 data = download_bytes(new_key)
                 validate_webp(data)
+                source_size = None
             else:
-                data = (
+                data, source_size = (
                     _render_from_pdf(source_key) if row["source_pdf_key"]
                     else _render_from_webp(source_key)
                 )
@@ -304,10 +323,8 @@ def finalize_matched_assets(
             _switch_to_webp(batch_id, row, new_key)
             converted += 1
             bytes_after += len(data)
-            try:
-                bytes_before += int(head_object(source_key).get("ContentLength", 0))
-            except Exception:
-                pass  # ใช้รายงานขนาดเท่านั้น; การลบจริงทำจาก cleanup ledger
+            if source_size is not None:
+                bytes_before += source_size
         except Exception as exc:
             log.exception("แปลงใบ %s ไม่สำเร็จ", row["page_id"])
             failures.append({"pageId": row["page_id"], "reason": str(exc)[:200]})
@@ -328,7 +345,7 @@ def finalize_matched_assets(
             on_progress({"stage": "webp", "done": index, "total": len(rows),
                          "converted": converted, "failed": len(failures)})
 
-    after_cleanup = drain_asset_cleanup(batch_id)
+    after_cleanup = drain_asset_cleanup(batch_id, on_progress)
     return {
         "total": len(rows), "converted": converted, "failed": len(failures),
         "unresolved": _unresolved_count(batch_id),
