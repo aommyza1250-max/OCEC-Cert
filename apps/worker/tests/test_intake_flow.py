@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+import app.tasks.finalize_webp as finalize_module
 import app.tasks.split as split_module
 from app.db import connection, new_id
 from app.storage import upload_bytes
@@ -109,6 +110,36 @@ def upload_zip(batch_id: str, files: dict[str, bytes]) -> dict:
     upload_bytes(key, make_zip(files), "application/zip")
     payload = {"kind": "zip", "zipKey": key, "fileName": "certs.zip"}
     return run_split(batch_id, make_job(batch_id, "SPLIT", payload), noop, payload)
+
+
+def test_นำเข้าใหม่เรนเดอร์รูปเต็มครั้งเดียวแล้วลบ_pdf_หลังจับคู่(db, monkeypatch):
+    batch = make_batch()
+    use_roster(batch, SOMCHAI)
+    calls = []
+    original = split_module.render_webp
+
+    def tracked(page, dpi, quality):
+        calls.append((dpi, quality))
+        return original(page, dpi, quality)
+
+    monkeypatch.setattr(split_module, "render_webp", tracked)
+    monkeypatch.setattr(finalize_module, "render_webp", tracked)
+    upload_zip(batch, {"online/Gold/a.pdf": pdf(page_of(SOMCHAI))})
+
+    assert calls == [(150, 85)]
+    with connection() as conn:
+        cert = conn.execute(
+            "SELECT c.pdf_key, c.preview_key, sp.pdf_key AS staging_pdf_key, "
+            "sp.preview_key AS staging_preview_key FROM certificates c "
+            "JOIN staging_pages sp ON sp.id = c.staging_page_id WHERE c.batch_id = %s",
+            (batch,),
+        ).fetchone()
+    assert cert["pdf_key"] is None and cert["staging_pdf_key"] is None
+    assert cert["preview_key"] == cert["staging_preview_key"]
+    assert "/d150/q85/" in cert["preview_key"]
+    assert cert["preview_key"] in db.objects
+    assert len([key for key in db.objects if key.startswith(f"previews/{batch}/")]) == 1
+    assert not [key for key in db.objects if key.startswith(f"certificates/{batch}/")]
 
 
 def pdf(*entries: dict) -> bytes:
@@ -467,10 +498,13 @@ def test_งานที่พังกลางทางย้อนได้�
     with pytest.raises(RuntimeError):
         run_split(batch, job, noop, payload)
     assert len(pages(batch)) == 1  # ทำไปได้ครึ่งทาง
+    legacy_key = f"previews/{batch}/final/q85/{job}/{pages(batch)[0]['id']}.webp"
+    db.objects[legacy_key] = b"old interrupted output"
 
     rollback_job_outputs(batch, job)
     assert pages(batch) == []
     assert not [k for k in db.objects if f"/{job}/" in k]
+    assert legacy_key not in db.objects
 
     monkeypatch.setattr(split_module, "render_webp", real)
     run_split(batch, job, noop, payload)

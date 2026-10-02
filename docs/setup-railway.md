@@ -152,7 +152,7 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://cert.example.co
 ## ตัวแปรเพิ่มเติมและค่าใช้จ่าย
 
 - Web: `RETENTION_MONTHS=24`, `SEARCH_RATE_LIMIT_PER_MIN=300`, `LOGIN_RATE_LIMIT_PER_MIN=10` เป็นค่าปริยาย
-- Worker: `RETENTION_ENABLED=false`, `SOURCE_ZIP_KEEP_DAYS=0`, `PREVIEW_DPI=72`, `PREVIEW_QUALITY=75`, `POLL_INTERVAL_SEC=2.0`, `MAX_ATTEMPTS=3`
+- Worker: `RETENTION_ENABLED=false`, `SOURCE_ZIP_KEEP_DAYS=0`, `CERT_IMAGE_DPI=150`, `CERT_IMAGE_QUALITY=85`, `POLL_INTERVAL_SEC=2.0`, `MAX_ATTEMPTS=3`
 - `PORT` ของ worker ต้องตรงกับ `WORKER_BASE_URL`; Dockerfile ใช้ `${PORT:-8000}`
 - `NEXT_PUBLIC_SITE_URL` อยู่ในไฟล์ตัวอย่างแต่ไม่มีการอ่านใน application ปัจจุบัน ไม่ใช้แทน CORS และไม่รับประกันการตั้ง runtime NEXT_PUBLIC จะเปลี่ยนค่าที่ build ไปแล้ว
 - กฎ parser เก็บใน `app/certificate_profiles/` ไม่ใช้ NAME_ANCHOR หรือ CERT_NO_PATTERN เป็น env แล้ว

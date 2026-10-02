@@ -1,5 +1,7 @@
 # WebP-only certificate delivery and legacy migration
 
+> Update 2026-10-02: The current output is 150 DPI at quality 85. Split renders that full WebP once for each eligible page; matching verifies the existing image before deleting the split PDF. The migration also downsizes previously finalized 180 DPI WebPs, including those already at quality 85. The 180 DPI and preliminary-preview details below describe the original rollout.
+
 Date: 2026-10-01
 
 ## Goal and scope

@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import os
+import re
 import tempfile
 from typing import Any, Callable
 
@@ -19,14 +20,16 @@ from PIL import Image
 from ..config import settings
 from ..db import connection, new_id
 from ..storage import (
+    current_webp_pattern,
     delete_keys,
     download_bytes,
     download_to_file,
     final_webp_key,
     head_object,
+    is_current_webp_key,
     upload_bytes,
 )
-from .render_preview import render_webp
+from .render_preview import render_webp, validate_webp
 
 log = logging.getLogger(__name__)
 ProgressFn = Callable[[dict[str, Any]], None]
@@ -50,12 +53,16 @@ def _pending_pages(batch_id: str) -> list[dict[str, Any]]:
               AND sp.match_status = 'MATCHED'
               AND (
                 NULLIF(c.pdf_key, '') IS NOT NULL
-                OR (c.preview_key LIKE %s AND c.preview_key NOT LIKE %s)
+                OR NULLIF(sp.pdf_key, '') IS NOT NULL
+                OR c.preview_key IS NULL
+                OR c.preview_key NOT LIKE %s
+                OR sp.preview_key IS DISTINCT FROM c.preview_key
               )
             ORDER BY sp.page_number
             """,
-            (batch_id, f"previews/{batch_id}/final/%.webp",
-             f"previews/{batch_id}/final/q{settings().cert_image_quality}/%.webp"),
+            (batch_id, current_webp_pattern(
+                batch_id, settings().cert_image_dpi, settings().cert_image_quality
+            )),
         ).fetchall()
 
 
@@ -81,10 +88,7 @@ def _render_from_pdf(pdf_key: str) -> bytes:
                 raise ValueError(f"PDF รายใบมี {doc.page_count} หน้า แทนที่จะมี 1 หน้า")
             data = render_webp(doc[0], cfg.cert_image_dpi, cfg.cert_image_quality)
 
-    with Image.open(io.BytesIO(data)) as image:
-        if image.format != "WEBP" or image.width < 1 or image.height < 1:
-            raise ValueError("รูปที่แปลงมาไม่ใช่ WebP ที่เปิดได้")
-        image.verify()
+    validate_webp(data)
     return data
 
 
@@ -94,13 +98,19 @@ def _render_from_webp(key: str) -> bytes:
         if source.format != "WEBP":
             raise ValueError("ไฟล์รูปเดิมไม่ใช่ WebP จึงไม่สามารถบีบอัดซ้ำได้")
         image = source.convert("RGB")
+        # คีย์รุ่นเก่าที่ไม่มี d<DPI> สร้างด้วยค่าเดิม 180 DPI
+        match = re.search(r"/d(\d+)/q\d+/", key)
+        source_dpi = int(match.group(1)) if match else 180
+        if cfg.cert_image_dpi < source_dpi:
+            size = (
+                max(1, round(image.width * cfg.cert_image_dpi / source_dpi)),
+                max(1, round(image.height * cfg.cert_image_dpi / source_dpi)),
+            )
+            image = image.resize(size, Image.Resampling.LANCZOS)
         buffer = io.BytesIO()
         image.save(buffer, format="WEBP", quality=cfg.cert_image_quality, method=4)
         data = buffer.getvalue()
-    with Image.open(io.BytesIO(data)) as image:
-        if image.format != "WEBP" or image.width < 1 or image.height < 1:
-            raise ValueError("รูป WebP ที่บีบอัดซ้ำเปิดไม่ได้")
-        image.verify()
+    validate_webp(data)
     return data
 
 
@@ -173,13 +183,23 @@ def _switch_to_webp(batch_id: str, row: dict[str, Any], new_key: str) -> None:
             (new_key, row["certificate_id"]),
         )
         _translate_approved_snapshot(conn, row, new_key)
-        conn.execute(
-            """
-            INSERT INTO asset_cleanup (id, batch_id, old_pdf_key, old_preview_key)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (new_id(), batch_id, row["source_pdf_key"], row["preview_key"]),
-        )
+        old_pdfs = list(dict.fromkeys(
+            key for key in (row["certificate_pdf_key"], row["staging_pdf_key"]) if key
+        ))
+        old_previews = list(dict.fromkeys(
+            key for key in (row["preview_key"], row["staging_preview_key"])
+            if key and key != new_key
+        ))
+        for index in range(max(len(old_pdfs), len(old_previews))):
+            conn.execute(
+                """
+                INSERT INTO asset_cleanup (id, batch_id, old_pdf_key, old_preview_key)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (new_id(), batch_id,
+                 old_pdfs[index] if index < len(old_pdfs) else None,
+                 old_previews[index] if index < len(old_previews) else None),
+            )
 
 
 def drain_asset_cleanup(batch_id: str) -> dict[str, Any]:
@@ -254,14 +274,30 @@ def finalize_matched_assets(
     failures: list[dict[str, str]] = []
     bytes_before = bytes_after = 0
     for index, row in enumerate(rows, start=1):
-        quality = settings().cert_image_quality
-        new_key = final_webp_key(batch_id, row["page_id"], revision, quality)
+        cfg = settings()
+        quality = cfg.cert_image_quality
+        candidate_key = row["preview_key"]
+        use_candidate = is_current_webp_key(
+            batch_id, candidate_key, cfg.cert_image_dpi, quality
+        )
+        new_key = candidate_key if use_candidate else final_webp_key(
+            batch_id, row["page_id"], revision, quality, cfg.cert_image_dpi
+        )
+        created_new = False
         try:
-            source_key = row["source_pdf_key"] or row["preview_key"]
+            source_key = row["source_pdf_key"] or row["preview_key"] or row["staging_preview_key"]
             if not source_key:
                 raise ValueError("ไม่พบทั้ง PDF และ WebP ต้นทาง")
-            data = _render_from_pdf(source_key) if row["source_pdf_key"] else _render_from_webp(source_key)
-            upload_bytes(new_key, data, "image/webp")
+            if use_candidate:
+                data = download_bytes(new_key)
+                validate_webp(data)
+            else:
+                data = (
+                    _render_from_pdf(source_key) if row["source_pdf_key"]
+                    else _render_from_webp(source_key)
+                )
+                upload_bytes(new_key, data, "image/webp")
+                created_new = True
             metadata = head_object(new_key)
             if metadata.get("ContentLength") != len(data) or metadata.get("ContentType") != "image/webp":
                 raise ValueError("ตรวจไฟล์ WebP หลังอัปโหลดไม่ผ่าน")
@@ -276,15 +312,18 @@ def finalize_matched_assets(
             log.exception("แปลงใบ %s ไม่สำเร็จ", row["page_id"])
             failures.append({"pageId": row["page_id"], "reason": str(exc)[:200]})
             # ถ้าแถวไม่สลับแล้วรูปใหม่ไม่ถูกอ้าง ลบทิ้ง; ไฟล์เดิมยังอยู่
-            try:
-                with connection() as conn:
-                    active = conn.execute(
-                        "SELECT 1 FROM certificates WHERE preview_key = %s LIMIT 1", (new_key,)
-                    ).fetchone()
-                if not active:
-                    delete_keys([new_key])
-            except Exception:
-                log.exception("ลบรูปที่สร้างค้างไม่สำเร็จ: %s", new_key)
+            if created_new:
+                try:
+                    with connection() as conn:
+                        active = conn.execute(
+                            "SELECT 1 FROM certificates WHERE preview_key = %s "
+                            "UNION ALL SELECT 1 FROM staging_pages WHERE preview_key = %s LIMIT 1",
+                            (new_key, new_key),
+                        ).fetchone()
+                    if not active:
+                        delete_keys([new_key])
+                except Exception:
+                    log.exception("ลบรูปที่สร้างค้างไม่สำเร็จ: %s", new_key)
         if index % 25 == 0 or index == len(rows):
             on_progress({"stage": "webp", "done": index, "total": len(rows),
                          "converted": converted, "failed": len(failures)})

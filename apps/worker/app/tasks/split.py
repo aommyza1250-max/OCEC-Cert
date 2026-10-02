@@ -35,20 +35,21 @@ from ..config import settings
 from ..db import connection, new_id
 from ..normalize import name_sort_key, normalize_name
 from ..storage import (
+    candidate_webp_key,
     certificate_pdf_key,
     certificate_stem,
     delete_keys,
     download_to_file,
     final_webp_key,
+    head_object,
     job_output_prefixes,
     list_keys,
-    preview_key,
     unique_stem,
     upload_bytes,
 )
 from .extract import page_fingerprint, page_text
 from .match import run_match
-from .render_preview import render_webp
+from .render_preview import render_webp, validate_webp
 from .zip_bundle import Bundle, ZipLayoutError, open_bundles, preflight_zip
 
 log = logging.getLogger(__name__)
@@ -225,9 +226,16 @@ def _process_page(
         )
         cfg = settings()
         pdf_key = certificate_pdf_key(batch["id"], stem, job_id)
-        prev_key = preview_key(batch["id"], stem, job_id)
+        prev_key = candidate_webp_key(
+            batch["id"], stem, job_id, cfg.cert_image_dpi, cfg.cert_image_quality
+        )
         upload_bytes(pdf_key, _single_page_pdf(doc, index), "application/pdf")
-        upload_bytes(prev_key, render_webp(page, cfg.preview_dpi, cfg.preview_quality), "image/webp")
+        image = render_webp(page, cfg.cert_image_dpi, cfg.cert_image_quality)
+        validate_webp(image)
+        upload_bytes(prev_key, image, "image/webp")
+        metadata = head_object(prev_key)
+        if metadata.get("ContentLength") != len(image) or metadata.get("ContentType") != "image/webp":
+            raise ValueError("ตรวจไฟล์ WebP หลังอัปโหลดไม่ผ่าน")
         stats["pagesSplit"] += 1
         stats["byAward"][bundle.award] = stats["byAward"].get(bundle.award, 0) + 1
         if bundle.mode:
@@ -395,8 +403,16 @@ def rollback_job_outputs(batch_id: str, job_id: str) -> int:
 
     keys = [f["key"] for prefix in job_output_prefixes(batch_id, job_id) for f in list_keys(prefix)]
     keys.extend(
-        final_webp_key(batch_id, str(row["id"]), job_id, settings().cert_image_quality)
+        final_webp_key(
+            batch_id, str(row["id"]), job_id,
+            settings().cert_image_quality, settings().cert_image_dpi,
+        )
         for row in removed
+    )
+    # งานที่ค้างจากรุ่น 180 DPI อาจมีรูป final ใต้คีย์เดิมก่อนเปลี่ยนรูปแบบคีย์
+    keys.extend(
+        f"previews/{batch_id}/final/q{quality}/{job_id}/{row['id']}.webp"
+        for row in removed for quality in (85, 90)
     )
     delete_keys(keys)
     if removed or keys:

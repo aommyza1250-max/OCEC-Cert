@@ -1,5 +1,7 @@
 # WebP-only Certificates Implementation Plan
 
+> Update 2026-10-02: Current intake renders one 150 DPI / quality 85 WebP during split and removes the split PDF only after matching and verification. The migration must also find and resize older 180 DPI WebPs that already use quality 85. The original 180 DPI steps below remain as the rollout record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Keep PDF intake and matching unchanged, then make every matched certificate use one sharp WebP for preview and download and delete its split PDF after verification; provide a temporary admin migration for existing matched certificates.

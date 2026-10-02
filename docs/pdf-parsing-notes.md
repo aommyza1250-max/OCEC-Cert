@@ -51,7 +51,8 @@ Cert No: 900101                                         ← เลขผู้�
 
 ตัวอย่าง HKIMO ด้านบนเป็นผลสำรวจเฉพาะชุดเดิม ไม่ใช่โครงทุกใบ BBB ไม่มี anchor แบบเดียวกัน Heat ใช้ from เป็นโรงเรียน Final เป็นประเทศ ขาดหลักฐานประเทศต้องค้าง NATIONALITY_UNVERIFIED ไม่เดาเป็นไทย
 
-ค่ารูป preview ที่ยังตั้งผ่าน env ได้คือ PREVIEW_DPI=72 และ PREVIEW_QUALITY=75
+รูป WebP สำหรับดูและดาวน์โหลดใช้ `CERT_IMAGE_DPI=150` และ `CERT_IMAGE_QUALITY=85`
+ส่วน `PREVIEW_DPI=72` กับ `PREVIEW_QUALITY=75` ใช้เฉพาะสคริปต์สร้าง preview รุ่นเก่าของหน้าที่ยังจับคู่ไม่ได้
 
 ## วิธีสำรวจไฟล์ของรายการสอบใหม่
 

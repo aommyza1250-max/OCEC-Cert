@@ -25,7 +25,7 @@ from typing import Any, Callable
 from ..certificate_profiles import UnsupportedProfile, get_profile
 from ..config import settings
 from ..db import connection
-from ..storage import delete_keys, list_keys
+from ..storage import current_webp_pattern, delete_keys, list_keys
 
 log = logging.getLogger(__name__)
 
@@ -126,12 +126,16 @@ def check_blockers(batch_id: str) -> list[str]:
 
         not_finalized = conn.execute(
             """
-            SELECT COUNT(*) AS n FROM certificates
-            WHERE batch_id = %s AND files_deleted_at IS NULL
-              AND (pdf_key IS NOT NULL OR preview_key IS NULL
-                   OR preview_key NOT LIKE %s)
+            SELECT COUNT(*) AS n FROM certificates c
+            JOIN staging_pages sp ON sp.id = c.staging_page_id
+            WHERE c.batch_id = %s AND c.files_deleted_at IS NULL
+              AND (c.pdf_key IS NOT NULL OR sp.pdf_key IS NOT NULL
+                   OR c.preview_key IS NULL OR c.preview_key NOT LIKE %s
+                   OR sp.preview_key IS DISTINCT FROM c.preview_key)
             """,
-            (batch_id, f"previews/{batch_id}/final/q{settings().cert_image_quality}/%.webp"),
+            (batch_id, current_webp_pattern(
+                batch_id, settings().cert_image_dpi, settings().cert_image_quality
+            )),
         ).fetchone()
         if not_finalized["n"]:
             blockers.append(f"ยังมีเกียรติบัตรที่แปลงเป็น WebP ไม่สำเร็จ {not_finalized['n']} ใบ")

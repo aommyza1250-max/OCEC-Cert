@@ -1,4 +1,4 @@
-"""สร้างรูปตัวอย่างใหม่จาก PDF ใบเดี่ยวที่เก็บไว้แล้ว
+"""สร้างรูปตัวอย่างเก่าของหน้าที่ยังจับคู่ไม่ได้ใหม่จาก PDF รายใบ
 
 ใช้ตอนเปลี่ยนค่า PREVIEW_DPI / PREVIEW_QUALITY แล้วอยากให้ของที่นำเข้าไปแล้วเปลี่ยนตาม
 (รูปสร้างครั้งเดียวตอนนำเข้า ไม่ได้สร้างใหม่ทุกครั้งที่เปิดหน้าเว็บ)
@@ -7,12 +7,11 @@
     python scripts/rerender_previews.py --batch <id>
     python scripts/rerender_previews.py --all
 
-อ่าน PDF ใบเดี่ยวจาก R2 ทีละไฟล์แล้วเขียนรูปทับที่ key เดิม
-ไม่แตะฐานข้อมูลเลย เพราะ key ไม่เปลี่ยน — รันซ้ำได้ไม่มีผลข้างเคียง
+ใช้เฉพาะ preview รุ่นเก่าที่ไม่ได้อยู่ในชุดรูปเต็มปัจจุบัน
+รูปของใบที่จับคู่แล้วให้ใช้ปุ่มย้ายรูปเก่าในหน้าแอดมิน เพื่อสลับคีย์และลบ PDF อย่างปลอดภัย
 """
 
 import argparse
-import io
 import sys
 
 import pymupdf
@@ -32,7 +31,7 @@ def main() -> int:
     args = parser.parse_args()
 
     cfg = settings()
-    rows = _load_pages(args.batch)
+    rows = [row for row in _load_pages(args.batch) if "/final/" not in row["preview_key"]]
     if not rows:
         print("ไม่พบหน้าที่มีทั้งไฟล์ PDF และรูปตัวอย่าง")
         return 0
@@ -68,8 +67,9 @@ def main() -> int:
 
 def _load_pages(batch_id: str | None) -> list[dict]:
     sql = """
-        SELECT pdf_key, preview_key FROM staging_pages
+        SELECT batch_id::text, pdf_key, preview_key FROM staging_pages
         WHERE pdf_key IS NOT NULL AND preview_key IS NOT NULL
+          AND match_status NOT IN ('MATCHED', 'DISCARDED', 'SUPERSEDED')
     """
     params: tuple = ()
     if batch_id:

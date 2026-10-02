@@ -70,7 +70,7 @@ export function WebpMigrationPanel({ batchId, processing }: { batchId: string; p
   return (
     <section className="rounded-2xl border border-hairline bg-card p-4 text-sm">
       <h3 className="font-semibold">ย้ายรูปเก่าเป็น WebP คุณภาพปัจจุบัน</h3>
-      <p className="mt-1 text-ink-soft">ตรวจจำนวนก่อน ระบบจะแปลง PDF ที่ยังเหลือ หรือบีบอัด WebP รุ่นเก่าซ้ำ แล้วสลับไฟล์ก่อนลบรูปเดิม</p>
+      <p className="mt-1 text-ink-soft">ตรวจจำนวนก่อน ระบบจะแปลง PDF ที่ยังเหลือหรือปรับขนาด WebP รุ่นเก่า แล้วตรวจรูป สลับไฟล์ และลบไฟล์เก่าที่เลิกใช้</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={running || processing} onClick={() => queue(true)} className="min-h-10 rounded-xl border border-brand-line px-3 font-medium text-brand disabled:opacity-50">ตรวจจำนวน</button>
         <button type="button" disabled={running || processing} onClick={() => queue(false)} className="min-h-10 rounded-xl bg-brand px-3 font-medium text-white disabled:opacity-50">เริ่มย้าย / ลองใหม่</button>
@@ -78,7 +78,7 @@ export function WebpMigrationPanel({ batchId, processing }: { batchId: string; p
       {running && <p className="mt-2 text-ink-soft">กำลังทำงาน…</p>}
       {result && <div className="mt-2 text-ink-soft">
         <p>{result.dryRun ? "รอย้าย" : "แปลงแล้ว"} {result.dryRun ? result.total ?? 0 : result.converted ?? 0} ใบ · ล้มเหลว {result.failed ?? 0} · รอลบไฟล์เก่า {result.pendingCleanup ?? 0} · หน้าที่ยังต้องจับคู่ {result.unresolved ?? 0}</p>
-        {!result.dryRun && result.bytesAfter !== undefined && <p>ขนาดรูปใหม่รวม {(result.bytesAfter / 1024 / 1024).toFixed(1)} MB จาก PDF {(result.bytesBefore ?? 0) / 1024 / 1024 > 0 ? ((result.bytesBefore ?? 0) / 1024 / 1024).toFixed(1) : "?"} MB</p>}
+        {!result.dryRun && result.bytesAfter !== undefined && <p>ขนาดรูปหลังย้ายรวม {(result.bytesAfter / 1024 / 1024).toFixed(1)} MB จากไฟล์เดิม {(result.bytesBefore ?? 0) / 1024 / 1024 > 0 ? ((result.bytesBefore ?? 0) / 1024 / 1024).toFixed(1) : "?"} MB</p>}
         {result.failures?.map((failure) => <p key={failure.pageId} className="text-danger-ink">หน้า {failure.pageId}: {failure.reason}</p>)}
       </div>}
       {error && <p className="mt-2 text-danger-ink">{error}</p>}

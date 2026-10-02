@@ -12,9 +12,9 @@ def test_webp_download_resolution() -> None:
     with pymupdf.open() as doc:
         page = doc.new_page(width=842, height=595)
         page.insert_text((72, 72), "CERTIFICATE 123")
-        data = render_webp(page, 180, 85)
+        data = render_webp(page, 150, 85)
 
     with Image.open(io.BytesIO(data)) as image:
         assert image.format == "WEBP"
-        assert image.width >= 2100
-        assert image.height >= 1480
+        assert 1750 <= image.width <= 1760
+        assert 1235 <= image.height <= 1250
