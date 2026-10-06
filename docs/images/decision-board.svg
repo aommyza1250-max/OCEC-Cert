@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="500" viewBox="0 0 1040 500" role="img" aria-labelledby="title desc">
+  <title id="title">ภาพสรุปรายการที่ต้องให้แอดมินตัดสิน</title>
+  <desc id="desc">รายการตัวอย่างแสดงชื่อและเลขที่อ่านได้ รูปตัวอย่าง ป้ายปัญหา และปุ่มทางเลือกของแอดมิน</desc>
+  <rect width="1040" height="500" rx="28" fill="#f5f8fc"/>
+  <rect x="36" y="34" width="968" height="430" rx="21" fill="#fff" stroke="#d8e1eb" stroke-width="2"/>
+  <text x="70" y="84" font-family="Noto Sans Thai, sans-serif" font-size="26" font-weight="700" fill="#173f70">หน้าที่ต้องตัดสิน</text>
+  <text x="70" y="114" font-family="Noto Sans Thai, sans-serif" font-size="15" fill="#596b7e">ตรวจรูปตัวอย่างและข้อมูลบนใบ เทียบกับรายชื่อก่อนเลือกการดำเนินการ</text>
+  <rect x="70" y="145" width="214" height="178" rx="12" fill="#f1f5f9" stroke="#cbd6e2"/>
+  <rect x="90" y="163" width="174" height="142" rx="8" fill="#fff" stroke="#cbd6e2"/>
+  <path d="M105 284 L145 243 L177 264 L203 217 L250 281" fill="none" stroke="#9baec2" stroke-width="4"/>
+  <text x="177" y="188" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="13" fill="#72869b">ตัวอย่างหน้า</text>
+  <rect x="320" y="148" width="193" height="32" rx="16" fill="#fff2d5"/><text x="416" y="170" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="14" font-weight="700" fill="#74520b">ชื่อไม่ตรง</text>
+  <text x="320" y="213" font-family="Noto Sans Thai, sans-serif" font-size="16" fill="#33485e">ชื่อบนใบ · ข้อมูลตัวอย่าง</text>
+  <text x="320" y="243" font-family="Noto Sans Thai, sans-serif" font-size="16" fill="#33485e">เลขบนใบ · XXXXX</text>
+  <text x="320" y="273" font-family="Noto Sans Thai, sans-serif" font-size="15" fill="#596b7e">เทียบกับเลขและชื่อในรายชื่อสอบ</text>
+  <rect x="618" y="147" width="310" height="43" rx="11" fill="#173f70"/><text x="773" y="175" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="15" font-weight="700" fill="#fff">คนเดียวกัน — จับคู่ด้วยมือ</text>
+  <rect x="618" y="204" width="310" height="43" rx="11" fill="#fff" stroke="#9db3cb" stroke-width="2"/><text x="773" y="232" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="15" fill="#33485e">แก้ชื่อในรายชื่อ</text>
+  <rect x="618" y="261" width="310" height="43" rx="11" fill="#fff" stroke="#c98787" stroke-width="2"/><text x="773" y="289" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="15" fill="#8b343a">ทิ้งหน้านี้</text>
+  <rect x="70" y="351" width="858" height="74" rx="14" fill="#fff2d5"/>
+  <text x="499" y="382" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="17" font-weight="700" fill="#74520b">แต่ละสถานะมีตัวเลือกต่างกัน</text>
+  <text x="499" y="408" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#725d2a">เมื่อไม่มั่นใจ ให้หยุดไว้และตรวจหลักฐานจากต้นทางก่อนยืนยัน</text>
+</svg>

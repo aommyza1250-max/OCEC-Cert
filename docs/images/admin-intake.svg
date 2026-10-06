@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="340" viewBox="0 0 1040 340" role="img" aria-labelledby="title desc">
+  <title id="title">สามขั้นตอนการนำเข้าเกียรติบัตร</title>
+  <desc id="desc">ขั้นหนึ่งอัปโหลดรายชื่อ Excel ขั้นสองอัปโหลด ZIP และจับคู่ ขั้นสามตรวจรายการค้างและเผยแพร่</desc>
+  <rect width="1040" height="340" rx="28" fill="#f5f8fc"/>
+  <g font-family="Noto Sans Thai, sans-serif">
+    <rect x="32" y="46" width="300" height="220" rx="20" fill="#fff" stroke="#9db3cb" stroke-width="2"/>
+    <circle cx="78" cy="92" r="22" fill="#173f70"/><text x="78" y="100" text-anchor="middle" font-size="19" font-weight="700" fill="#fff">1</text>
+    <text x="112" y="98" font-size="22" font-weight="700" fill="#173f70">รายชื่อ</text><text x="60" y="145" font-size="17" fill="#33485e">อัปโหลด Excel (.xlsx)</text><text x="60" y="176" font-size="15" fill="#596b7e">ตรวจยอดทั้งหมด / Online / Onsite</text><text x="60" y="207" font-size="15" fill="#596b7e">ยืนยันใช้รายชื่อชุดนี้</text>
+    <path d="M348 156 H386" stroke="#91a4b8" stroke-width="4"/><path d="M377 147 L389 156 L377 165" fill="none" stroke="#91a4b8" stroke-width="4"/>
+    <rect x="400" y="46" width="300" height="220" rx="20" fill="#fff" stroke="#9db3cb" stroke-width="2"/>
+    <circle cx="446" cy="92" r="22" fill="#173f70"/><text x="446" y="100" text-anchor="middle" font-size="19" font-weight="700" fill="#fff">2</text>
+    <text x="480" y="98" font-size="22" font-weight="700" fill="#173f70">เกียรติบัตร</text><text x="428" y="145" font-size="17" fill="#33485e">อัปโหลด ZIP (.zip)</text><text x="428" y="176" font-size="15" fill="#596b7e">ตรวจโครงสร้างและแยก PDF</text><text x="428" y="207" font-size="15" fill="#596b7e">ระบบจับคู่กับรายชื่อ</text>
+    <path d="M716 156 H754" stroke="#91a4b8" stroke-width="4"/><path d="M745 147 L757 156 L745 165" fill="none" stroke="#91a4b8" stroke-width="4"/>
+    <rect x="768" y="46" width="240" height="220" rx="20" fill="#fff" stroke="#9db3cb" stroke-width="2"/>
+    <circle cx="814" cy="92" r="22" fill="#173f70"/><text x="814" y="100" text-anchor="middle" font-size="19" font-weight="700" fill="#fff">3</text>
+    <text x="848" y="98" font-size="22" font-weight="700" fill="#173f70">ตรวจและเผยแพร่</text><text x="796" y="145" font-size="16" fill="#33485e">ตัดสินรายการค้าง</text><text x="796" y="176" font-size="15" fill="#596b7e">ตรวจยอดผู้พร้อม/ผู้ค้าง</text><text x="796" y="207" font-size="15" fill="#596b7e">เผยแพร่ให้ค้นหาได้</text>
+    <text x="520" y="307" text-anchor="middle" font-size="15" fill="#596b7e">ทำตามลำดับนี้ทุกครั้ง · ระหว่างเผยแพร่ ระบบล็อกการแก้ไข</text>
+  </g>
+</svg>

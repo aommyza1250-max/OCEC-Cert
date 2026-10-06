@@ -179,7 +179,7 @@ function HowToUse() {
   const steps = [
     { n: 1, title: "พิมพ์ชื่อภาษาอังกฤษ", detail: "ตามที่พิมพ์บนเกียรติบัตร" },
     { n: 2, title: "กดค้นหา", detail: "ขึ้นเกียรติบัตรทุกใบของคนนั้น" },
-    { n: 3, title: "กดบันทึกไฟล์", detail: "ได้ไฟล์ PDF สั่งพิมพ์ได้" },
+    { n: 3, title: "กดบันทึกไฟล์", detail: "ได้ไฟล์รูปภาพแบบ WebP ใช้งานต่อได้ทุกรูปแบบ" },
   ];
 
   return (
@@ -396,7 +396,7 @@ function SameNameHint() {
   return (
     <p className="flex items-start gap-2 rounded-xl bg-gold-bg px-3 py-2.5 text-sm text-gold-ink sm:px-4 sm:py-3 sm:text-base">
       <InfoIcon className="mt-0.5 h-5 w-5 shrink-0" />
-      มีผู้เข้าสอบชื่อคล้ายกันหลายคน เลือกให้ตรงกับลูกคุณก่อนบันทึกไฟล์
+      ตรวจสอบรายชื่อให้ถูกต้อง ก่อนบันทึกไฟล์
     </p>
   );
 }

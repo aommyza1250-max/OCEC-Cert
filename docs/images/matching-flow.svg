@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="530" viewBox="0 0 1040 530" role="img" aria-labelledby="title desc">
+  <title id="title">ลำดับการประมวลผลและจับคู่เกียรติบัตร</title>
+  <desc id="desc">ระบบตรวจ ZIP แยกรางวัลและข้อมูลบน PDF เทียบกับรายชื่อ แล้วรับเฉพาะรายการมั่นใจ ส่วนกรณีไม่ชัดจะแจ้งให้แอดมินตัดสิน</desc>
+  <rect width="1040" height="530" rx="28" fill="#f5f8fc"/>
+  <text x="520" y="57" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="28" font-weight="700" fill="#173f70">ระบบทำงานตามลำดับนี้</text>
+  <g font-family="Noto Sans Thai, sans-serif" text-anchor="middle">
+    <rect x="62" y="103" width="220" height="96" rx="17" fill="#fff" stroke="#9db3cb" stroke-width="2"/><text x="172" y="143" font-size="18" font-weight="700" fill="#173f70">1 · ตรวจ ZIP</text><text x="172" y="173" font-size="14" fill="#596b7e">โครงสร้างและชื่อรางวัล</text>
+    <path d="M293 151 H350" stroke="#91a4b8" stroke-width="4"/><path d="M341 142 L353 151 L341 160" fill="none" stroke="#91a4b8" stroke-width="4"/>
+    <rect x="365" y="103" width="250" height="96" rx="17" fill="#fff" stroke="#9db3cb" stroke-width="2"/><text x="490" y="143" font-size="18" font-weight="700" fill="#173f70">2 · อ่าน PDF ทีละหน้า</text><text x="490" y="173" font-size="14" fill="#596b7e">เลข ชื่อ โรงเรียน รอบ/ปี</text>
+    <path d="M626 151 H683" stroke="#91a4b8" stroke-width="4"/><path d="M674 142 L686 151 L674 160" fill="none" stroke="#91a4b8" stroke-width="4"/>
+    <rect x="698" y="103" width="280" height="96" rx="17" fill="#fff" stroke="#9db3cb" stroke-width="2"/><text x="838" y="143" font-size="18" font-weight="700" fill="#173f70">3 · ตรวจเทียบรายชื่อ</text><text x="838" y="173" font-size="14" fill="#596b7e">เลข ชื่อ และ Online/Onsite</text>
+    <path d="M838 212 V267" stroke="#91a4b8" stroke-width="4"/><path d="M829 258 L838 270 L847 258" fill="none" stroke="#91a4b8" stroke-width="4"/>
+    <rect x="592" y="286" width="386" height="97" rx="17" fill="#e8f4ee" stroke="#8fb9a0" stroke-width="2"/><text x="785" y="327" font-size="18" font-weight="700" fill="#20623b">ข้อมูลตรงและไม่กำกวม</text><text x="785" y="356" font-size="15" fill="#3d6750">จัดเป็นรายการพร้อมตรวจและเผยแพร่</text>
+    <path d="M584 334 H525" stroke="#91a4b8" stroke-width="4"/><path d="M534 325 L522 334 L534 343" fill="none" stroke="#91a4b8" stroke-width="4"/>
+    <rect x="62" y="286" width="445" height="97" rx="17" fill="#fff2d5" stroke="#d6ba74" stroke-width="2"/><text x="284" y="327" font-size="18" font-weight="700" fill="#74520b">ข้อมูลไม่ชัดหรือไม่ตรงกัน</text><text x="284" y="356" font-size="15" fill="#725d2a">สร้างสถานะค้างให้แอดมินตรวจเอง</text>
+    <rect x="62" y="415" width="916" height="65" rx="16" fill="#173f70"/><text x="520" y="455" font-size="19" font-weight="700" fill="#fff">ไม่มีการสร้างผู้เข้าสอบใหม่หรือเดารางวัลโดยอัตโนมัติ</text>
+  </g>
+</svg>

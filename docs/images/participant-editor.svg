@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="520" viewBox="0 0 1040 520" role="img" aria-labelledby="title desc">
+  <title id="title">ภาพสรุปหน้าค้นหาและแก้ไขผู้เข้าสอบรายคน</title>
+  <desc id="desc">หน้ารายชื่อมีช่องค้นหาและตัวกรอง เมื่อเปิดรายคนจะแก้เลข ชื่อ รูปแบบ โรงเรียน ระดับชั้น และจัดการเกียรติบัตรได้</desc>
+  <rect width="1040" height="520" rx="28" fill="#f5f8fc"/>
+  <rect x="34" y="30" width="972" height="460" rx="22" fill="#fff" stroke="#d8e1eb" stroke-width="2"/>
+  <text x="70" y="75" font-family="Noto Sans Thai, sans-serif" font-size="25" font-weight="700" fill="#173f70">ผู้เข้าสอบ · ค้นหาและแก้ไข</text>
+  <rect x="70" y="101" width="365" height="43" rx="10" fill="#fff" stroke="#b9c7d5"/><text x="90" y="129" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#78889a">ชื่อหรือเลขผู้เข้าสอบ</text>
+  <rect x="449" y="101" width="166" height="43" rx="10" fill="#f7f9fc" stroke="#d8e1eb"/><text x="532" y="129" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#596b7e">รูปแบบ / รางวัล</text>
+  <rect x="629" y="101" width="205" height="43" rx="10" fill="#f7f9fc" stroke="#d8e1eb"/><text x="731" y="129" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#596b7e">สถานะ / แหล่งรายชื่อ</text>
+  <rect x="848" y="101" width="122" height="43" rx="10" fill="#173f70"/><text x="909" y="129" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="15" font-weight="700" fill="#fff">ค้นหา</text>
+  <rect x="70" y="167" width="900" height="290" rx="16" fill="#f7f9fc" stroke="#d8e1eb"/>
+  <text x="100" y="207" font-family="Noto Sans Thai, sans-serif" font-size="19" font-weight="700" fill="#173f70">ข้อมูลการสอบ</text>
+  <g font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#596b7e">
+    <text x="100" y="243">เลขผู้เข้าสอบ</text><text x="517" y="243">รูปแบบการสอบ</text><text x="100" y="313">ชื่อ-นามสกุล (อังกฤษ)</text><text x="517" y="313">ชื่อ-นามสกุล (ไทย)</text><text x="100" y="383">โรงเรียน</text><text x="517" y="383">ระดับชั้น</text>
+  </g>
+  <g fill="#fff" stroke="#cbd6e2">
+    <rect x="100" y="253" width="380" height="40" rx="8"/><rect x="517" y="253" width="420" height="40" rx="8"/>
+    <rect x="100" y="323" width="380" height="40" rx="8"/><rect x="517" y="323" width="420" height="40" rx="8"/>
+    <rect x="100" y="393" width="380" height="40" rx="8"/><rect x="517" y="393" width="420" height="40" rx="8"/>
+  </g>
+  <text x="520" y="474" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#596b7e">ส่วนเกียรติบัตรอยู่ถัดจากข้อมูลการสอบ · การแก้ไขจะบันทึกประวัติ</text>
+</svg>

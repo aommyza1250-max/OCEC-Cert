@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="480" viewBox="0 0 960 480" role="img" aria-labelledby="title desc">
+  <title id="title">ภาพสรุปหน้าเว็บค้นหาเกียรติบัตร</title>
+  <desc id="desc">หน้าค้นหามีช่องให้พิมพ์ชื่อภาษาอังกฤษและปุ่มค้นหา ตามด้วยคำแนะนำสามขั้นตอน</desc>
+  <rect width="960" height="480" rx="28" fill="#f5f8fc"/>
+  <rect width="320" height="8" rx="4" fill="#173f70"/><rect x="320" width="320" height="8" fill="#c83e47"/><rect x="640" width="320" height="8" rx="4" fill="#e3b33f"/>
+  <rect x="50" y="38" width="860" height="404" rx="24" fill="#fff" stroke="#d8e1eb" stroke-width="2"/>
+  <text x="86" y="91" font-family="Noto Sans Thai, sans-serif" font-size="24" font-weight="700" fill="#173f70">OCEC · ระบบค้นหาเกียรติบัตร</text>
+  <text x="480" y="148" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="34" font-weight="700" fill="#173f70">ค้นหาเกียรติบัตร</text>
+  <text x="480" y="184" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="18" fill="#596b7e">ค้นหาด้วยชื่อผู้เข้าสอบภาษาอังกฤษ อย่างน้อย 3 ตัวอักษร</text>
+  <text x="100" y="231" font-family="Noto Sans Thai, sans-serif" font-size="17" font-weight="600" fill="#1e2c3b">พิมพ์ชื่อผู้เข้าสอบเป็นภาษาอังกฤษ</text>
+  <rect x="100" y="248" width="590" height="58" rx="13" fill="#fff" stroke="#9aabc0" stroke-width="2"/>
+  <text x="124" y="285" font-family="Noto Sans Thai, sans-serif" font-size="19" fill="#78889a">ชื่อ นามสกุล</text>
+  <rect x="710" y="248" width="150" height="58" rx="13" fill="#173f70"/>
+  <text x="785" y="285" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="20" font-weight="700" fill="#fff">ค้นหา</text>
+  <g font-family="Noto Sans Thai, sans-serif" text-anchor="middle">
+    <circle cx="190" cy="365" r="23" fill="#eaf1fa"/><text x="190" y="373" font-size="19" font-weight="700" fill="#173f70">1</text><text x="190" y="411" font-size="16" fill="#33485e">พิมพ์ชื่อภาษาอังกฤษ</text>
+    <circle cx="480" cy="365" r="23" fill="#eaf1fa"/><text x="480" y="373" font-size="19" font-weight="700" fill="#173f70">2</text><text x="480" y="411" font-size="16" fill="#33485e">กดค้นหา</text>
+    <circle cx="770" cy="365" r="23" fill="#eaf1fa"/><text x="770" y="373" font-size="19" font-weight="700" fill="#173f70">3</text><text x="770" y="411" font-size="16" fill="#33485e">ตรวจชื่อและรายการที่พบ</text>
+  </g>
+</svg>

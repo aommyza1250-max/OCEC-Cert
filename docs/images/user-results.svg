@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">ภาพสรุปผลการค้นหาและปุ่มบันทึกรูปภาพ</title>
+  <desc id="desc">กรอบตัวอย่างแสดงชื่อผู้เข้าสอบ รายการสอบ ปีและรอบ รางวัล รูปเกียรติบัตร และปุ่มบันทึกรูปภาพ</desc>
+  <rect width="960" height="540" rx="28" fill="#f5f8fc"/>
+  <rect x="42" y="32" width="876" height="476" rx="22" fill="#fff" stroke="#d8e1eb" stroke-width="2"/>
+  <rect x="42" y="32" width="876" height="112" rx="22" fill="#eaf1fa"/>
+  <text x="82" y="78" font-family="Noto Sans Thai, sans-serif" font-size="28" font-weight="700" fill="#173f70">ชื่อผู้เข้าสอบตัวอย่าง</text>
+  <text x="82" y="112" font-family="Noto Sans Thai, sans-serif" font-size="17" fill="#53677b">ตรวจชื่อ โรงเรียน หรือระดับชั้นเพื่อเลือกผลที่ถูกต้อง</text>
+  <text x="82" y="187" font-family="Noto Sans Thai, sans-serif" font-size="23" font-weight="700" fill="#173f70">HKIMO · Hong Kong International Mathematical Olympiad</text>
+  <rect x="82" y="207" width="235" height="36" rx="9" fill="#fff2d5"/>
+  <text x="199" y="232" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="17" font-weight="700" fill="#755414">ปี 2026 · รอบคัดเลือก</text>
+  <rect x="82" y="266" width="370" height="188" rx="14" fill="#f1f5f9" stroke="#cbd6e2" stroke-width="2"/>
+  <rect x="105" y="286" width="324" height="144" rx="9" fill="#fff" stroke="#b8c6d5"/>
+  <path d="M133 402 L183 352 L221 382 L267 324 L397 403" fill="none" stroke="#9baec2" stroke-width="5"/>
+  <text x="267" y="314" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#72869b">ภาพตัวอย่างเกียรติบัตร</text>
+  <rect x="488" y="266" width="170" height="38" rx="19" fill="#f8e6b1"/>
+  <text x="573" y="291" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="18" font-weight="700" fill="#74520b">Gold · เหรียญทอง</text>
+  <text x="488" y="338" font-family="Noto Sans Thai, sans-serif" font-size="16" fill="#596b7e">ระดับชั้น · เลขที่สอบ</text>
+  <rect x="488" y="370" width="360" height="58" rx="13" fill="#173f70"/>
+  <text x="668" y="407" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="19" font-weight="700" fill="#fff">บันทึกรูปภาพ</text>
+  <text x="480" y="485" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="16" fill="#596b7e">ตัวอย่างประกอบ · ปุ่มดาวน์โหลดแต่ละใบอยู่ในการ์ดของใบนั้น</text>
+</svg>

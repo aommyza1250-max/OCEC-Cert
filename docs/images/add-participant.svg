@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="530" viewBox="0 0 1040 530" role="img" aria-labelledby="title desc">
+  <title id="title">ภาพสรุปฟอร์มเพิ่มผู้เข้าสอบที่ตกหล่น</title>
+  <desc id="desc">ฟอร์มมีเลขสอบ รูปแบบสอบ ชื่ออังกฤษหรือไทย โรงเรียน ระดับชั้น และรางวัลคาดไว้ จากนั้นบันทึกและจับคู่ใหม่</desc>
+  <rect width="1040" height="530" rx="28" fill="#f5f8fc"/>
+  <rect x="45" y="28" width="950" height="465" rx="22" fill="#fff" stroke="#d8e1eb" stroke-width="2"/>
+  <text x="82" y="77" font-family="Noto Sans Thai, sans-serif" font-size="25" font-weight="700" fill="#173f70">เพิ่มผู้เข้าสอบที่ตกหล่นจาก Excel</text>
+  <text x="82" y="109" font-family="Noto Sans Thai, sans-serif" font-size="15" fill="#596b7e">ใช้ข้อมูลจากรายชื่อหรือหลักฐานที่เชื่อถือได้ แล้วตรวจข้อมูลก่อนบันทึก</text>
+  <g font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#596b7e">
+    <text x="82" y="159">เลขผู้เข้าสอบ *</text><text x="526" y="159">รูปแบบการสอบ *</text>
+    <text x="82" y="243">ชื่อ-นามสกุล (อังกฤษ)</text><text x="526" y="243">ชื่อ-นามสกุล (ไทย)</text>
+    <text x="82" y="327">โรงเรียน</text><text x="526" y="327">ระดับชั้น</text><text x="82" y="411">รางวัลที่คาดไว้ (ใช้ตามเก็บไฟล์)</text>
+  </g>
+  <g fill="#fff" stroke="#cbd6e2">
+    <rect x="82" y="170" width="395" height="44" rx="9"/><rect x="526" y="170" width="395" height="44" rx="9"/>
+    <rect x="82" y="254" width="395" height="44" rx="9"/><rect x="526" y="254" width="395" height="44" rx="9"/>
+    <rect x="82" y="338" width="395" height="44" rx="9"/><rect x="526" y="338" width="395" height="44" rx="9"/>
+    <rect x="82" y="422" width="395" height="38" rx="9"/>
+  </g>
+  <text x="551" y="198" font-family="Noto Sans Thai, sans-serif" font-size="14" fill="#33485e">○ Online     ○ Onsite</text>
+  <rect x="526" y="421" width="395" height="40" rx="10" fill="#173f70"/><text x="723" y="447" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="15" font-weight="700" fill="#fff">บันทึกและไปหน้าผู้เข้าสอบ</text>
+  <text x="520" y="510" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="15" fill="#596b7e">หลังบันทึก ระบบจับคู่ใหม่ · หากยังไม่มีไฟล์ ให้เพิ่ม PDF หรืออัป ZIP ต่อ</text>
+</svg>

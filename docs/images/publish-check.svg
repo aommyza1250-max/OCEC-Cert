@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="360" viewBox="0 0 1040 360" role="img" aria-labelledby="title desc">
+  <title id="title">ภาพสรุปการตรวจและเผยแพร่รอบนำเข้า</title>
+  <desc id="desc">ก่อนเผยแพร่ตรวจยอดผู้พร้อม ใบพร้อม ผู้ค้างตามเหตุผล และนโยบายการแสดงรางวัล แล้วจึงกดยืนยัน</desc>
+  <rect width="1040" height="360" rx="28" fill="#f5f8fc"/>
+  <text x="520" y="55" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="27" font-weight="700" fill="#173f70">ตรวจรายการก่อนเผยแพร่</text>
+  <rect x="50" y="91" width="450" height="174" rx="18" fill="#e8f4ee" stroke="#8fb9a0" stroke-width="2"/>
+  <rect x="540" y="91" width="450" height="174" rx="18" fill="#fff2d5" stroke="#d6ba74" stroke-width="2"/>
+  <g font-family="Noto Sans Thai, sans-serif">
+    <text x="82" y="133" font-size="20" font-weight="700" fill="#20623b">จะเผยแพร่</text><text x="82" y="173" font-size="17" fill="#3d6750">ผู้เข้าสอบที่ข้อมูลครบ</text><text x="82" y="210" font-size="15" fill="#3d6750">จำนวนคนและจำนวนใบ · แยก Online / Onsite</text>
+    <text x="572" y="133" font-size="20" font-weight="700" fill="#74520b">จะค้างไว้</text><text x="572" y="173" font-size="17" fill="#725d2a">ตรวจเหตุผลของแต่ละคน</text><text x="572" y="210" font-size="15" fill="#725d2a">ไฟล์ขาด · ปัญหาการจับคู่ · มีแต่รางวัลเสริม</text>
+  </g>
+  <rect x="344" y="288" width="352" height="48" rx="13" fill="#173f70"/>
+  <text x="520" y="319" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="18" font-weight="700" fill="#fff">ตรวจครบแล้วจึงกดเผยแพร่</text>
+</svg>

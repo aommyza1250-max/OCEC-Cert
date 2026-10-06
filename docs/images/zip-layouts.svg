@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="540" viewBox="0 0 1040 540" role="img" aria-labelledby="title desc">
+  <title id="title">ตัวอย่างโครงสร้าง ZIP ที่รับนำเข้าได้</title>
+  <desc id="desc">ZIP แบบแยกตามรางวัล หรือแยกตามรูปแบบการสอบและรางวัล ห้ามผสมสองแบบในไฟล์เดียว</desc>
+  <rect width="1040" height="540" rx="28" fill="#f5f8fc"/>
+  <text x="520" y="57" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="28" font-weight="700" fill="#173f70">เลือกโครงสร้างแบบใดแบบหนึ่ง</text>
+  <rect x="35" y="91" width="465" height="340" rx="20" fill="#fff" stroke="#9db3cb" stroke-width="2"/>
+  <rect x="540" y="91" width="465" height="340" rx="20" fill="#fff" stroke="#9db3cb" stroke-width="2"/>
+  <g font-family="Noto Sans Thai, sans-serif">
+    <text x="68" y="137" font-size="21" font-weight="700" fill="#173f70">แบบ A · แยกตามรางวัล</text>
+    <text x="68" y="167" font-size="15" fill="#596b7e">โหมดจะอ้างอิงจากรายชื่อผู้เข้าสอบ</text>
+    <rect x="64" y="190" width="405" height="206" rx="12" fill="#f7f9fc"/>
+    <text x="88" y="224" font-size="15" font-weight="700" fill="#33485e">ไฟล์ ZIP</text><text x="108" y="263" font-size="15" fill="#33485e">└─ Gold/</text><text x="139" y="291" font-size="15" fill="#596b7e">└─ รวม.pdf</text><text x="108" y="330" font-size="15" fill="#33485e">└─ Silver/</text><text x="139" y="358" font-size="15" fill="#596b7e">└─ รวม.pdf</text>
+    <text x="573" y="137" font-size="21" font-weight="700" fill="#173f70">แบบ B · แยกโหมดแล้วรางวัล</text>
+    <text x="573" y="167" font-size="15" fill="#596b7e">ระบบตรวจโฟลเดอร์เทียบกับรายชื่อ</text>
+    <rect x="569" y="190" width="405" height="206" rx="12" fill="#f7f9fc"/>
+    <text x="593" y="224" font-size="15" font-weight="700" fill="#33485e">ไฟล์ ZIP</text><text x="613" y="263" font-size="15" fill="#33485e">└─ online/</text><text x="644" y="291" font-size="15" fill="#596b7e">└─ Gold/รวม.pdf</text><text x="613" y="330" font-size="15" fill="#33485e">└─ onsite/</text><text x="644" y="358" font-size="15" fill="#596b7e">└─ Silver/รวม.pdf</text>
+  </g>
+  <rect x="162" y="454" width="716" height="54" rx="15" fill="#fff2d5"/>
+  <text x="520" y="488" text-anchor="middle" font-family="Noto Sans Thai, sans-serif" font-size="17" font-weight="700" fill="#74520b">ZIP เดียวห้ามผสมแบบ A กับแบบ B · มีโฟลเดอร์ครอบได้อีก 1 ชั้น</text>
+</svg>
